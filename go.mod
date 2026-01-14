@@ -6,6 +6,8 @@ require github.com/google/flatbuffers v25.12.19+incompatible
 
 require github.com/klauspost/compress v1.18.2
 
+require golang.org/x/sync v0.19.0 // indirect
+
 require (
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect

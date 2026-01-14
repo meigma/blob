@@ -128,24 +128,24 @@ func TestIndexLookup(t *testing.T) {
 
 	t.Run("existing path", func(t *testing.T) {
 		t.Parallel()
-		entry, ok := idx.Lookup("a/file1.txt")
+		view, ok := idx.LookupView("a/file1.txt")
 		require.True(t, ok, "expected to find entry")
-		assert.Equal(t, "a/file1.txt", entry.Path)
-		assert.Equal(t, uint64(0), entry.DataOffset)
+		assert.Equal(t, "a/file1.txt", view.Path())
+		assert.Equal(t, uint64(0), view.DataOffset())
 	})
 
 	t.Run("non-existing path", func(t *testing.T) {
 		t.Parallel()
-		_, ok := idx.Lookup("nonexistent.txt")
+		_, ok := idx.LookupView("nonexistent.txt")
 		assert.False(t, ok, "expected not to find entry")
 	})
 
 	t.Run("all entries accessible", func(t *testing.T) {
 		t.Parallel()
 		for _, e := range entries {
-			entry, ok := idx.Lookup(e.Path)
+			view, ok := idx.LookupView(e.Path)
 			require.True(t, ok, "expected to find entry %q", e.Path)
-			assert.Equal(t, e.DataOffset, entry.DataOffset, "entry %q offset mismatch", e.Path)
+			assert.Equal(t, e.DataOffset, view.DataOffset(), "entry %q offset mismatch", e.Path)
 		}
 	})
 }
@@ -163,8 +163,8 @@ func TestIndexEntries(t *testing.T) {
 
 	expected := []string{"a.txt", "b.txt", "c.txt"}
 	paths := make([]string, 0, len(expected))
-	for entry := range idx.Entries() {
-		paths = append(paths, entry.Path)
+	for view := range idx.EntriesView() {
+		paths = append(paths, view.Path())
 	}
 
 	assert.Equal(t, expected, paths, "entries should be sorted by path")
@@ -225,8 +225,8 @@ func TestIndexEntriesWithPrefix(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			paths := make([]string, 0, len(tc.expected))
-			for entry := range idx.EntriesWithPrefix(tc.prefix) {
-				paths = append(paths, entry.Path)
+			for view := range idx.EntriesWithPrefixView(tc.prefix) {
+				paths = append(paths, view.Path())
 			}
 			assert.Equal(t, tc.expected, paths)
 		})
@@ -261,19 +261,19 @@ func TestIndexEntryMetadata(t *testing.T) {
 	data := buildTestIndex(t, entries)
 	idx := mustLoadIndex(t, data)
 
-	entry, ok := idx.Lookup("test.txt")
+	view, ok := idx.LookupView("test.txt")
 	require.True(t, ok, "expected to find entry")
 
-	assert.Equal(t, "test.txt", entry.Path)
-	assert.Equal(t, uint64(1000), entry.DataOffset)
-	assert.Equal(t, uint64(500), entry.DataSize)
-	assert.Equal(t, uint64(1000), entry.OriginalSize)
-	assert.Equal(t, hash, entry.Hash)
-	assert.Equal(t, fs.FileMode(0o644), entry.Mode)
-	assert.Equal(t, uint32(1000), entry.UID)
-	assert.Equal(t, uint32(1000), entry.GID)
-	assert.True(t, entry.ModTime.Equal(modTime), "ModTime mismatch: expected %v, got %v", modTime, entry.ModTime)
-	assert.Equal(t, CompressionZstd, entry.Compression)
+	assert.Equal(t, "test.txt", view.Path())
+	assert.Equal(t, uint64(1000), view.DataOffset())
+	assert.Equal(t, uint64(500), view.DataSize())
+	assert.Equal(t, uint64(1000), view.OriginalSize())
+	assert.Equal(t, hash, view.HashBytes())
+	assert.Equal(t, fs.FileMode(0o644), view.Mode())
+	assert.Equal(t, uint32(1000), view.UID())
+	assert.Equal(t, uint32(1000), view.GID())
+	assert.True(t, view.ModTime().Equal(modTime), "ModTime mismatch: expected %v, got %v", modTime, view.ModTime())
+	assert.Equal(t, CompressionZstd, view.Compression())
 }
 
 func TestIndexVersion(t *testing.T) {

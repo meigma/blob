@@ -110,7 +110,8 @@ func (r *Reader) Open(name string) (fs.File, error) {
 	}
 
 	// Check if it's a file
-	if entry, ok := r.index.Lookup(name); ok {
+	if view, ok := r.index.LookupView(name); ok {
+		entry := entryFromViewWithPath(view, name)
 		return &file{r: r, entry: entry}, nil
 	}
 
@@ -133,7 +134,8 @@ func (r *Reader) Stat(name string) (fs.FileInfo, error) {
 	}
 
 	// Check if it's a file
-	if entry, ok := r.index.Lookup(name); ok {
+	if view, ok := r.index.LookupView(name); ok {
+		entry := entryFromViewWithPath(view, name)
 		info, err := newFileInfo(&entry, pathutil.Base(name))
 		if err != nil {
 			return nil, &fs.PathError{Op: "stat", Path: name, Err: err}
@@ -162,11 +164,12 @@ func (r *Reader) ReadFile(name string) ([]byte, error) {
 		return nil, &fs.PathError{Op: "readfile", Path: name, Err: fs.ErrInvalid}
 	}
 
-	entry, ok := r.index.Lookup(name)
+	view, ok := r.index.LookupView(name)
 	if !ok {
 		return nil, &fs.PathError{Op: "readfile", Path: name, Err: fs.ErrNotExist}
 	}
 
+	entry := entryFromViewWithPath(view, name)
 	return r.readAndVerify(&entry)
 }
 
@@ -233,36 +236,6 @@ func groupAdjacentEntries(entries []Entry) []rangeGroup {
 		}
 	}
 	return append(groups, current)
-}
-
-// decompress decompresses data according to the compression algorithm.
-func decompress(data []byte, comp Compression, expectedSize, maxDecoderMemory uint64) ([]byte, error) {
-	switch comp {
-	case CompressionNone:
-		if uint64(len(data)) != expectedSize {
-			return nil, fmt.Errorf("%w: size mismatch", ErrDecompression)
-		}
-		return data, nil
-	case CompressionZstd:
-		dec, err := newZstdDecoder(bytes.NewReader(data), maxDecoderMemory)
-		if err != nil {
-			return nil, fmt.Errorf("%w: %v", ErrDecompression, err)
-		}
-		defer dec.Close()
-		content, err := sizing.ReadAllWithLimit(dec, expectedSize, ErrSizeOverflow)
-		if err != nil {
-			if errors.Is(err, ErrSizeOverflow) {
-				return nil, err
-			}
-			return nil, fmt.Errorf("%w: %v", ErrDecompression, err)
-		}
-		if uint64(len(content)) != expectedSize {
-			return nil, fmt.Errorf("%w: size mismatch", ErrDecompression)
-		}
-		return content, nil
-	default:
-		return nil, fmt.Errorf("unknown compression algorithm: %d", comp)
-	}
 }
 
 // fileInfo implements fs.FileInfo for regular files.
@@ -553,7 +526,7 @@ func (r *Reader) isDir(name string) bool {
 		return r.index.Len() > 0
 	}
 	prefix := name + "/"
-	for range r.index.EntriesWithPrefix(prefix) {
+	for range r.index.EntriesWithPrefixView(prefix) {
 		return true
 	}
 	return false
@@ -618,7 +591,7 @@ func validateEntry(entry *Entry, sourceSize int64, maxFileSize uint64) error {
 }
 
 type dirIter struct {
-	next     func() (Entry, bool)
+	next     func() (EntryView, bool)
 	stop     func()
 	prefix   string
 	lastName string
@@ -626,7 +599,7 @@ type dirIter struct {
 }
 
 func newDirIter(idx *Index, prefix string) *dirIter {
-	next, stop := iter.Pull(idx.EntriesWithPrefix(prefix))
+	next, stop := iter.Pull(idx.EntriesWithPrefixView(prefix))
 	return &dirIter{
 		next:   next,
 		stop:   stop,
@@ -639,13 +612,14 @@ func (it *dirIter) Next() (fs.DirEntry, bool) {
 		return nil, false
 	}
 	for {
-		entry, ok := it.next()
+		view, ok := it.next()
 		if !ok {
 			it.Close()
 			return nil, false
 		}
 
-		childName, isSubDir := pathutil.Child(entry.Path, it.prefix)
+		path := string(view.PathBytes())
+		childName, isSubDir := pathutil.Child(path, it.prefix)
 		if childName == it.lastName {
 			continue
 		}
@@ -654,6 +628,7 @@ func (it *dirIter) Next() (fs.DirEntry, bool) {
 		if isSubDir {
 			return &dirEntry{info: &dirInfo{name: childName}}, true
 		}
+		entry := entryFromViewWithPath(view, path)
 		info, err := newFileInfo(&entry, childName)
 		if err != nil {
 			info = &fileInfo{entry: entry, name: childName, size: 0}

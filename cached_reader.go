@@ -3,11 +3,17 @@ package blob
 import (
 	"bytes"
 	"crypto/sha256"
+	"errors"
 	"fmt"
 	"io"
 	"io/fs"
 	"math"
+	"runtime"
 	"slices"
+	"sync"
+	"sync/atomic"
+
+	"golang.org/x/sync/singleflight"
 
 	"github.com/meigma/blob/internal/pathutil"
 	"github.com/meigma/blob/internal/sizing"
@@ -27,6 +33,8 @@ type Cache interface {
 
 	// Put stores content indexed by its SHA256 hash.
 	Put(hash []byte, content []byte) error
+
+	// Implementations must be safe for concurrent use.
 }
 
 // StreamingCache extends Cache with streaming write support for large files.
@@ -68,13 +76,24 @@ type CacheWriter interface {
 // the cache before fetching from the underlying source and caches content
 // after successful reads.
 //
+// Prefetch/PrefetchDir use a size-based heuristic for parallelism when unset;
+// override with WithPrefetchConcurrency to force serial or parallel behavior.
+//
 // For streaming reads via Open(), caching behavior depends on the cache type:
 //   - StreamingCache: content streams to cache without full buffering
 //   - Basic Cache: content is buffered in memory then cached on Close
+//
+// CachedReader uses singleflight to deduplicate concurrent ReadFile calls
+// for the same content, preventing redundant network requests during
+// cache miss storms.
 type CachedReader struct {
 	*Reader
-	cache Cache
+	cache           Cache
+	prefetchWorkers int
+	fetchGroup      singleflight.Group
 }
+
+const prefetchParallelMinAvgBytes = 64 << 10
 
 // Interface compliance.
 var (
@@ -84,12 +103,31 @@ var (
 	_ fs.ReadDirFS  = (*CachedReader)(nil)
 )
 
+// CachedReaderOption configures a CachedReader.
+type CachedReaderOption func(*CachedReader)
+
+// WithPrefetchConcurrency sets the number of workers used for Prefetch/PrefetchDir.
+// Values < 0 force serial execution. Zero uses a size-based heuristic.
+// Values > 0 force a fixed worker count.
+func WithPrefetchConcurrency(workers int) CachedReaderOption {
+	return func(cr *CachedReader) {
+		cr.prefetchWorkers = workers
+	}
+}
+
 // NewCachedReader wraps a Reader with caching support.
-func NewCachedReader(r *Reader, cache Cache) *CachedReader {
-	return &CachedReader{
+func NewCachedReader(r *Reader, cache Cache, opts ...CachedReaderOption) *CachedReader {
+	cr := &CachedReader{
 		Reader: r,
 		cache:  cache,
 	}
+	for _, opt := range opts {
+		if opt == nil {
+			continue
+		}
+		opt(cr)
+	}
+	return cr
 }
 
 // Open implements fs.FS with caching support.
@@ -104,11 +142,12 @@ func (cr *CachedReader) Open(name string) (fs.File, error) {
 	}
 
 	// Check if it's a file
-	entry, ok := cr.index.Lookup(name)
+	view, ok := cr.index.LookupView(name)
 	if !ok {
 		// Not a file, delegate to base (handles directories)
 		return cr.Reader.Open(name)
 	}
+	entry := entryFromViewWithPath(view, name)
 
 	// Check cache first
 	if content, cached := cr.cache.Get(entry.Hash); cached {
@@ -137,31 +176,54 @@ func (cr *CachedReader) Open(name string) (fs.File, error) {
 //
 // ReadFile checks the cache first and returns cached content if available.
 // On cache miss, it reads from the source and caches the result.
+//
+// Concurrent calls for the same content are deduplicated using singleflight,
+// so only one network request is made even if multiple goroutines request
+// the same file simultaneously.
 func (cr *CachedReader) ReadFile(name string) ([]byte, error) {
 	if !fs.ValidPath(name) {
 		return nil, &fs.PathError{Op: "readfile", Path: name, Err: fs.ErrInvalid}
 	}
 
-	entry, ok := cr.index.Lookup(name)
+	view, ok := cr.index.LookupView(name)
 	if !ok {
 		return nil, &fs.PathError{Op: "readfile", Path: name, Err: fs.ErrNotExist}
 	}
+	entry := entryFromViewWithPath(view, name)
 
-	// Check cache first
+	// Check cache first (fast path, avoids singleflight overhead)
 	if content, cached := cr.cache.Get(entry.Hash); cached {
 		return content, nil
 	}
 
-	// Read from base reader
-	content, err := cr.Reader.ReadFile(name)
+	// Use content hash as singleflight key. All concurrent callers requesting
+	// the same content (even via different paths) share a single fetch.
+	key := string(entry.Hash)
+
+	result, err, _ := cr.fetchGroup.Do(key, func() (any, error) {
+		// Double-check cache: another goroutine may have just cached this
+		// content between our cache check and acquiring the singleflight lock.
+		if content, cached := cr.cache.Get(entry.Hash); cached {
+			return content, nil
+		}
+
+		// Fetch from source
+		content, err := cr.Reader.ReadFile(name)
+		if err != nil {
+			return nil, err
+		}
+
+		// Cache the content (errors are non-fatal)
+		_ = cr.cache.Put(entry.Hash, content) //nolint:errcheck // caching is opportunistic
+
+		return content, nil
+	})
+
 	if err != nil {
 		return nil, err
 	}
 
-	// Cache the content (errors are non-fatal)
-	_ = cr.cache.Put(entry.Hash, content) //nolint:errcheck // caching is opportunistic
-
-	return content, nil
+	return result.([]byte), nil
 }
 
 // Prefetch fetches and caches the specified files.
@@ -175,10 +237,11 @@ func (cr *CachedReader) Prefetch(paths ...string) error {
 		if !fs.ValidPath(path) {
 			continue
 		}
-		entry, ok := cr.index.Lookup(path)
+		view, ok := cr.index.LookupView(path)
 		if !ok {
 			continue
 		}
+		entry := entryFromViewWithPath(view, path)
 		// Skip if already cached
 		if _, cached := cr.cache.Get(entry.Hash); cached {
 			continue
@@ -223,7 +286,8 @@ func (cr *CachedReader) PrefetchDir(prefix string) error {
 	}
 
 	var entries []Entry //nolint:prealloc // size unknown until iteration
-	for entry := range cr.index.EntriesWithPrefix(dirPrefix) {
+	for view := range cr.index.EntriesWithPrefixView(dirPrefix) {
+		entry := entryFromView(view)
 		// Skip if already cached
 		if _, cached := cr.cache.Get(entry.Hash); cached {
 			continue
@@ -279,12 +343,48 @@ func (cr *CachedReader) prefetchGroup(group rangeGroup) error {
 		return fmt.Errorf("prefetch: short read (%d of %d bytes)", n, size)
 	}
 
-	for i := range group.entries {
-		if err := cr.decompressVerifyCache(&group.entries[i], data, group.start); err != nil {
-			return err
-		}
+	if len(group.entries) == 0 {
+		return nil
 	}
-	return nil
+
+	workers := cr.prefetchWorkerCount(group.entries)
+	if workers < 2 {
+		for i := range group.entries {
+			if err := cr.decompressVerifyCache(&group.entries[i], data, group.start); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+
+	var stop atomic.Bool
+	errCh := make(chan error, 1)
+	var wg sync.WaitGroup
+	for w := 0; w < workers; w++ {
+		wg.Add(1)
+		go func(start int) {
+			defer wg.Done()
+			for i := start; i < len(group.entries); i += workers {
+				if stop.Load() {
+					return
+				}
+				if err := cr.decompressVerifyCache(&group.entries[i], data, group.start); err != nil {
+					if stop.CompareAndSwap(false, true) {
+						errCh <- err
+					}
+					return
+				}
+			}
+		}(w)
+	}
+	wg.Wait()
+
+	select {
+	case err := <-errCh:
+		return err
+	default:
+		return nil
+	}
 }
 
 // decompressVerifyCache decompresses entry data, verifies its hash, and caches it.
@@ -304,7 +404,14 @@ func (cr *CachedReader) decompressVerifyCache(entry *Entry, groupData []byte, gr
 	}
 	entryData := groupData[start:end]
 
-	content, err := decompress(entryData, entry.Compression, entry.OriginalSize, cr.maxDecoderMemory)
+	if sc, ok := cr.cache.(StreamingCache); ok {
+		return cr.streamDecompressVerifyCache(entry, entryData, sc)
+	}
+	return cr.bufferDecompressVerifyCache(entry, entryData)
+}
+
+func (cr *CachedReader) bufferDecompressVerifyCache(entry *Entry, data []byte) error {
+	content, err := cr.decompress(data, entry.Compression, entry.OriginalSize)
 	if err != nil {
 		return err
 	}
@@ -314,9 +421,142 @@ func (cr *CachedReader) decompressVerifyCache(entry *Entry, groupData []byte, gr
 		return ErrHashMismatch
 	}
 
-	// Cache errors are non-fatal
+	// Cache errors are non-fatal.
 	_ = cr.cache.Put(entry.Hash, content) //nolint:errcheck // caching is opportunistic
 	return nil
+}
+
+func (cr *CachedReader) streamDecompressVerifyCache(entry *Entry, data []byte, sc StreamingCache) error {
+	w, err := sc.Writer(entry.Hash)
+	if err != nil {
+		return cr.bufferDecompressVerifyCache(entry, data)
+	}
+
+	reader, closeFn, err := cr.newEntryReader(entry, data)
+	if err != nil {
+		_ = w.Discard()
+		return err
+	}
+	defer closeFn()
+
+	hasher := sha256.New()
+	tee := io.TeeReader(reader, hasher)
+
+	expected, err := sizing.ToInt64(entry.OriginalSize, ErrSizeOverflow)
+	if err != nil {
+		_ = w.Discard()
+		return err
+	}
+	if _, err := io.CopyN(w, tee, expected); err != nil {
+		_ = w.Discard()
+		if errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF) {
+			return fmt.Errorf("%w: unexpected EOF", ErrDecompression)
+		}
+		return err
+	}
+	if err := ensureNoExtra(tee); err != nil {
+		_ = w.Discard()
+		return err
+	}
+
+	sum := hasher.Sum(nil)
+	if !bytes.Equal(sum, entry.Hash) {
+		_ = w.Discard()
+		return ErrHashMismatch
+	}
+	if err := w.Commit(); err != nil {
+		return err
+	}
+	return nil
+}
+
+// decompress decompresses data according to the compression algorithm.
+func (cr *CachedReader) decompress(data []byte, comp Compression, expectedSize uint64) ([]byte, error) {
+	switch comp {
+	case CompressionNone:
+		if uint64(len(data)) != expectedSize {
+			return nil, fmt.Errorf("%w: size mismatch", ErrDecompression)
+		}
+		return data, nil
+	case CompressionZstd:
+		contentSize, err := sizing.ToInt(expectedSize, ErrSizeOverflow)
+		if err != nil {
+			return nil, err
+		}
+		dec, closeFn, err := cr.getZstdDecoder(bytes.NewReader(data))
+		if err != nil {
+			return nil, fmt.Errorf("%w: %v", ErrDecompression, err)
+		}
+		defer closeFn()
+
+		content := make([]byte, contentSize)
+		if _, err := io.ReadFull(dec, content); err != nil {
+			if errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF) {
+				return nil, fmt.Errorf("%w: unexpected EOF", ErrDecompression)
+			}
+			return nil, fmt.Errorf("%w: %v", ErrDecompression, err)
+		}
+		if err := ensureNoExtra(dec); err != nil {
+			return nil, err
+		}
+		return content, nil
+	default:
+		return nil, fmt.Errorf("unknown compression algorithm: %d", comp)
+	}
+}
+
+func (cr *CachedReader) newEntryReader(entry *Entry, data []byte) (io.Reader, func(), error) {
+	switch entry.Compression {
+	case CompressionNone:
+		return bytes.NewReader(data), func() {}, nil
+	case CompressionZstd:
+		dec, closeFn, err := cr.getZstdDecoder(bytes.NewReader(data))
+		if err != nil {
+			return nil, func() {}, fmt.Errorf("%w: %v", ErrDecompression, err)
+		}
+		return dec, closeFn, nil
+	default:
+		return nil, func() {}, fmt.Errorf("unknown compression algorithm: %d", entry.Compression)
+	}
+}
+
+func (cr *CachedReader) prefetchWorkerCount(entries []Entry) int {
+	if len(entries) < 2 {
+		return 1
+	}
+	if cr.prefetchWorkers < 0 {
+		return 1
+	}
+
+	workers := cr.prefetchWorkers
+	if workers == 0 {
+		workers = runtime.GOMAXPROCS(0)
+		if workers < 2 {
+			return 1
+		}
+		if _, ok := cr.cache.(StreamingCache); ok {
+			var total uint64
+			for i := range entries {
+				next, ok := sizing.AddUint64(total, entries[i].OriginalSize)
+				if !ok {
+					total = ^uint64(0)
+					break
+				}
+				total = next
+			}
+			if total/uint64(len(entries)) < prefetchParallelMinAvgBytes {
+				return 1
+			}
+		}
+	}
+
+	if workers > len(entries) {
+		workers = len(entries)
+	}
+	if workers < 2 {
+		return 1
+	}
+	return workers
 }
 
 // wrapFileForCaching wraps a base file with caching support.

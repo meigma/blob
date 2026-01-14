@@ -8,55 +8,18 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"sync/atomic"
 	"testing"
 
 	"github.com/klauspost/compress/zstd"
+	"github.com/meigma/blob/internal/testutil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
-// mockByteSource implements ByteSource for testing.
-type mockByteSource struct {
-	data []byte
-}
-
-func (m *mockByteSource) ReadAt(p []byte, off int64) (int, error) {
-	if off >= int64(len(m.data)) {
-		return 0, io.EOF
-	}
-	n := copy(p, m.data[off:])
-	if off+int64(n) >= int64(len(m.data)) {
-		return n, io.EOF
-	}
-	return n, nil
-}
-
-func (m *mockByteSource) Size() int64 {
-	return int64(len(m.data))
-}
-
-// mockCache implements Cache for testing.
-type mockCache struct {
-	data map[string][]byte
-}
-
-func newMockCache() *mockCache {
-	return &mockCache{data: make(map[string][]byte)}
-}
-
-func (c *mockCache) Get(hash []byte) ([]byte, bool) {
-	data, ok := c.data[string(hash)]
-	return data, ok
-}
-
-func (c *mockCache) Put(hash, content []byte) error {
-	c.data[string(hash)] = content
-	return nil
-}
-
 // createTestArchive creates an index and data blob for testing.
 // Returns the index and data source.
-func createTestArchive(t *testing.T, files map[string][]byte, compression Compression) (*Index, *mockByteSource) {
+func createTestArchive(t *testing.T, files map[string][]byte, compression Compression) (*Index, *testutil.MockByteSource) {
 	t.Helper()
 
 	var indexBuf, dataBuf bytes.Buffer
@@ -74,7 +37,7 @@ func createTestArchive(t *testing.T, files map[string][]byte, compression Compre
 	idx, err := LoadIndex(indexBuf.Bytes())
 	require.NoError(t, err)
 
-	return idx, &mockByteSource{data: dataBuf.Bytes()}
+	return idx, testutil.NewMockByteSource(dataBuf.Bytes())
 }
 
 // createTestFilesBytes creates files in dir from a map of relative path to content bytes.
@@ -201,7 +164,7 @@ func TestReaderReadFile(t *testing.T) {
 		idx, source := createTestArchive(t, files, CompressionNone)
 
 		// Corrupt the data
-		source.data[0] ^= 0xFF
+		source.Bytes()[0] ^= 0xFF
 
 		r := NewReader(idx, source)
 		_, err := r.ReadFile("test.txt")
@@ -335,7 +298,7 @@ func TestCachedReaderReadFile(t *testing.T) {
 		"test.txt": []byte("cached content"),
 	}
 	idx, source := createTestArchive(t, files, CompressionNone)
-	cache := newMockCache()
+	cache := testutil.NewMockCache()
 	r := NewCachedReader(NewReader(idx, source), cache)
 
 	// First read should populate cache
@@ -350,11 +313,84 @@ func TestCachedReaderReadFile(t *testing.T) {
 	assert.Equal(t, []byte("cached content"), cachedContent)
 
 	// Corrupt the source - second read should use cache
-	source.data[0] ^= 0xFF
+	source.Bytes()[0] ^= 0xFF
 
 	content2, err := r.ReadFile("test.txt")
 	require.NoError(t, err)
 	assert.Equal(t, []byte("cached content"), content2)
+}
+
+func TestCachedReaderReadFileSingleflight(t *testing.T) {
+	t.Parallel()
+
+	files := map[string][]byte{
+		"test.txt": []byte("singleflight test content"),
+	}
+	idx, source := createTestArchive(t, files, CompressionNone)
+
+	// Wrap source to count reads
+	countingSource := &countingByteSource{source: source}
+
+	cache := testutil.NewMockCache()
+	r := NewCachedReader(NewReader(idx, countingSource), cache)
+
+	// Launch multiple goroutines to read the same file concurrently
+	const numGoroutines = 10
+	results := make(chan []byte, numGoroutines)
+	errors := make(chan error, numGoroutines)
+
+	// Use a barrier to ensure all goroutines start at the same time
+	start := make(chan struct{})
+
+	for range numGoroutines {
+		go func() {
+			<-start // Wait for signal
+			content, err := r.ReadFile("test.txt")
+			if err != nil {
+				errors <- err
+				return
+			}
+			results <- content
+		}()
+	}
+
+	// Release all goroutines at once
+	close(start)
+
+	// Collect results
+	for range numGoroutines {
+		select {
+		case content := <-results:
+			assert.Equal(t, []byte("singleflight test content"), content)
+		case err := <-errors:
+			t.Fatalf("unexpected error: %v", err)
+		}
+	}
+
+	// With singleflight, we should have exactly 1 read despite 10 concurrent callers
+	// (Allow up to 2 in case of race between cache check and singleflight)
+	readCount := countingSource.ReadCount()
+	assert.LessOrEqual(t, readCount, int64(2), "singleflight should deduplicate concurrent reads (got %d reads)", readCount)
+	t.Logf("concurrent reads deduplicated: %d goroutines, %d actual reads", numGoroutines, readCount)
+}
+
+// countingByteSource wraps a ByteSource and counts ReadAt calls.
+type countingByteSource struct {
+	source    ByteSource
+	readCount atomic.Int64
+}
+
+func (c *countingByteSource) ReadAt(p []byte, off int64) (int, error) {
+	c.readCount.Add(1)
+	return c.source.ReadAt(p, off)
+}
+
+func (c *countingByteSource) Size() int64 {
+	return c.source.Size()
+}
+
+func (c *countingByteSource) ReadCount() int64 {
+	return c.readCount.Load()
 }
 
 func TestCachedReaderPrefetch(t *testing.T) {
@@ -366,7 +402,7 @@ func TestCachedReaderPrefetch(t *testing.T) {
 		"c.txt": []byte("content c"),
 	}
 	idx, source := createTestArchive(t, files, CompressionNone)
-	cache := newMockCache()
+	cache := testutil.NewMockCache()
 	r := NewCachedReader(NewReader(idx, source), cache)
 
 	// Prefetch should populate cache
@@ -398,7 +434,7 @@ func TestCachedReaderPrefetchDir(t *testing.T) {
 		"other/d.txt":   []byte("d"),
 	}
 	idx, source := createTestArchive(t, files, CompressionNone)
-	cache := newMockCache()
+	cache := testutil.NewMockCache()
 	r := NewCachedReader(NewReader(idx, source), cache)
 
 	// Prefetch dir should populate cache for all files under dir
@@ -569,7 +605,7 @@ func TestReaderCompressedDecompression(t *testing.T) {
 	indexData := buildTestIndex(t, entries)
 	idx := mustLoadIndex(t, indexData)
 
-	source := &mockByteSource{data: compressed}
+	source := testutil.NewMockByteSource(compressed)
 	r := NewReader(idx, source)
 
 	content, err := r.ReadFile("test.txt")

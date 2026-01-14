@@ -42,24 +42,24 @@ func TestWriterCreate(t *testing.T) {
 
 	// Verify entries are sorted by path
 	paths := make([]string, 0, idx.Len())
-	for entry := range idx.Entries() {
-		paths = append(paths, entry.Path)
+	for view := range idx.EntriesView() {
+		paths = append(paths, view.Path())
 	}
 	assert.Equal(t, []string{"a.txt", "b.txt", "sub/c.txt", "sub/deep/d.go"}, paths)
 
 	// Verify we can look up each file and data is correct
 	for path, content := range files {
 		path = filepath.ToSlash(path)
-		entry, ok := idx.Lookup(path)
+		view, ok := idx.LookupView(path)
 		require.True(t, ok, "entry %q not found", path)
 
 		// Verify data content
-		data := dataBuf.Bytes()[entry.DataOffset : entry.DataOffset+entry.DataSize]
+		data := dataBuf.Bytes()[view.DataOffset() : view.DataOffset()+view.DataSize()]
 		assert.Equal(t, content, string(data), "content mismatch for %q", path)
 
 		// Verify hash
 		expectedHash := sha256.Sum256([]byte(content))
-		assert.Equal(t, expectedHash[:], entry.Hash, "hash mismatch for %q", path)
+		assert.Equal(t, expectedHash[:], view.HashBytes(), "hash mismatch for %q", path)
 	}
 }
 
@@ -96,15 +96,15 @@ func TestWriterCreateCompression(t *testing.T) {
 	idx, err := LoadIndex(indexBuf.Bytes())
 	require.NoError(t, err)
 
-	entry, ok := idx.Lookup("test.txt")
+	view, ok := idx.LookupView("test.txt")
 	require.True(t, ok)
 
 	// Compressed should be smaller than original
-	assert.Less(t, entry.DataSize, entry.OriginalSize, "compressed size should be smaller")
-	assert.Equal(t, CompressionZstd, entry.Compression)
+	assert.Less(t, view.DataSize(), view.OriginalSize(), "compressed size should be smaller")
+	assert.Equal(t, CompressionZstd, view.Compression())
 
 	// Verify we can decompress
-	compressed := dataBuf.Bytes()[entry.DataOffset : entry.DataOffset+entry.DataSize]
+	compressed := dataBuf.Bytes()[view.DataOffset() : view.DataOffset()+view.DataSize()]
 	dec, err := zstd.NewReader(nil)
 	require.NoError(t, err)
 	decompressed, err := dec.DecodeAll(compressed, nil)
@@ -114,7 +114,7 @@ func TestWriterCreateCompression(t *testing.T) {
 
 	// Verify hash is of uncompressed content
 	expectedHash := sha256.Sum256(content)
-	assert.Equal(t, expectedHash[:], entry.Hash)
+	assert.Equal(t, expectedHash[:], view.HashBytes())
 }
 
 func TestWriterCreateMetadata(t *testing.T) {
@@ -136,11 +136,11 @@ func TestWriterCreateMetadata(t *testing.T) {
 	idx, err := LoadIndex(indexBuf.Bytes())
 	require.NoError(t, err)
 
-	entry, ok := idx.Lookup("test.txt")
+	view, ok := idx.LookupView("test.txt")
 	require.True(t, ok)
 
-	assert.Equal(t, fs.FileMode(0o755), entry.Mode)
-	assert.True(t, entry.ModTime.Equal(modTime), "ModTime mismatch: expected %v, got %v", modTime, entry.ModTime)
+	assert.Equal(t, fs.FileMode(0o755), view.Mode())
+	assert.True(t, view.ModTime().Equal(modTime), "ModTime mismatch: expected %v, got %v", modTime, view.ModTime())
 }
 
 func TestWriterCreateSkipsSymlinks(t *testing.T) {
@@ -160,9 +160,9 @@ func TestWriterCreateSkipsSymlinks(t *testing.T) {
 
 	// Only real file should be present
 	assert.Equal(t, 1, idx.Len())
-	_, ok := idx.Lookup("real.txt")
+	_, ok := idx.LookupView("real.txt")
 	assert.True(t, ok)
-	_, ok = idx.Lookup("link.txt")
+	_, ok = idx.LookupView("link.txt")
 	assert.False(t, ok)
 }
 
@@ -208,8 +208,8 @@ func TestWriterCreatePrefixScans(t *testing.T) {
 
 	// Verify prefix scan works correctly
 	cssPaths := make([]string, 0, 2)
-	for entry := range idx.EntriesWithPrefix("assets/css/") {
-		cssPaths = append(cssPaths, entry.Path)
+	for view := range idx.EntriesWithPrefixView("assets/css/") {
+		cssPaths = append(cssPaths, view.Path())
 	}
 	assert.Equal(t, []string{"assets/css/main.css", "assets/css/reset.css"}, cssPaths)
 }

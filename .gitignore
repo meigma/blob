@@ -1,4 +1,6 @@
 .claude
+bench/
+research/
 CLAUDE.md
 blob.test
 cpu.prof

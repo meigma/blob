@@ -9,6 +9,8 @@ import (
 	"path/filepath"
 	"runtime"
 	"testing"
+
+	"github.com/meigma/blob/internal/testutil"
 )
 
 var (
@@ -112,11 +114,41 @@ func BenchmarkIndexLookup(b *testing.B) {
 			b.ResetTimer()
 			for i := 0; b.Loop(); i++ {
 				path := paths[i%len(paths)]
-				entry, ok := idx.Lookup(path)
+				entry, ok := idx.LookupView(path)
 				if !ok {
 					b.Fatalf("missing entry for %q", path)
 				}
-				benchSinkEntry = entry
+				benchSinkEntry = entryFromViewWithPath(entry, path)
+			}
+		})
+	}
+}
+
+func BenchmarkIndexLookupCopy(b *testing.B) {
+	cases := []struct {
+		name      string
+		fileCount int
+		fileSize  int
+	}{
+		{name: "files=256/size=4k", fileCount: 256, fileSize: 4 << 10},
+		{name: "files=1024/size=4k", fileCount: 1024, fileSize: 4 << 10},
+	}
+
+	for _, bc := range cases {
+		b.Run(bc.name, func(b *testing.B) {
+			dir := b.TempDir()
+			paths := makeBenchFiles(b, dir, bc.fileCount, bc.fileSize, benchDirCount, benchPatternCompressible)
+			idx, _ := createBenchArchive(b, dir, CompressionNone)
+
+			b.ReportAllocs()
+			b.ResetTimer()
+			for i := 0; b.Loop(); i++ {
+				path := paths[i%len(paths)]
+				view, ok := idx.LookupView(path)
+				if !ok {
+					b.Fatalf("missing entry for %q", path)
+				}
+				benchSinkEntry = view.Entry()
 			}
 		})
 	}
@@ -143,7 +175,41 @@ func BenchmarkEntriesWithPrefix(b *testing.B) {
 			b.ResetTimer()
 			for b.Loop() {
 				count := 0
-				for range idx.EntriesWithPrefix(prefix) {
+				for range idx.EntriesWithPrefixView(prefix) {
+					count++
+				}
+				if count == 0 {
+					b.Fatal("expected at least one entry for prefix")
+				}
+				benchSinkInt = count
+			}
+		})
+	}
+}
+
+func BenchmarkEntriesWithPrefixCopy(b *testing.B) {
+	cases := []struct {
+		name      string
+		fileCount int
+		fileSize  int
+	}{
+		{name: "files=256/size=4k", fileCount: 256, fileSize: 4 << 10},
+		{name: "files=1024/size=4k", fileCount: 1024, fileSize: 4 << 10},
+	}
+
+	for _, bc := range cases {
+		b.Run(bc.name, func(b *testing.B) {
+			dir := b.TempDir()
+			makeBenchFiles(b, dir, bc.fileCount, bc.fileSize, benchDirCount, benchPatternCompressible)
+			idx, _ := createBenchArchive(b, dir, CompressionNone)
+			prefix := "dir00/"
+
+			b.ReportAllocs()
+			b.ResetTimer()
+			for b.Loop() {
+				count := 0
+				for view := range idx.EntriesWithPrefixView(prefix) {
+					benchSinkEntry = view.Entry()
 					count++
 				}
 				if count == 0 {
@@ -204,7 +270,7 @@ func BenchmarkCachedReaderReadFileHit(b *testing.B) {
 	paths := makeBenchFiles(b, dir, 128, 32<<10, benchDirCount, benchPatternCompressible)
 	idx, source := createBenchArchive(b, dir, CompressionZstd)
 	reader := NewReader(idx, source)
-	cache := newMockCache()
+	cache := testutil.NewMockCache()
 	cached := NewCachedReader(reader, cache)
 
 	for _, path := range paths {
@@ -225,6 +291,238 @@ func BenchmarkCachedReaderReadFileHit(b *testing.B) {
 			b.Fatal(err)
 		}
 		benchSinkBytes = content
+	}
+}
+
+func BenchmarkCachedReaderPrefetchDir(b *testing.B) {
+	cases := []struct {
+		name        string
+		fileCount   int
+		fileSize    int
+		compression Compression
+		pattern     benchPattern
+	}{
+		{
+			name:        "files=512/size=16k/none/compressible",
+			fileCount:   512,
+			fileSize:    16 << 10,
+			compression: CompressionNone,
+			pattern:     benchPatternCompressible,
+		},
+		{
+			name:        "files=512/size=16k/zstd/compressible",
+			fileCount:   512,
+			fileSize:    16 << 10,
+			compression: CompressionZstd,
+			pattern:     benchPatternCompressible,
+		},
+		{
+			name:        "files=512/size=16k/zstd/random",
+			fileCount:   512,
+			fileSize:    16 << 10,
+			compression: CompressionZstd,
+			pattern:     benchPatternRandom,
+		},
+		{
+			name:        "files=512/size=64k/zstd/compressible",
+			fileCount:   512,
+			fileSize:    64 << 10,
+			compression: CompressionZstd,
+			pattern:     benchPatternCompressible,
+		},
+		{
+			name:        "files=2048/size=16k/none/compressible",
+			fileCount:   2048,
+			fileSize:    16 << 10,
+			compression: CompressionNone,
+			pattern:     benchPatternCompressible,
+		},
+		{
+			name:        "files=2048/size=16k/zstd/compressible",
+			fileCount:   2048,
+			fileSize:    16 << 10,
+			compression: CompressionZstd,
+			pattern:     benchPatternCompressible,
+		},
+		{
+			name:        "files=128/size=1m/none/compressible",
+			fileCount:   128,
+			fileSize:    1 << 20,
+			compression: CompressionNone,
+			pattern:     benchPatternCompressible,
+		},
+		{
+			name:        "files=128/size=1m/zstd/compressible",
+			fileCount:   128,
+			fileSize:    1 << 20,
+			compression: CompressionZstd,
+			pattern:     benchPatternCompressible,
+		},
+		{
+			name:        "files=64/size=4m/zstd/compressible",
+			fileCount:   64,
+			fileSize:    4 << 20,
+			compression: CompressionZstd,
+			pattern:     benchPatternCompressible,
+		},
+	}
+
+	prefix := "dir00"
+
+	for _, bc := range cases {
+		b.Run(bc.name, func(b *testing.B) {
+			dir := b.TempDir()
+			makeBenchFiles(b, dir, bc.fileCount, bc.fileSize, benchDirCount, bc.pattern)
+			idx, source := createBenchArchive(b, dir, bc.compression)
+			reader := NewReader(idx, source)
+
+			dirEntries := countBenchDirEntries(bc.fileCount, benchDirCount)
+			totalBytes := int64(dirEntries * bc.fileSize)
+			if totalBytes > 0 {
+				b.SetBytes(totalBytes)
+			}
+
+			b.ReportAllocs()
+			b.ResetTimer()
+			for b.Loop() {
+				b.StopTimer()
+				cache := testutil.NewMockCache()
+				cached := NewCachedReader(reader, cache)
+				b.StartTimer()
+
+				if err := cached.PrefetchDir(prefix); err != nil {
+					b.Fatal(err)
+				}
+			}
+		})
+	}
+}
+
+func BenchmarkCachedReaderPrefetchDirDisk(b *testing.B) {
+	benchmarkCachedReaderPrefetchDirDisk(b, "serial", 1)
+}
+
+func BenchmarkCachedReaderPrefetchDirDiskParallel(b *testing.B) {
+	benchmarkCachedReaderPrefetchDirDisk(b, "parallel", runtime.GOMAXPROCS(0))
+}
+
+func benchmarkCachedReaderPrefetchDirDisk(b *testing.B, label string, workers int) {
+	cases := []struct {
+		name        string
+		fileCount   int
+		fileSize    int
+		compression Compression
+		pattern     benchPattern
+	}{
+		{
+			name:        "files=512/size=16k/none/compressible",
+			fileCount:   512,
+			fileSize:    16 << 10,
+			compression: CompressionNone,
+			pattern:     benchPatternCompressible,
+		},
+		{
+			name:        "files=512/size=16k/zstd/compressible",
+			fileCount:   512,
+			fileSize:    16 << 10,
+			compression: CompressionZstd,
+			pattern:     benchPatternCompressible,
+		},
+		{
+			name:        "files=512/size=16k/zstd/random",
+			fileCount:   512,
+			fileSize:    16 << 10,
+			compression: CompressionZstd,
+			pattern:     benchPatternRandom,
+		},
+		{
+			name:        "files=512/size=64k/zstd/compressible",
+			fileCount:   512,
+			fileSize:    64 << 10,
+			compression: CompressionZstd,
+			pattern:     benchPatternCompressible,
+		},
+		{
+			name:        "files=2048/size=16k/none/compressible",
+			fileCount:   2048,
+			fileSize:    16 << 10,
+			compression: CompressionNone,
+			pattern:     benchPatternCompressible,
+		},
+		{
+			name:        "files=2048/size=16k/zstd/compressible",
+			fileCount:   2048,
+			fileSize:    16 << 10,
+			compression: CompressionZstd,
+			pattern:     benchPatternCompressible,
+		},
+		{
+			name:        "files=128/size=1m/none/compressible",
+			fileCount:   128,
+			fileSize:    1 << 20,
+			compression: CompressionNone,
+			pattern:     benchPatternCompressible,
+		},
+		{
+			name:        "files=128/size=1m/zstd/compressible",
+			fileCount:   128,
+			fileSize:    1 << 20,
+			compression: CompressionZstd,
+			pattern:     benchPatternCompressible,
+		},
+		{
+			name:        "files=64/size=4m/zstd/compressible",
+			fileCount:   64,
+			fileSize:    4 << 20,
+			compression: CompressionZstd,
+			pattern:     benchPatternCompressible,
+		},
+	}
+
+	prefix := "dir00"
+
+	for _, bc := range cases {
+		b.Run(fmt.Sprintf("%s/%s", label, bc.name), func(b *testing.B) {
+			dir := b.TempDir()
+			makeBenchFiles(b, dir, bc.fileCount, bc.fileSize, benchDirCount, bc.pattern)
+			idx, source := createBenchArchive(b, dir, bc.compression)
+			reader := NewReader(idx, source)
+			cachedOpts := []CachedReaderOption{WithPrefetchConcurrency(workers)}
+
+			dirEntries := countBenchDirEntries(bc.fileCount, benchDirCount)
+			totalBytes := int64(dirEntries * bc.fileSize)
+			if totalBytes > 0 {
+				b.SetBytes(totalBytes)
+			}
+
+			cacheRoot := filepath.Join(dir, "cache")
+			if err := os.MkdirAll(cacheRoot, 0o755); err != nil {
+				b.Fatal(err)
+			}
+
+			b.ReportAllocs()
+			b.ResetTimer()
+			for i := 0; b.Loop(); i++ {
+				b.StopTimer()
+				cacheDir := filepath.Join(cacheRoot, fmt.Sprintf("iter-%d", i))
+				if err := os.MkdirAll(cacheDir, 0o755); err != nil {
+					b.Fatal(err)
+				}
+				cache := newBenchDiskCache(cacheDir)
+				cached := NewCachedReader(reader, cache, cachedOpts...)
+				b.StartTimer()
+
+				if err := cached.PrefetchDir(prefix); err != nil {
+					b.Fatal(err)
+				}
+
+				b.StopTimer()
+				if err := os.RemoveAll(cacheDir); err != nil {
+					b.Fatal(err)
+				}
+				b.StartTimer()
+			}
+		})
 	}
 }
 
@@ -269,7 +567,14 @@ func makeBenchFiles(b *testing.B, dir string, fileCount, fileSize, dirCount int,
 	return paths
 }
 
-func createBenchArchive(b *testing.B, dir string, compression Compression) (*Index, *mockByteSource) {
+func countBenchDirEntries(fileCount, dirCount int) int {
+	if fileCount <= 0 || dirCount <= 0 {
+		return 0
+	}
+	return (fileCount + dirCount - 1) / dirCount
+}
+
+func createBenchArchive(b *testing.B, dir string, compression Compression) (*Index, *testutil.MockByteSource) {
 	b.Helper()
 
 	var indexBuf, dataBuf bytes.Buffer
@@ -283,5 +588,25 @@ func createBenchArchive(b *testing.B, dir string, compression Compression) (*Ind
 		b.Fatal(err)
 	}
 
-	return idx, &mockByteSource{data: dataBuf.Bytes()}
+	return idx, testutil.NewMockByteSource(dataBuf.Bytes())
+}
+
+type benchDiskCache struct {
+	*testutil.DiskCache
+}
+
+func newBenchDiskCache(dir string) *benchDiskCache {
+	return &benchDiskCache{DiskCache: testutil.NewDiskCache(dir)}
+}
+
+func (c *benchDiskCache) Writer(hash []byte) (CacheWriter, error) {
+	writer, err := c.DiskCache.Writer(hash)
+	if err != nil {
+		return nil, err
+	}
+	adapted, ok := writer.(CacheWriter)
+	if !ok {
+		return nil, fmt.Errorf("unexpected cache writer type %T", writer)
+	}
+	return adapted, nil
 }
