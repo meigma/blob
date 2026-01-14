@@ -199,39 +199,10 @@ func (r *Reader) Ops() *fileops.Ops {
 	return r.ops
 }
 
-// rangeGroup represents a contiguous range of entries in the data blob.
-type rangeGroup struct {
-	start   uint64
-	end     uint64
-	entries []Entry
-}
-
-// groupAdjacentEntries groups entries that are adjacent in the data blob.
-func groupAdjacentEntries(entries []Entry) []rangeGroup {
-	groups := make([]rangeGroup, 0, len(entries))
-	current := rangeGroup{
-		start:   entries[0].DataOffset,
-		end:     entries[0].DataOffset + entries[0].DataSize,
-		entries: []Entry{entries[0]},
-	}
-
-	for i := 1; i < len(entries); i++ {
-		entry := entries[i]
-		entryEnd := entry.DataOffset + entry.DataSize
-
-		if entry.DataOffset == current.end {
-			current.end = entryEnd
-			current.entries = append(current.entries, entry)
-		} else {
-			groups = append(groups, current)
-			current = rangeGroup{
-				start:   entry.DataOffset,
-				end:     entryEnd,
-				entries: []Entry{entry},
-			}
-		}
-	}
-	return append(groups, current)
+// Index returns the underlying index for lookups.
+// This is useful for cached readers that need direct index access.
+func (r *Reader) Index() *Index {
+	return r.index
 }
 
 // openDir implements fs.File and fs.ReadDirFile for directories.

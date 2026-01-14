@@ -3,13 +3,14 @@ package main
 import (
 	"bytes"
 	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"io/fs"
 	"log"
-	"math/rand"
+	"math/rand" //nolint:gosec // intentional use for reproducible benchmarks
 	"net/http"
-	_ "net/http/pprof"
+	_ "net/http/pprof" //nolint:gosec // intentional profiling endpoint
 	"os"
 	"path/filepath"
 	"runtime"
@@ -18,8 +19,11 @@ import (
 	"time"
 
 	"github.com/meigma/blob"
+	"github.com/meigma/blob/cache"
 	"github.com/meigma/blob/internal/testutil"
 )
+
+const cacheNone = "none"
 
 type config struct {
 	mode            string
@@ -45,18 +49,21 @@ type config struct {
 	randomSeed      int64
 }
 
+//nolint:unused // sink variables prevent compiler optimizations in profiling
 var (
 	sinkBytes []byte
 	sinkEntry blob.Entry
 	sinkCount int
 )
 
+//nolint:gocognit,gocyclo // main function complexity is acceptable for CLI tool
 func main() {
 	cfg := parseFlags()
 
 	if cfg.pprofAddr != "" {
 		go func() {
 			log.Printf("pprof listening on %s", cfg.pprofAddr)
+			//nolint:gosec // intentional pprof server without timeouts for profiling
 			if err := http.ListenAndServe(cfg.pprofAddr, nil); err != nil {
 				log.Printf("pprof server error: %v", err)
 			}
@@ -68,12 +75,12 @@ func main() {
 		log.Fatal(err)
 	}
 	if cleanup != nil {
-		defer cleanup()
+		defer cleanup() //nolint:errcheck // cleanup errors are non-fatal in profiler
 	}
 
 	paths, err := makeFiles(dir, cfg.files, cfg.fileSize, cfg.dirCount, cfg.pattern, cfg.randomSeed)
 	if err != nil {
-		log.Fatal(err)
+		log.Fatal(err) //nolint:gocritic // exitAfterDefer is intentional - cleanup is best-effort
 	}
 
 	index, data, err := buildArchive(dir, cfg.compression)
@@ -85,30 +92,30 @@ func main() {
 	reader := blob.NewReader(index, source)
 
 	if cfg.cpuProfile != "" {
-		f, err := os.Create(cfg.cpuProfile)
-		if err != nil {
-			log.Fatal(err)
+		cpuFile, cpuErr := os.Create(cfg.cpuProfile)
+		if cpuErr != nil {
+			log.Fatal(cpuErr)
 		}
-		if err := pprof.StartCPUProfile(f); err != nil {
-			log.Fatal(err)
+		if cpuErr = pprof.StartCPUProfile(cpuFile); cpuErr != nil {
+			log.Fatal(cpuErr)
 		}
 		defer func() {
 			pprof.StopCPUProfile()
-			_ = f.Close()
+			_ = cpuFile.Close()
 		}()
 	}
 
 	if cfg.traceFile != "" {
-		f, err := os.Create(cfg.traceFile)
-		if err != nil {
-			log.Fatal(err)
+		traceFile, traceErr := os.Create(cfg.traceFile)
+		if traceErr != nil {
+			log.Fatal(traceErr)
 		}
-		if err := trace.Start(f); err != nil {
-			log.Fatal(err)
+		if traceErr = trace.Start(traceFile); traceErr != nil {
+			log.Fatal(traceErr)
 		}
 		defer func() {
 			trace.Stop()
-			_ = f.Close()
+			_ = traceFile.Close()
 		}()
 	}
 
@@ -144,6 +151,7 @@ type profileStats struct {
 	elapsed time.Duration
 }
 
+//nolint:gocognit,gocyclo,gocritic // complexity is inherent to multi-mode profiler dispatch; hugeParam acceptable for profiler
 func runProfile(cfg config, reader *blob.Reader, paths []string, index *blob.Index, rootDir string) (profileStats, error) {
 	start := time.Now()
 	ops := 0
@@ -159,16 +167,16 @@ func runProfile(cfg config, reader *blob.Reader, paths []string, index *blob.Ind
 	switch cfg.mode {
 	case "readfile":
 		readFS := fs.ReadFileFS(reader)
-		if cfg.cache != "none" {
-			cache, cleanup, err := newCache(cfg, rootDir)
+		if cfg.cache != cacheNone {
+			c, cleanup, err := newCache(cfg, rootDir)
 			if err != nil {
 				return profileStats{}, err
 			}
-			defer cleanup()
-			readFS = blob.NewCachedReader(reader, cache, blob.WithPrefetchConcurrency(cfg.prefetchWorkers))
+			defer cleanup() //nolint:errcheck // cleanup errors are non-fatal in profiler
+			readFS = cache.NewReader(reader, c, cache.WithPrefetchConcurrency(cfg.prefetchWorkers))
 		}
 
-		rng := rand.New(rand.NewSource(cfg.randomSeed))
+		rng := rand.New(rand.NewSource(cfg.randomSeed)) //nolint:gosec // intentional for reproducible benchmarks
 		for shouldContinue() {
 			path := pickPath(paths, ops, rng, cfg.readRandom)
 			content, err := readFS.ReadFile(path)
@@ -181,16 +189,16 @@ func runProfile(cfg config, reader *blob.Reader, paths []string, index *blob.Ind
 		}
 
 	case "cached-readfile-hit":
-		if cfg.cache == "none" {
-			return profileStats{}, fmt.Errorf("cached-readfile-hit requires cache")
+		if cfg.cache == cacheNone {
+			return profileStats{}, errors.New("cached-readfile-hit requires cache")
 		}
-		cache, cleanup, err := newCache(cfg, rootDir)
+		c, cleanup, err := newCache(cfg, rootDir)
 		if err != nil {
 			return profileStats{}, err
 		}
-		defer cleanup()
+		defer cleanup() //nolint:errcheck // cleanup errors are non-fatal in profiler
 
-		cached := blob.NewCachedReader(reader, cache, blob.WithPrefetchConcurrency(cfg.prefetchWorkers))
+		cached := cache.NewReader(reader, c, cache.WithPrefetchConcurrency(cfg.prefetchWorkers))
 		for _, path := range paths {
 			content, err := cached.ReadFile(path)
 			if err != nil {
@@ -202,7 +210,7 @@ func runProfile(cfg config, reader *blob.Reader, paths []string, index *blob.Ind
 		start = time.Now()
 		ops = 0
 		byteCount = 0
-		rng := rand.New(rand.NewSource(cfg.randomSeed))
+		rng := rand.New(rand.NewSource(cfg.randomSeed)) //nolint:gosec // intentional for reproducible benchmarks
 		for shouldContinue() {
 			path := pickPath(paths, ops, rng, cfg.readRandom)
 			content, err := cached.ReadFile(path)
@@ -215,7 +223,7 @@ func runProfile(cfg config, reader *blob.Reader, paths []string, index *blob.Ind
 		}
 
 	case "index-lookup":
-		rng := rand.New(rand.NewSource(cfg.randomSeed))
+		rng := rand.New(rand.NewSource(cfg.randomSeed)) //nolint:gosec // intentional for reproducible benchmarks
 		for shouldContinue() {
 			path := pickPath(paths, ops, rng, cfg.readRandom)
 			view, ok := index.LookupView(path)
@@ -227,7 +235,7 @@ func runProfile(cfg config, reader *blob.Reader, paths []string, index *blob.Ind
 		}
 
 	case "index-lookup-copy":
-		rng := rand.New(rand.NewSource(cfg.randomSeed))
+		rng := rand.New(rand.NewSource(cfg.randomSeed)) //nolint:gosec // intentional for reproducible benchmarks
 		for shouldContinue() {
 			path := pickPath(paths, ops, rng, cfg.readRandom)
 			view, ok := index.LookupView(path)
@@ -268,8 +276,8 @@ func runProfile(cfg config, reader *blob.Reader, paths []string, index *blob.Ind
 		}
 
 	case "prefetchdir":
-		if cfg.cache == "none" {
-			return profileStats{}, fmt.Errorf("prefetchdir requires cache")
+		if cfg.cache == cacheNone {
+			return profileStats{}, errors.New("prefetchdir requires cache")
 		}
 		prefix := cfg.prefetchPrefix
 		if prefix == "." {
@@ -278,13 +286,13 @@ func runProfile(cfg config, reader *blob.Reader, paths []string, index *blob.Ind
 		prefetchBytes := prefetchSize(index, prefix)
 		if cfg.prefetchCold {
 			for shouldContinue() {
-				cache, cleanup, err := newCache(cfg, rootDir)
+				c, cleanup, err := newCache(cfg, rootDir)
 				if err != nil {
 					return profileStats{}, err
 				}
-				cached := blob.NewCachedReader(reader, cache, blob.WithPrefetchConcurrency(cfg.prefetchWorkers))
+				cached := cache.NewReader(reader, c, cache.WithPrefetchConcurrency(cfg.prefetchWorkers))
 				if err := cached.PrefetchDir(prefix); err != nil {
-					_ = cleanup()
+					_ = cleanup() //nolint:errcheck // cleanup errors are non-fatal in profiler
 					return profileStats{}, err
 				}
 				if err := cleanup(); err != nil {
@@ -294,12 +302,12 @@ func runProfile(cfg config, reader *blob.Reader, paths []string, index *blob.Ind
 				ops++
 			}
 		} else {
-			cache, cleanup, err := newCache(cfg, rootDir)
+			c, cleanup, err := newCache(cfg, rootDir)
 			if err != nil {
 				return profileStats{}, err
 			}
-			defer cleanup()
-			cached := blob.NewCachedReader(reader, cache, blob.WithPrefetchConcurrency(cfg.prefetchWorkers))
+			defer cleanup() //nolint:errcheck // cleanup errors are non-fatal in profiler
+			cached := cache.NewReader(reader, c, cache.WithPrefetchConcurrency(cfg.prefetchWorkers))
 			for shouldContinue() {
 				if err := cached.PrefetchDir(prefix); err != nil {
 					return profileStats{}, err
@@ -395,9 +403,10 @@ func entryFromViewWithPath(view blob.EntryView, path string) blob.Entry {
 	}
 }
 
+//nolint:gocritic // hugeParam acceptable for config struct in CLI tool
 func setupTempDir(cfg config) (string, func() error, error) {
 	if cfg.tempDir != "" {
-		return cfg.tempDir, nil, os.MkdirAll(cfg.tempDir, 0o755)
+		return cfg.tempDir, nil, os.MkdirAll(cfg.tempDir, 0o755) //nolint:gosec // 0o755 is intentional for profiler temp dirs
 	}
 	dir, err := os.MkdirTemp("", "blob-profiler-*")
 	if err != nil {
@@ -417,11 +426,11 @@ func makeFiles(dir string, fileCount, fileSize, dirCount int, pattern string, se
 		dirCount = 1
 	}
 	paths := make([]string, 0, fileCount)
-	rng := rand.New(rand.NewSource(seed))
-	for i := 0; i < fileCount; i++ {
+	rng := rand.New(rand.NewSource(seed)) //nolint:gosec // intentional use for reproducible benchmarks
+	for i := range fileCount {
 		relPath := fmt.Sprintf("dir%02d/file%05d.dat", i%dirCount, i)
 		fullPath := filepath.Join(dir, filepath.FromSlash(relPath))
-		if err := os.MkdirAll(filepath.Dir(fullPath), 0o755); err != nil {
+		if err := os.MkdirAll(filepath.Dir(fullPath), 0o755); err != nil { //nolint:gosec // 0o755 is intentional for profiler
 			return nil, err
 		}
 
@@ -441,7 +450,7 @@ func makeFiles(dir string, fileCount, fileSize, dirCount int, pattern string, se
 			}
 		}
 
-		if err := os.WriteFile(fullPath, content, 0o644); err != nil {
+		if err := os.WriteFile(fullPath, content, 0o644); err != nil { //nolint:gosec // 0o644 is intentional for profiler test files
 			return nil, err
 		}
 		paths = append(paths, relPath)
@@ -480,17 +489,18 @@ func prefetchSize(index *blob.Index, prefix string) int64 {
 		size := view.OriginalSize()
 		next := total + size
 		if next < total {
-			return int64(^uint64(0) >> 1)
+			return int64(^uint64(0) >> 1) //nolint:gosec // overflow check is explicit above
 		}
 		total = next
 	}
-	return int64(total)
+	return int64(total) //nolint:gosec // overflow is checked and bounded above
 }
 
-func newCache(cfg config, rootDir string) (blob.Cache, func() error, error) {
+//nolint:gocritic // hugeParam acceptable for config struct in CLI tool
+func newCache(cfg config, rootDir string) (cache.Cache, func() error, error) {
 	switch cfg.cache {
-	case "none":
-		return nil, nil, fmt.Errorf("cache=none should not create a cache")
+	case cacheNone:
+		return nil, nil, errors.New("cache=none should not create a cache")
 	case "memory":
 		return testutil.NewMockCache(), func() error { return nil }, nil
 	case "disk":
@@ -498,7 +508,7 @@ func newCache(cfg config, rootDir string) (blob.Cache, func() error, error) {
 		autoDir := false
 		if cacheDir == "" {
 			base := filepath.Join(rootDir, "cache")
-			if err := os.MkdirAll(base, 0o755); err != nil {
+			if err := os.MkdirAll(base, 0o755); err != nil { //nolint:gosec // 0o755 is intentional for profiler
 				return nil, nil, err
 			}
 			dir, err := os.MkdirTemp(base, "run-*")
@@ -507,7 +517,7 @@ func newCache(cfg config, rootDir string) (blob.Cache, func() error, error) {
 			}
 			cacheDir = dir
 			autoDir = true
-		} else if err := os.MkdirAll(cacheDir, 0o755); err != nil {
+		} else if err := os.MkdirAll(cacheDir, 0o755); err != nil { //nolint:gosec // 0o755 is intentional for profiler
 			return nil, nil, err
 		}
 
@@ -528,12 +538,12 @@ type streamingDiskCache struct {
 	*testutil.DiskCache
 }
 
-func (c *streamingDiskCache) Writer(hash []byte) (blob.CacheWriter, error) {
+func (c *streamingDiskCache) Writer(hash []byte) (cache.Writer, error) {
 	writer, err := c.DiskCache.Writer(hash)
 	if err != nil {
 		return nil, err
 	}
-	adapted, ok := writer.(blob.CacheWriter)
+	adapted, ok := writer.(cache.Writer)
 	if !ok {
 		return nil, fmt.Errorf("unexpected cache writer type %T", writer)
 	}

@@ -87,7 +87,7 @@ func NewDiskCache(dir string) *DiskCache {
 // Get retrieves cached content by hash.
 func (c *DiskCache) Get(hash []byte) ([]byte, bool) {
 	path := c.path(hash)
-	data, err := os.ReadFile(path)
+	data, err := os.ReadFile(path) //nolint:gosec // path is derived from hash, not user input
 	if err != nil {
 		return nil, false
 	}
@@ -117,7 +117,7 @@ func (c *DiskCache) Put(hash, content []byte) error {
 	}
 	if err := os.Rename(tmpPath, finalPath); err != nil {
 		_ = os.Remove(tmpPath)
-		return nil
+		return err
 	}
 	return nil
 }
@@ -161,7 +161,7 @@ func (w *diskCacheWriter) Commit() error {
 	}
 	if err := os.Rename(w.tmpPath, w.finalPath); err != nil {
 		_ = os.Remove(w.tmpPath)
-		return nil
+		return err
 	}
 	return nil
 }

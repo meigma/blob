@@ -139,6 +139,8 @@ func (w *Writer) writeData(ctx context.Context, root *os.Root, data io.Writer) (
 }
 
 // processEntry handles a single directory entry during archive creation.
+//
+//nolint:gocritic // unnamedResult is acceptable for this internal helper
 func (w *Writer) processEntry(ctx context.Context, root *os.Root, data io.Writer, ops *writeops.Ops, path string, d fs.DirEntry, walkErr error, strict bool, maxFiles, count int) (Entry, bool, error) {
 	if walkErr != nil {
 		return Entry{}, false, walkErr
@@ -188,8 +190,8 @@ func (w *Writer) writeEntry(ctx context.Context, root *os.Root, data io.Writer, 
 	if !finfo.Mode().IsRegular() {
 		return Entry{}, fmt.Errorf("not a regular file: %s", path)
 	}
-	if err := writeops.ValidateFileInfo(path, info, finfo, strict); err != nil {
-		return Entry{}, err
+	if validateErr := writeops.ValidateFileInfo(path, info, finfo, strict); validateErr != nil {
+		return Entry{}, validateErr
 	}
 
 	compression := w.opts.Compression

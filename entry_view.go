@@ -94,7 +94,3 @@ func entryFromViewWithPath(ev EntryView, path string) Entry {
 		Compression:  ev.Compression(),
 	}
 }
-
-func entryFromView(ev EntryView) Entry {
-	return entryFromViewWithPath(ev, string(ev.PathBytes()))
-}
