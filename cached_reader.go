@@ -15,6 +15,7 @@ import (
 
 	"golang.org/x/sync/singleflight"
 
+	"github.com/meigma/blob/internal/fileops"
 	"github.com/meigma/blob/internal/pathutil"
 	"github.com/meigma/blob/internal/sizing"
 )
@@ -163,7 +164,7 @@ func (cr *CachedReader) Open(name string) (fs.File, error) {
 		return nil, err
 	}
 
-	f, ok := baseFile.(*file)
+	f, ok := baseFile.(*fileops.File)
 	if !ok {
 		// Should not happen for files, but return base file if it does
 		return baseFile, nil
@@ -309,9 +310,9 @@ func (cr *CachedReader) prefetchEntries(entries []Entry) error {
 		return nil
 	}
 
-	sourceSize := cr.source.Size()
+	sourceSize := cr.ops.Source().Size()
 	for i := range entries {
-		if err := validateEntry(&entries[i], sourceSize, cr.maxFileSize); err != nil {
+		if err := fileops.ValidateAll(&entries[i], sourceSize, cr.maxFileSize); err != nil {
 			return err
 		}
 	}
@@ -335,7 +336,7 @@ func (cr *CachedReader) prefetchGroup(group rangeGroup) error {
 		return fmt.Errorf("prefetch: %w", err)
 	}
 	data := make([]byte, sizeInt)
-	n, err := cr.source.ReadAt(data, int64(group.start)) //nolint:gosec // offset fits in int64
+	n, err := cr.ops.Source().ReadAt(data, int64(group.start)) //nolint:gosec // offset fits in int64
 	if err != nil && err != io.EOF {
 		return fmt.Errorf("prefetch: %w", err)
 	}
@@ -454,7 +455,7 @@ func (cr *CachedReader) streamDecompressVerifyCache(entry *Entry, data []byte, s
 		}
 		return err
 	}
-	if err := ensureNoExtra(tee); err != nil {
+	if err := fileops.EnsureNoExtra(tee); err != nil {
 		_ = w.Discard()
 		return err
 	}
@@ -464,10 +465,7 @@ func (cr *CachedReader) streamDecompressVerifyCache(entry *Entry, data []byte, s
 		_ = w.Discard()
 		return ErrHashMismatch
 	}
-	if err := w.Commit(); err != nil {
-		return err
-	}
-	return nil
+	return w.Commit()
 }
 
 // decompress decompresses data according to the compression algorithm.
@@ -483,7 +481,7 @@ func (cr *CachedReader) decompress(data []byte, comp Compression, expectedSize u
 		if err != nil {
 			return nil, err
 		}
-		dec, closeFn, err := cr.getZstdDecoder(bytes.NewReader(data))
+		dec, closeFn, err := cr.ops.Pool().Get(bytes.NewReader(data))
 		if err != nil {
 			return nil, fmt.Errorf("%w: %v", ErrDecompression, err)
 		}
@@ -496,7 +494,7 @@ func (cr *CachedReader) decompress(data []byte, comp Compression, expectedSize u
 			}
 			return nil, fmt.Errorf("%w: %v", ErrDecompression, err)
 		}
-		if err := ensureNoExtra(dec); err != nil {
+		if err := fileops.EnsureNoExtra(dec); err != nil {
 			return nil, err
 		}
 		return content, nil
@@ -510,7 +508,7 @@ func (cr *CachedReader) newEntryReader(entry *Entry, data []byte) (io.Reader, fu
 	case CompressionNone:
 		return bytes.NewReader(data), func() {}, nil
 	case CompressionZstd:
-		dec, closeFn, err := cr.getZstdDecoder(bytes.NewReader(data))
+		dec, closeFn, err := cr.ops.Pool().Get(bytes.NewReader(data))
 		if err != nil {
 			return nil, func() {}, fmt.Errorf("%w: %v", ErrDecompression, err)
 		}
@@ -560,7 +558,7 @@ func (cr *CachedReader) prefetchWorkerCount(entries []Entry) int {
 }
 
 // wrapFileForCaching wraps a base file with caching support.
-func (cr *CachedReader) wrapFileForCaching(f *file, entry *Entry) (fs.File, error) {
+func (cr *CachedReader) wrapFileForCaching(f *fileops.File, entry *Entry) (fs.File, error) {
 	// Check if cache supports streaming
 	if sc, ok := cr.cache.(StreamingCache); ok {
 		w, err := sc.Writer(entry.Hash)
@@ -569,7 +567,7 @@ func (cr *CachedReader) wrapFileForCaching(f *file, entry *Entry) (fs.File, erro
 			return cr.wrapFileBuffered(f, entry)
 		}
 		return &streamingCachedFile{
-			file:   f,
+			File:   f,
 			entry:  *entry,
 			writer: w,
 		}, nil
@@ -579,7 +577,7 @@ func (cr *CachedReader) wrapFileForCaching(f *file, entry *Entry) (fs.File, erro
 }
 
 // wrapFileBuffered wraps a file with in-memory buffering for caching.
-func (cr *CachedReader) wrapFileBuffered(f *file, entry *Entry) (fs.File, error) {
+func (cr *CachedReader) wrapFileBuffered(f *fileops.File, entry *Entry) (fs.File, error) {
 	// Check if file is small enough to buffer
 	if entry.OriginalSize > uint64(math.MaxInt) {
 		// Too large to buffer, skip caching
@@ -587,7 +585,7 @@ func (cr *CachedReader) wrapFileBuffered(f *file, entry *Entry) (fs.File, error)
 	}
 
 	return &bufferedCachedFile{
-		file:  f,
+		File:  f,
 		entry: *entry,
 		cache: cr.cache,
 		buf:   &bytes.Buffer{},
@@ -611,7 +609,7 @@ func (f *cachedContentFile) Read(p []byte) (int, error) {
 }
 
 func (f *cachedContentFile) Stat() (fs.FileInfo, error) {
-	return &fileInfo{entry: f.entry, name: pathutil.Base(f.entry.Path)}, nil
+	return fileops.NewFileInfo(&f.entry, pathutil.Base(f.entry.Path))
 }
 
 func (f *cachedContentFile) Close() error {
@@ -620,7 +618,7 @@ func (f *cachedContentFile) Close() error {
 
 // streamingCachedFile wraps a file and streams reads to a CacheWriter.
 type streamingCachedFile struct {
-	*file
+	*fileops.File
 	entry   Entry
 	writer  CacheWriter
 	written bool
@@ -628,7 +626,7 @@ type streamingCachedFile struct {
 }
 
 func (f *streamingCachedFile) Read(p []byte) (int, error) {
-	n, err := f.file.Read(p)
+	n, err := f.File.Read(p)
 
 	if n > 0 && !f.failed {
 		if _, werr := f.writer.Write(p[:n]); werr != nil {
@@ -642,7 +640,7 @@ func (f *streamingCachedFile) Read(p []byte) (int, error) {
 }
 
 func (f *streamingCachedFile) Close() error {
-	err := f.file.Close()
+	err := f.File.Close()
 
 	// Handle cache finalization
 	switch {
@@ -661,14 +659,14 @@ func (f *streamingCachedFile) Close() error {
 
 // bufferedCachedFile wraps a file and buffers reads for caching.
 type bufferedCachedFile struct {
-	*file
+	*fileops.File
 	entry Entry
 	cache Cache
 	buf   *bytes.Buffer
 }
 
 func (f *bufferedCachedFile) Read(p []byte) (int, error) {
-	n, err := f.file.Read(p)
+	n, err := f.File.Read(p)
 
 	if n > 0 && f.buf != nil {
 		if _, werr := f.buf.Write(p[:n]); werr != nil {
@@ -681,7 +679,7 @@ func (f *bufferedCachedFile) Read(p []byte) (int, error) {
 }
 
 func (f *bufferedCachedFile) Close() error {
-	err := f.file.Close()
+	err := f.File.Close()
 
 	// Cache content on success
 	if err == nil && f.buf != nil && uint64(f.buf.Len()) == f.entry.OriginalSize { //nolint:gosec // Len() is always non-negative

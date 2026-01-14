@@ -2,20 +2,18 @@ package blob
 
 import (
 	"context"
-	"crypto/sha256"
 	"errors"
 	"fmt"
 	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
-	"strings"
 
 	flatbuffers "github.com/google/flatbuffers/go"
 	"github.com/klauspost/compress/zstd"
 
 	"github.com/meigma/blob/internal/fb"
-	"github.com/meigma/blob/internal/ioutil"
+	"github.com/meigma/blob/internal/writeops"
 )
 
 // DefaultMaxFiles is the default limit used when WriteOptions.MaxFiles is zero.
@@ -31,7 +29,11 @@ const (
 
 // SkipCompressionFunc returns true when a file should be stored uncompressed.
 // It is called once per file and should be inexpensive.
-type SkipCompressionFunc func(path string, info fs.FileInfo) bool
+type SkipCompressionFunc = writeops.SkipCompressionFunc
+
+// DefaultSkipCompression returns a SkipCompressionFunc that skips small files
+// and known already-compressed extensions.
+var DefaultSkipCompression = writeops.DefaultSkipCompression
 
 // WriteOptions configures archive creation.
 type WriteOptions struct {
@@ -52,19 +54,6 @@ type WriteOptions struct {
 	// MaxFiles limits the number of files included in the archive.
 	// Zero uses DefaultMaxFiles. Negative means no limit.
 	MaxFiles int
-}
-
-// DefaultSkipCompression returns a SkipCompressionFunc that skips small files
-// and known already-compressed extensions.
-func DefaultSkipCompression(minSize int64) SkipCompressionFunc {
-	return func(path string, info fs.FileInfo) bool {
-		if info != nil && minSize > 0 && info.Size() < minSize {
-			return true
-		}
-		ext := strings.ToLower(filepath.Ext(path))
-		_, ok := defaultSkipCompressionExts[ext]
-		return ok
-	}
 }
 
 // Writer creates archives from directories.
@@ -98,52 +87,39 @@ func (w *Writer) Create(ctx context.Context, dir string, index, data io.Writer) 
 	}
 	defer root.Close()
 
-	// Write file contents to data blob while collecting metadata
 	entries, err := w.writeData(ctx, root, data)
 	if err != nil {
 		return err
 	}
 
-	// Build and write index
 	indexData := buildIndex(entries)
 	_, err = index.Write(indexData)
 	return err
-}
-
-func (w *Writer) shouldSkipCompression(path string, info fs.FileInfo) bool {
-	for _, fn := range w.opts.SkipCompression {
-		if fn == nil {
-			continue
-		}
-		if fn(path, info) {
-			return true
-		}
-	}
-	return false
 }
 
 // writeData streams file contents to the data writer while populating entries.
 func (w *Writer) writeData(ctx context.Context, root *os.Root, data io.Writer) ([]Entry, error) {
 	entries := make([]Entry, 0, 1024)
 	var offset uint64
-	buf := make([]byte, 32*1024)
 	strict := w.opts.ChangeDetection == ChangeDetectionStrict
 	maxFiles := w.opts.MaxFiles
 	if maxFiles == 0 {
 		maxFiles = DefaultMaxFiles
 	}
 
-	var enc *zstd.Encoder
+	var ops *writeops.Ops
 	if w.opts.Compression != CompressionNone {
-		var err error
-		enc, err = zstd.NewWriter(io.Discard, zstd.WithEncoderConcurrency(1), zstd.WithLowerEncoderMem(true))
+		enc, err := zstd.NewWriter(io.Discard, zstd.WithEncoderConcurrency(1), zstd.WithLowerEncoderMem(true))
 		if err != nil {
 			return nil, fmt.Errorf("create zstd encoder: %w", err)
 		}
+		ops = writeops.New(enc)
+	} else {
+		ops = writeops.New(nil)
 	}
 
 	err := fs.WalkDir(root.FS(), ".", func(path string, d fs.DirEntry, walkErr error) error {
-		entry, skip, err := w.processEntry(ctx, root, data, enc, buf, path, d, walkErr, strict, maxFiles, len(entries))
+		entry, skip, err := w.processEntry(ctx, root, data, ops, path, d, walkErr, strict, maxFiles, len(entries))
 		if err != nil || skip {
 			return err
 		}
@@ -163,8 +139,7 @@ func (w *Writer) writeData(ctx context.Context, root *os.Root, data io.Writer) (
 }
 
 // processEntry handles a single directory entry during archive creation.
-// Returns (entry, skip, error) where skip indicates this entry should be skipped.
-func (w *Writer) processEntry(ctx context.Context, root *os.Root, data io.Writer, enc *zstd.Encoder, buf []byte, path string, d fs.DirEntry, walkErr error, strict bool, maxFiles, count int) (Entry, bool, error) {
+func (w *Writer) processEntry(ctx context.Context, root *os.Root, data io.Writer, ops *writeops.Ops, path string, d fs.DirEntry, walkErr error, strict bool, maxFiles, count int) (Entry, bool, error) {
 	if walkErr != nil {
 		return Entry{}, false, walkErr
 	}
@@ -176,7 +151,7 @@ func (w *Writer) processEntry(ctx context.Context, root *os.Root, data io.Writer
 	}
 
 	fsPath := filepath.FromSlash(path)
-	info, ok, err := entryInfo(root, fsPath, d, strict)
+	info, ok, err := writeops.ResolveEntryInfo(root, fsPath, d, strict)
 	if err != nil {
 		return Entry{}, false, err
 	}
@@ -188,7 +163,7 @@ func (w *Writer) processEntry(ctx context.Context, root *os.Root, data io.Writer
 		return Entry{}, false, ErrTooManyFiles
 	}
 
-	entry, err := w.writeEntry(ctx, root, data, enc, buf, path, fsPath, info, strict)
+	entry, err := w.writeEntry(ctx, root, data, ops, path, fsPath, info, strict)
 	if err != nil {
 		if errors.Is(err, ErrSymlink) {
 			return Entry{}, true, nil
@@ -199,7 +174,7 @@ func (w *Writer) processEntry(ctx context.Context, root *os.Root, data io.Writer
 	return entry, false, nil
 }
 
-func (w *Writer) writeEntry(ctx context.Context, root *os.Root, data io.Writer, enc *zstd.Encoder, buf []byte, path, fsPath string, info fs.FileInfo, strict bool) (Entry, error) {
+func (w *Writer) writeEntry(ctx context.Context, root *os.Root, data io.Writer, ops *writeops.Ops, path, fsPath string, info fs.FileInfo, strict bool) (Entry, error) {
 	f, err := openFileNoFollow(root, fsPath)
 	if err != nil {
 		return Entry{}, err
@@ -213,12 +188,12 @@ func (w *Writer) writeEntry(ctx context.Context, root *os.Root, data io.Writer, 
 	if !finfo.Mode().IsRegular() {
 		return Entry{}, fmt.Errorf("not a regular file: %s", path)
 	}
-	if verr := validateFileInfo(path, info, finfo, strict); verr != nil {
-		return Entry{}, verr
+	if err := writeops.ValidateFileInfo(path, info, finfo, strict); err != nil {
+		return Entry{}, err
 	}
 
 	compression := w.opts.Compression
-	if compression != CompressionNone && w.shouldSkipCompression(path, finfo) {
+	if compression != CompressionNone && writeops.ShouldSkip(path, finfo, w.opts.SkipCompression) {
 		compression = CompressionNone
 	}
 
@@ -226,12 +201,12 @@ func (w *Writer) writeEntry(ctx context.Context, root *os.Root, data io.Writer, 
 		return Entry{}, fmt.Errorf("negative file size: %s", path)
 	}
 
-	dataSize, originalSize, hash, err := w.writeFile(ctx, f, data, enc, buf, compression, finfo.Size())
+	dataSize, originalSize, hash, err := ops.WriteFile(ctx, f, data, compression, finfo.Size())
 	if err != nil {
 		return Entry{}, fmt.Errorf("write %s: %w", path, err)
 	}
 
-	if err := checkFileUnchanged(f, path, finfo, strict); err != nil {
+	if err := writeops.CheckFileUnchanged(f, path, finfo, strict); err != nil {
 		return Entry{}, err
 	}
 
@@ -249,41 +224,6 @@ func (w *Writer) writeEntry(ctx context.Context, root *os.Root, data io.Writer, 
 	}, nil
 }
 
-// writeFile streams a single file through the hash and optional compression
-// pipeline to the data writer.
-func (w *Writer) writeFile(ctx context.Context, f *os.File, data io.Writer, enc *zstd.Encoder, buf []byte, compression Compression, expectedSize int64) (dataSize, originalSize uint64, hash []byte, err error) {
-	if expectedSize < 0 {
-		return 0, 0, nil, errors.New("negative file size")
-	}
-
-	hasher := sha256.New()
-	cw := &ioutil.CountingWriter{W: data}
-	cr := &ioutil.CountingReader{R: io.LimitReader(f, expectedSize)}
-
-	if compression == CompressionNone {
-		// Stream: file → TeeReader(hasher) → countingWriter(data)
-		if _, err := ioutil.CopyWithContext(ctx, cw, io.TeeReader(cr, hasher), buf); err != nil {
-			return 0, 0, nil, wrapOverflowErr(err)
-		}
-	} else {
-		// Stream: file → TeeReader(hasher) → zstd encoder → countingWriter(data)
-		enc.Reset(cw)
-		if _, err := ioutil.CopyWithContext(ctx, enc, io.TeeReader(cr, hasher), buf); err != nil {
-			enc.Close()
-			return 0, 0, nil, wrapOverflowErr(err)
-		}
-		if err := enc.Close(); err != nil {
-			return 0, 0, nil, fmt.Errorf("close zstd encoder: %w", err)
-		}
-	}
-
-	if cr.N != uint64(expectedSize) {
-		return 0, 0, nil, fmt.Errorf("file size changed during archive creation: expected %d, got %d", expectedSize, cr.N)
-	}
-
-	return cw.N, cr.N, hasher.Sum(nil), nil
-}
-
 // buildIndex serializes entries to FlatBuffers format.
 func buildIndex(entries []Entry) []byte {
 	builder := flatbuffers.NewBuilder(1024)
@@ -293,17 +233,14 @@ func buildIndex(entries []Entry) []byte {
 	for i := len(entries) - 1; i >= 0; i-- {
 		e := entries[i]
 
-		// Create path string
 		pathOffset := builder.CreateString(e.Path)
 
-		// Create hash vector (bytes in reverse)
 		fb.EntryStartHashVector(builder, len(e.Hash))
 		for j := len(e.Hash) - 1; j >= 0; j-- {
 			builder.PrependByte(e.Hash[j])
 		}
 		hashOffset := builder.EndVector(len(e.Hash))
 
-		// Build entry
 		fb.EntryStart(builder)
 		fb.EntryAddPath(builder, pathOffset)
 		fb.EntryAddDataOffset(builder, e.DataOffset)
@@ -318,14 +255,12 @@ func buildIndex(entries []Entry) []byte {
 		entryOffsets[i] = fb.EntryEnd(builder)
 	}
 
-	// Create entries vector (must be in sorted order for binary search)
 	fb.IndexStartEntriesVector(builder, len(entries))
 	for i := len(entryOffsets) - 1; i >= 0; i-- {
 		builder.PrependUOffsetT(entryOffsets[i])
 	}
 	entriesOffset := builder.EndVector(len(entries))
 
-	// Build index
 	fb.IndexStart(builder)
 	fb.IndexAddVersion(builder, 1)
 	fb.IndexAddHashAlgorithm(builder, fb.HashAlgorithmSHA256)
@@ -334,109 +269,4 @@ func buildIndex(entries []Entry) []byte {
 
 	builder.Finish(indexOffset)
 	return builder.FinishedBytes()
-}
-
-func checkFileUnchanged(f *os.File, path string, before fs.FileInfo, strict bool) error {
-	if !strict {
-		return nil
-	}
-	after, err := f.Stat()
-	if err != nil {
-		return err
-	}
-	if after.Size() != before.Size() || !after.ModTime().Equal(before.ModTime()) || after.Mode().Perm() != before.Mode().Perm() {
-		return fmt.Errorf("file changed during archive creation: %s", path)
-	}
-	return nil
-}
-
-func entryInfo(root *os.Root, fsPath string, d fs.DirEntry, strict bool) (fs.FileInfo, bool, error) {
-	dtype := d.Type()
-	if dtype&fs.ModeSymlink != 0 {
-		return nil, false, nil
-	}
-
-	if dtype == 0 {
-		linfo, err := root.Lstat(fsPath)
-		if err != nil {
-			return nil, false, err
-		}
-		if linfo.Mode()&fs.ModeSymlink != 0 {
-			return nil, false, nil
-		}
-		if !linfo.Mode().IsRegular() {
-			return nil, false, nil
-		}
-		return linfo, true, nil
-	}
-
-	if !dtype.IsRegular() {
-		return nil, false, nil
-	}
-	if !strict {
-		return nil, true, nil
-	}
-
-	info, err := d.Info()
-	if err != nil {
-		return nil, false, err
-	}
-	if !info.Mode().IsRegular() {
-		return nil, false, nil
-	}
-	return info, true, nil
-}
-
-func validateFileInfo(path string, info, finfo fs.FileInfo, strict bool) error {
-	if !strict {
-		return nil
-	}
-	if info == nil {
-		return fmt.Errorf("missing file info: %s", path)
-	}
-	if !os.SameFile(info, finfo) {
-		return fmt.Errorf("file changed during archive creation: %s", path)
-	}
-	return nil
-}
-
-func wrapOverflowErr(err error) error {
-	if errors.Is(err, ioutil.ErrOverflow) {
-		return ErrSizeOverflow
-	}
-	return err
-}
-
-var defaultSkipCompressionExts = map[string]struct{}{
-	".7z":    {},
-	".aac":   {},
-	".avif":  {},
-	".br":    {},
-	".bz2":   {},
-	".flac":  {},
-	".gif":   {},
-	".gz":    {},
-	".heic":  {},
-	".ico":   {},
-	".jpeg":  {},
-	".jpg":   {},
-	".m4v":   {},
-	".mkv":   {},
-	".mov":   {},
-	".mp3":   {},
-	".mp4":   {},
-	".ogg":   {},
-	".opus":  {},
-	".pdf":   {},
-	".png":   {},
-	".rar":   {},
-	".tgz":   {},
-	".wav":   {},
-	".webm":  {},
-	".webp":  {},
-	".woff":  {},
-	".woff2": {},
-	".xz":    {},
-	".zip":   {},
-	".zst":   {},
 }

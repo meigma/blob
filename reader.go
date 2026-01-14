@@ -1,21 +1,12 @@
 package blob
 
 import (
-	"bytes"
-	"crypto/sha256"
-	"errors"
-	"fmt"
-	"hash"
 	"io"
 	"io/fs"
 	"iter"
-	"sync"
-	"time"
 
-	"github.com/klauspost/compress/zstd"
-
+	"github.com/meigma/blob/internal/fileops"
 	"github.com/meigma/blob/internal/pathutil"
-	"github.com/meigma/blob/internal/sizing"
 )
 
 // ByteSource provides random access to the data blob.
@@ -25,9 +16,6 @@ type ByteSource interface {
 	io.ReaderAt
 	Size() int64
 }
-
-const defaultMaxFileSize = 256 << 20
-const defaultMaxDecoderMemory = 256 << 20
 
 // ReaderOption configures a Reader.
 type ReaderOption func(*Reader)
@@ -64,11 +52,10 @@ func WithVerifyOnClose(enabled bool) ReaderOption {
 // for compatibility with the standard library.
 type Reader struct {
 	index            *Index
-	source           ByteSource
+	ops              *fileops.Ops
 	maxFileSize      uint64
 	maxDecoderMemory uint64
 	verifyOnClose    bool
-	zstdPool         *sync.Pool
 }
 
 // Interface compliance.
@@ -86,15 +73,18 @@ var (
 func NewReader(index *Index, source ByteSource, opts ...ReaderOption) *Reader {
 	r := &Reader{
 		index:            index,
-		source:           source,
-		maxFileSize:      defaultMaxFileSize,
-		maxDecoderMemory: defaultMaxDecoderMemory,
+		maxFileSize:      fileops.DefaultMaxFileSize,
+		maxDecoderMemory: fileops.DefaultMaxDecoderMemory,
 		verifyOnClose:    true,
 	}
 	for _, opt := range opts {
 		opt(r)
 	}
-	r.initZstdPool()
+	r.ops = fileops.New(
+		source,
+		fileops.WithMaxFileSize(r.maxFileSize),
+		fileops.WithMaxDecoderMemory(r.maxDecoderMemory),
+	)
 	return r
 }
 
@@ -112,7 +102,7 @@ func (r *Reader) Open(name string) (fs.File, error) {
 	// Check if it's a file
 	if view, ok := r.index.LookupView(name); ok {
 		entry := entryFromViewWithPath(view, name)
-		return &file{r: r, entry: entry}, nil
+		return r.ops.OpenFile(&entry, r.verifyOnClose), nil
 	}
 
 	// Check if it's a directory
@@ -136,7 +126,7 @@ func (r *Reader) Stat(name string) (fs.FileInfo, error) {
 	// Check if it's a file
 	if view, ok := r.index.LookupView(name); ok {
 		entry := entryFromViewWithPath(view, name)
-		info, err := newFileInfo(&entry, pathutil.Base(name))
+		info, err := fileops.NewFileInfo(&entry, pathutil.Base(name))
 		if err != nil {
 			return nil, &fs.PathError{Op: "stat", Path: name, Err: err}
 		}
@@ -149,7 +139,7 @@ func (r *Reader) Stat(name string) (fs.FileInfo, error) {
 		if name == "." {
 			dirName = "."
 		}
-		return &dirInfo{name: dirName}, nil
+		return fileops.NewDirInfo(dirName), nil
 	}
 
 	return nil, &fs.PathError{Op: "stat", Path: name, Err: fs.ErrNotExist}
@@ -170,7 +160,7 @@ func (r *Reader) ReadFile(name string) ([]byte, error) {
 	}
 
 	entry := entryFromViewWithPath(view, name)
-	return r.readAndVerify(&entry)
+	return r.ops.ReadAll(&entry)
 }
 
 // ReadDir implements fs.ReadDirFS.
@@ -201,6 +191,12 @@ func (r *Reader) ReadDir(name string) ([]fs.DirEntry, error) {
 	}
 
 	return entries, nil
+}
+
+// Ops returns the underlying file operations helper.
+// This is useful for cached readers that need to share the decompression pool.
+func (r *Reader) Ops() *fileops.Ops {
+	return r.ops
 }
 
 // rangeGroup represents a contiguous range of entries in the data blob.
@@ -238,225 +234,6 @@ func groupAdjacentEntries(entries []Entry) []rangeGroup {
 	return append(groups, current)
 }
 
-// fileInfo implements fs.FileInfo for regular files.
-type fileInfo struct {
-	entry Entry
-	name  string // base name only
-	size  int64
-}
-
-func (fi *fileInfo) Name() string       { return fi.name }
-func (fi *fileInfo) Size() int64        { return fi.size }
-func (fi *fileInfo) Mode() fs.FileMode  { return fi.entry.Mode }
-func (fi *fileInfo) ModTime() time.Time { return fi.entry.ModTime }
-func (fi *fileInfo) IsDir() bool        { return false }
-func (fi *fileInfo) Sys() any           { return nil }
-
-func newFileInfo(entry *Entry, name string) (*fileInfo, error) {
-	size, err := sizing.ToInt64(entry.OriginalSize, ErrSizeOverflow)
-	if err != nil {
-		return nil, err
-	}
-	return &fileInfo{entry: *entry, name: name, size: size}, nil
-}
-
-// dirInfo implements fs.FileInfo for synthetic directories.
-type dirInfo struct {
-	name string
-}
-
-func (di *dirInfo) Name() string       { return di.name }
-func (di *dirInfo) Size() int64        { return 0 }
-func (di *dirInfo) Mode() fs.FileMode  { return fs.ModeDir | 0o755 }
-func (di *dirInfo) ModTime() time.Time { return time.Time{} }
-func (di *dirInfo) IsDir() bool        { return true }
-func (di *dirInfo) Sys() any           { return nil }
-
-// dirEntry implements fs.DirEntry by wrapping fs.FileInfo.
-type dirEntry struct {
-	info    fs.FileInfo
-	infoErr error
-}
-
-func (de *dirEntry) Name() string               { return de.info.Name() }
-func (de *dirEntry) IsDir() bool                { return de.info.IsDir() }
-func (de *dirEntry) Type() fs.FileMode          { return de.info.Mode().Type() }
-func (de *dirEntry) Info() (fs.FileInfo, error) { return de.info, de.infoErr }
-
-// file implements fs.File for regular files.
-type file struct {
-	r     *Reader
-	entry Entry
-
-	reader    io.Reader
-	decoder   *zstd.Decoder
-	hasher    hash.Hash
-	remaining uint64
-
-	initialized bool
-	initErr     error
-	verified    bool
-	verifyErr   error
-}
-
-func (f *file) Read(p []byte) (int, error) {
-	if err := f.init(); err != nil {
-		return 0, err
-	}
-	if f.verifyErr != nil {
-		return 0, f.verifyErr
-	}
-
-	if len(p) == 0 {
-		return 0, nil
-	}
-
-	if f.remaining == 0 {
-		return f.readExtra()
-	}
-
-	if uint64(len(p)) > f.remaining {
-		p = p[:f.remaining]
-	}
-
-	n, err := f.reader.Read(p)
-	if n > 0 {
-		_, _ = f.hasher.Write(p[:n]) //nolint:errcheck // hash writes never fail
-		f.remaining -= uint64(n)
-	}
-
-	if err == io.EOF {
-		if f.remaining != 0 {
-			return n, fmt.Errorf("%w: unexpected EOF", ErrDecompression)
-		}
-		if verifyErr := f.verifyHash(); verifyErr != nil {
-			return n, verifyErr
-		}
-		return n, io.EOF
-	}
-	if err != nil {
-		return n, err
-	}
-	return n, nil
-}
-
-func (f *file) Stat() (fs.FileInfo, error) {
-	return newFileInfo(&f.entry, pathutil.Base(f.entry.Path))
-}
-
-func (f *file) Close() error {
-	if err := f.init(); err != nil {
-		return err
-	}
-	if f.decoder != nil {
-		defer func() {
-			f.decoder.Close()
-			f.decoder = nil
-		}()
-	}
-	if f.verified {
-		return f.verifyErr
-	}
-	if !f.r.verifyOnClose {
-		return nil
-	}
-
-	buf := make([]byte, 32*1024)
-	for {
-		_, err := f.Read(buf)
-		if err == io.EOF {
-			return f.verifyErr
-		}
-		if err != nil {
-			return err
-		}
-	}
-}
-
-func (f *file) init() error {
-	if f.initialized {
-		return f.initErr
-	}
-	f.initialized = true
-
-	if err := validateEntry(&f.entry, f.r.source.Size(), f.r.maxFileSize); err != nil {
-		f.initErr = fmt.Errorf("read %s: %w", f.entry.Path, err)
-		return f.initErr
-	}
-	if err := validateEntryHash(&f.entry); err != nil {
-		f.initErr = fmt.Errorf("read %s: %w", f.entry.Path, err)
-		return f.initErr
-	}
-
-	if f.entry.Compression == CompressionNone && f.entry.DataSize != f.entry.OriginalSize {
-		f.initErr = fmt.Errorf("%w: size mismatch", ErrDecompression)
-		return f.initErr
-	}
-
-	offset, err := sizing.ToInt64(f.entry.DataOffset, ErrSizeOverflow)
-	if err != nil {
-		f.initErr = err
-		return f.initErr
-	}
-	length, err := sizing.ToInt64(f.entry.DataSize, ErrSizeOverflow)
-	if err != nil {
-		f.initErr = err
-		return f.initErr
-	}
-	section := io.NewSectionReader(f.r.source, offset, length)
-
-	switch f.entry.Compression {
-	case CompressionNone:
-		f.reader = section
-	case CompressionZstd:
-		dec, err := newZstdDecoder(section, f.r.maxDecoderMemory)
-		if err != nil {
-			f.initErr = fmt.Errorf("%w: %v", ErrDecompression, err)
-			return f.initErr
-		}
-		f.decoder = dec
-		f.reader = dec
-	default:
-		f.initErr = fmt.Errorf("unknown compression algorithm: %d", f.entry.Compression)
-		return f.initErr
-	}
-
-	f.remaining = f.entry.OriginalSize
-	f.hasher = sha256.New()
-
-	return nil
-}
-
-func (f *file) readExtra() (int, error) {
-	var scratch [1]byte
-	n, err := f.reader.Read(scratch[:])
-	if n > 0 {
-		return 0, ErrSizeOverflow
-	}
-	if err == io.EOF {
-		if verifyErr := f.verifyHash(); verifyErr != nil {
-			return 0, verifyErr
-		}
-		return 0, io.EOF
-	}
-	if err != nil {
-		return 0, err
-	}
-	return 0, nil
-}
-
-func (f *file) verifyHash() error {
-	if f.verified {
-		return f.verifyErr
-	}
-	sum := f.hasher.Sum(nil)
-	if !bytes.Equal(sum, f.entry.Hash) {
-		f.verifyErr = ErrHashMismatch
-	}
-	f.verified = true
-	return f.verifyErr
-}
-
 // openDir implements fs.File and fs.ReadDirFile for directories.
 type openDir struct {
 	r    *Reader
@@ -475,7 +252,7 @@ func (d *openDir) Stat() (fs.FileInfo, error) {
 	} else {
 		name = pathutil.Base(d.name)
 	}
-	return &dirInfo{name: name}, nil
+	return fileops.NewDirInfo(name), nil
 }
 
 func (d *openDir) Close() error {
@@ -532,64 +309,7 @@ func (r *Reader) isDir(name string) bool {
 	return false
 }
 
-// readAndVerify reads file content from source, decompresses if needed, and verifies the hash.
-func (r *Reader) readAndVerify(entry *Entry) ([]byte, error) {
-	if err := validateEntry(entry, r.source.Size(), r.maxFileSize); err != nil {
-		return nil, fmt.Errorf("read %s: %w", entry.Path, err)
-	}
-	if err := validateEntryHash(entry); err != nil {
-		return nil, fmt.Errorf("read %s: %w", entry.Path, err)
-	}
-
-	if err := validateEntryCompression(entry); err != nil {
-		return nil, err
-	}
-
-	section, err := r.sectionReader(entry)
-	if err != nil {
-		return nil, fmt.Errorf("read %s: %w", entry.Path, err)
-	}
-
-	reader, closeFn, err := r.entryReader(entry, section)
-	if err != nil {
-		return nil, err
-	}
-	defer closeFn()
-
-	content, sum, err := readContentAndHash(entry, reader)
-	if err != nil {
-		return nil, err
-	}
-
-	if !bytes.Equal(sum, entry.Hash) {
-		return nil, ErrHashMismatch
-	}
-
-	return content, nil
-}
-
-func validateEntry(entry *Entry, sourceSize int64, maxFileSize uint64) error {
-	if sourceSize < 0 {
-		return ErrSizeOverflow
-	}
-
-	if maxFileSize > 0 {
-		if entry.DataSize > maxFileSize || entry.OriginalSize > maxFileSize {
-			return ErrSizeOverflow
-		}
-	}
-
-	end, ok := sizing.AddUint64(entry.DataOffset, entry.DataSize)
-	if !ok {
-		return ErrSizeOverflow
-	}
-	if end > uint64(sourceSize) {
-		return ErrSizeOverflow
-	}
-
-	return nil
-}
-
+// dirIter iterates over directory entries, synthesizing subdirectories.
 type dirIter struct {
 	next     func() (EntryView, bool)
 	stop     func()
@@ -626,14 +346,15 @@ func (it *dirIter) Next() (fs.DirEntry, bool) {
 		it.lastName = childName
 
 		if isSubDir {
-			return &dirEntry{info: &dirInfo{name: childName}}, true
+			return fileops.NewDirEntry(fileops.NewDirInfo(childName), nil), true
 		}
 		entry := entryFromViewWithPath(view, path)
-		info, err := newFileInfo(&entry, childName)
+		info, err := fileops.NewFileInfo(&entry, childName)
 		if err != nil {
-			info = &fileInfo{entry: entry, name: childName, size: 0}
+			// Return a fallback info with size 0
+			info = &fileops.FileInfo{}
 		}
-		return &dirEntry{info: info, infoErr: err}, true
+		return fileops.NewDirEntry(info, err), true
 	}
 }
 
@@ -646,167 +367,4 @@ func (it *dirIter) Close() {
 		it.stop()
 		it.stop = nil
 	}
-}
-
-func newZstdDecoder(r io.Reader, maxDecoderMemory uint64) (*zstd.Decoder, error) {
-	if maxDecoderMemory == 0 {
-		return zstd.NewReader(r)
-	}
-	return zstd.NewReader(r, zstd.WithDecoderMaxMemory(maxDecoderMemory))
-}
-
-type hashingReader struct {
-	r io.Reader
-	h hash.Hash
-}
-
-func (hr *hashingReader) Read(p []byte) (int, error) {
-	n, err := hr.r.Read(p)
-	if n > 0 {
-		_, _ = hr.h.Write(p[:n]) //nolint:errcheck // hash writes never fail
-	}
-	return n, err
-}
-
-func ensureNoExtra(r io.Reader) error {
-	var scratch [1]byte
-	n, err := r.Read(scratch[:])
-	if n > 0 {
-		return ErrSizeOverflow
-	}
-	if err == io.EOF {
-		return nil
-	}
-	if err != nil {
-		return err
-	}
-	return nil
-}
-
-func validateEntryCompression(entry *Entry) error {
-	if entry.Compression == CompressionNone && entry.DataSize != entry.OriginalSize {
-		return fmt.Errorf("%w: size mismatch", ErrDecompression)
-	}
-	return nil
-}
-
-func validateEntryHash(entry *Entry) error {
-	if len(entry.Hash) != sha256.Size {
-		return fmt.Errorf("invalid hash length: %d", len(entry.Hash))
-	}
-	return nil
-}
-
-func (r *Reader) sectionReader(entry *Entry) (*io.SectionReader, error) {
-	offset, err := sizing.ToInt64(entry.DataOffset, ErrSizeOverflow)
-	if err != nil {
-		return nil, err
-	}
-	length, err := sizing.ToInt64(entry.DataSize, ErrSizeOverflow)
-	if err != nil {
-		return nil, err
-	}
-	return io.NewSectionReader(r.source, offset, length), nil
-}
-
-func (r *Reader) entryReader(entry *Entry, section *io.SectionReader) (io.Reader, func(), error) {
-	switch entry.Compression {
-	case CompressionNone:
-		return section, func() {}, nil
-	case CompressionZstd:
-		dec, closeFn, err := r.getZstdDecoder(section)
-		if err != nil {
-			return nil, func() {}, fmt.Errorf("%w: %v", ErrDecompression, err)
-		}
-		return dec, closeFn, nil
-	default:
-		return nil, func() {}, fmt.Errorf("unknown compression algorithm: %d", entry.Compression)
-	}
-}
-
-func (r *Reader) initZstdPool() {
-	r.zstdPool = &sync.Pool{
-		New: func() any {
-			dec, err := newZstdDecoder(nil, r.maxDecoderMemory)
-			if err != nil {
-				return nil
-			}
-			return dec
-		},
-	}
-}
-
-func (r *Reader) getZstdDecoder(reader io.Reader) (*zstd.Decoder, func(), error) {
-	if r.zstdPool == nil {
-		dec, err := newZstdDecoder(reader, r.maxDecoderMemory)
-		if err != nil {
-			return nil, nil, err
-		}
-		return dec, dec.Close, nil
-	}
-
-	value := r.zstdPool.Get()
-	if value == nil {
-		dec, err := newZstdDecoder(reader, r.maxDecoderMemory)
-		if err != nil {
-			return nil, nil, err
-		}
-		return dec, dec.Close, nil
-	}
-
-	dec, ok := value.(*zstd.Decoder)
-	if !ok {
-		dec, err := newZstdDecoder(reader, r.maxDecoderMemory)
-		if err != nil {
-			return nil, nil, err
-		}
-		return dec, dec.Close, nil
-	}
-
-	if err := dec.Reset(reader); err != nil {
-		dec.Close()
-		dec, err = newZstdDecoder(reader, r.maxDecoderMemory)
-		if err != nil {
-			return nil, nil, err
-		}
-		return dec, dec.Close, nil
-	}
-
-	return dec, func() {
-		_ = dec.Reset(nil)
-		r.zstdPool.Put(dec)
-	}, nil
-}
-
-func readContentAndHash(entry *Entry, reader io.Reader) (content, sum []byte, err error) {
-	contentSize, err := sizing.ToInt(entry.OriginalSize, ErrSizeOverflow)
-	if err != nil {
-		return nil, nil, fmt.Errorf("read %s: %w", entry.Path, err)
-	}
-	content = make([]byte, contentSize)
-
-	hasher := sha256.New()
-	hr := &hashingReader{r: reader, h: hasher}
-	n, err := io.ReadFull(hr, content)
-	if err != nil {
-		return nil, nil, mapReadError(entry, n, contentSize, err)
-	}
-	if err := ensureNoExtra(hr); err != nil {
-		return nil, nil, err
-	}
-
-	return content, hasher.Sum(nil), nil
-}
-
-func mapReadError(entry *Entry, n, expected int, err error) error {
-	if entry.Compression == CompressionNone {
-		if errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF) {
-			return fmt.Errorf("read %s: short read (%d of %d bytes)", entry.Path, n, expected)
-		}
-		return fmt.Errorf("read %s: %w", entry.Path, err)
-	}
-	if errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF) {
-		return fmt.Errorf("%w: unexpected EOF", ErrDecompression)
-	}
-	return fmt.Errorf("%w: %v", ErrDecompression, err)
 }
