@@ -301,7 +301,7 @@ func (cr *CachedReader) decompressVerifyCache(entry *Entry, groupData []byte, gr
 	}
 	entryData := groupData[start:end]
 
-	content, err := decompress(entryData, entry.Compression, entry.OriginalSize)
+	content, err := decompress(entryData, entry.Compression, entry.OriginalSize, cr.maxDecoderMemory)
 	if err != nil {
 		return err
 	}
