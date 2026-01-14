@@ -8,6 +8,9 @@ import (
 	"io/fs"
 	"math"
 	"slices"
+
+	"github.com/meigma/blob/internal/pathutil"
+	"github.com/meigma/blob/internal/sizing"
 )
 
 // Cache provides content-addressed storage for file contents.
@@ -263,7 +266,7 @@ func (cr *CachedReader) prefetchEntries(entries []Entry) error {
 // prefetchGroup fetches a contiguous range and caches each entry.
 func (cr *CachedReader) prefetchGroup(group rangeGroup) error {
 	size := group.end - group.start
-	sizeInt, err := sizeToInt(size)
+	sizeInt, err := sizing.ToInt(size, ErrSizeOverflow)
 	if err != nil {
 		return fmt.Errorf("prefetch: %w", err)
 	}
@@ -291,11 +294,11 @@ func (cr *CachedReader) decompressVerifyCache(entry *Entry, groupData []byte, gr
 	if localEnd < localOffset || localEnd > uint64(len(groupData)) {
 		return ErrSizeOverflow
 	}
-	start, err := sizeToInt(localOffset)
+	start, err := sizing.ToInt(localOffset, ErrSizeOverflow)
 	if err != nil {
 		return err
 	}
-	end, err := sizeToInt(localEnd)
+	end, err := sizing.ToInt(localEnd, ErrSizeOverflow)
 	if err != nil {
 		return err
 	}
@@ -368,7 +371,7 @@ func (f *cachedContentFile) Read(p []byte) (int, error) {
 }
 
 func (f *cachedContentFile) Stat() (fs.FileInfo, error) {
-	return &fileInfo{entry: f.entry, name: pathBase(f.entry.Path)}, nil
+	return &fileInfo{entry: f.entry, name: pathutil.Base(f.entry.Path)}, nil
 }
 
 func (f *cachedContentFile) Close() error {

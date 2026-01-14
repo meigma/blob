@@ -9,11 +9,12 @@ import (
 	"io"
 	"io/fs"
 	"iter"
-	"math"
-	"strings"
 	"time"
 
 	"github.com/klauspost/compress/zstd"
+
+	"github.com/meigma/blob/internal/pathutil"
+	"github.com/meigma/blob/internal/sizing"
 )
 
 // ByteSource provides random access to the data blob.
@@ -130,7 +131,7 @@ func (r *Reader) Stat(name string) (fs.FileInfo, error) {
 
 	// Check if it's a file
 	if entry, ok := r.index.Lookup(name); ok {
-		info, err := newFileInfo(entry, pathBase(name))
+		info, err := newFileInfo(&entry, pathutil.Base(name))
 		if err != nil {
 			return nil, &fs.PathError{Op: "stat", Path: name, Err: err}
 		}
@@ -139,7 +140,7 @@ func (r *Reader) Stat(name string) (fs.FileInfo, error) {
 
 	// Check if it's a directory
 	if r.isDir(name) {
-		dirName := pathBase(name)
+		dirName := pathutil.Base(name)
 		if name == "." {
 			dirName = "."
 		}
@@ -176,7 +177,7 @@ func (r *Reader) ReadDir(name string) ([]fs.DirEntry, error) {
 		return nil, &fs.PathError{Op: "readdir", Path: name, Err: fs.ErrInvalid}
 	}
 
-	prefix := dirPrefix(name)
+	prefix := pathutil.DirPrefix(name)
 	dirIter := newDirIter(r.index, prefix)
 	defer dirIter.Close()
 
@@ -245,7 +246,7 @@ func decompress(data []byte, comp Compression, expectedSize, maxDecoderMemory ui
 			return nil, fmt.Errorf("%w: %v", ErrDecompression, err)
 		}
 		defer dec.Close()
-		content, err := readAllWithLimit(dec, expectedSize)
+		content, err := sizing.ReadAllWithLimit(dec, expectedSize, ErrSizeOverflow)
 		if err != nil {
 			if errors.Is(err, ErrSizeOverflow) {
 				return nil, err
@@ -275,12 +276,12 @@ func (fi *fileInfo) ModTime() time.Time { return fi.entry.ModTime }
 func (fi *fileInfo) IsDir() bool        { return false }
 func (fi *fileInfo) Sys() any           { return nil }
 
-func newFileInfo(entry Entry, name string) (*fileInfo, error) {
-	size, err := sizeToInt64(entry.OriginalSize)
+func newFileInfo(entry *Entry, name string) (*fileInfo, error) {
+	size, err := sizing.ToInt64(entry.OriginalSize, ErrSizeOverflow)
 	if err != nil {
 		return nil, err
 	}
-	return &fileInfo{entry: entry, name: name, size: size}, nil
+	return &fileInfo{entry: *entry, name: name, size: size}, nil
 }
 
 // dirInfo implements fs.FileInfo for synthetic directories.
@@ -364,7 +365,7 @@ func (f *file) Read(p []byte) (int, error) {
 }
 
 func (f *file) Stat() (fs.FileInfo, error) {
-	return newFileInfo(f.entry, pathBase(f.entry.Path))
+	return newFileInfo(&f.entry, pathutil.Base(f.entry.Path))
 }
 
 func (f *file) Close() error {
@@ -416,12 +417,12 @@ func (f *file) init() error {
 		return f.initErr
 	}
 
-	offset, err := sizeToInt64(f.entry.DataOffset)
+	offset, err := sizing.ToInt64(f.entry.DataOffset, ErrSizeOverflow)
 	if err != nil {
 		f.initErr = err
 		return f.initErr
 	}
-	length, err := sizeToInt64(f.entry.DataSize)
+	length, err := sizing.ToInt64(f.entry.DataSize, ErrSizeOverflow)
 	if err != nil {
 		f.initErr = err
 		return f.initErr
@@ -496,7 +497,7 @@ func (d *openDir) Stat() (fs.FileInfo, error) {
 	if name == "." {
 		name = "."
 	} else {
-		name = pathBase(d.name)
+		name = pathutil.Base(d.name)
 	}
 	return &dirInfo{name: name}, nil
 }
@@ -511,7 +512,7 @@ func (d *openDir) Close() error {
 
 func (d *openDir) ReadDir(n int) ([]fs.DirEntry, error) {
 	if d.iter == nil {
-		d.iter = newDirIter(d.r.index, dirPrefix(d.name))
+		d.iter = newDirIter(d.r.index, pathutil.DirPrefix(d.name))
 	}
 
 	if n <= 0 {
@@ -541,19 +542,6 @@ func (d *openDir) readAll() ([]fs.DirEntry, error) {
 		}
 		entries = append(entries, entry)
 	}
-}
-
-// pathBase returns the last element of path (similar to filepath.Base but for slash-separated paths).
-func pathBase(path string) string {
-	if path == "" || path == "." {
-		return "."
-	}
-	// Remove trailing slash if present
-	path = strings.TrimSuffix(path, "/")
-	if i := strings.LastIndex(path, "/"); i >= 0 {
-		return path[i+1:]
-	}
-	return path
 }
 
 // isDir checks if name is a directory (has entries under it).
@@ -615,7 +603,7 @@ func validateEntry(entry *Entry, sourceSize int64, maxFileSize uint64) error {
 		}
 	}
 
-	end, ok := addUint64(entry.DataOffset, entry.DataSize)
+	end, ok := sizing.AddUint64(entry.DataOffset, entry.DataSize)
 	if !ok {
 		return ErrSizeOverflow
 	}
@@ -624,44 +612,6 @@ func validateEntry(entry *Entry, sourceSize int64, maxFileSize uint64) error {
 	}
 
 	return nil
-}
-
-func sizeToInt(size uint64) (int, error) {
-	if size > uint64(math.MaxInt) {
-		return 0, ErrSizeOverflow
-	}
-	return int(size), nil
-}
-
-func sizeToInt64(size uint64) (int64, error) {
-	if size > uint64(math.MaxInt64) {
-		return 0, ErrSizeOverflow
-	}
-	return int64(size), nil
-}
-
-func readAllWithLimit(r io.Reader, maxSize uint64) ([]byte, error) {
-	if maxSize > uint64(math.MaxInt-1) {
-		return nil, ErrSizeOverflow
-	}
-	limit := int64(maxSize) + 1 //nolint:gosec // checked above
-	lr := &io.LimitedReader{R: r, N: limit}
-	data, err := io.ReadAll(lr)
-	if err != nil {
-		return nil, err
-	}
-	if uint64(len(data)) > maxSize { //nolint:gosec // len is always non-negative
-		return nil, ErrSizeOverflow
-	}
-	return data, nil
-}
-
-func addUint64(a, b uint64) (uint64, bool) {
-	sum := a + b
-	if sum < a {
-		return 0, false
-	}
-	return sum, true
 }
 
 type dirIter struct {
@@ -692,21 +642,21 @@ func (it *dirIter) Next() (fs.DirEntry, bool) {
 			return nil, false
 		}
 
-		childName, isSubDir := childFromPath(entry.Path, it.prefix)
+		childName, isSubDir := pathutil.Child(entry.Path, it.prefix)
 		if childName == it.lastName {
 			continue
 		}
 		it.lastName = childName
 
-	if isSubDir {
-		return &dirEntry{info: &dirInfo{name: childName}}, true
+		if isSubDir {
+			return &dirEntry{info: &dirInfo{name: childName}}, true
+		}
+		info, err := newFileInfo(&entry, childName)
+		if err != nil {
+			info = &fileInfo{entry: entry, name: childName, size: 0}
+		}
+		return &dirEntry{info: info, infoErr: err}, true
 	}
-	info, err := newFileInfo(entry, childName)
-	if err != nil {
-		info = &fileInfo{entry: entry, name: childName, size: 0}
-	}
-	return &dirEntry{info: info, infoErr: err}, true
-}
 }
 
 func (it *dirIter) Close() {
@@ -718,21 +668,6 @@ func (it *dirIter) Close() {
 		it.stop()
 		it.stop = nil
 	}
-}
-
-func dirPrefix(name string) string {
-	if name == "." {
-		return ""
-	}
-	return name + "/"
-}
-
-func childFromPath(path, prefix string) (string, bool) {
-	relPath := strings.TrimPrefix(path, prefix)
-	if idx := strings.Index(relPath, "/"); idx >= 0 {
-		return relPath[:idx], true
-	}
-	return relPath, false
 }
 
 func newZstdDecoder(r io.Reader, maxDecoderMemory uint64) (*zstd.Decoder, error) {
@@ -785,11 +720,11 @@ func validateEntryHash(entry *Entry) error {
 }
 
 func (r *Reader) sectionReader(entry *Entry) (*io.SectionReader, error) {
-	offset, err := sizeToInt64(entry.DataOffset)
+	offset, err := sizing.ToInt64(entry.DataOffset, ErrSizeOverflow)
 	if err != nil {
 		return nil, err
 	}
-	length, err := sizeToInt64(entry.DataSize)
+	length, err := sizing.ToInt64(entry.DataSize, ErrSizeOverflow)
 	if err != nil {
 		return nil, err
 	}
@@ -812,7 +747,7 @@ func (r *Reader) entryReader(entry *Entry, section *io.SectionReader) (io.Reader
 }
 
 func readContentAndHash(entry *Entry, reader io.Reader) (content, sum []byte, err error) {
-	contentSize, err := sizeToInt(entry.OriginalSize)
+	contentSize, err := sizing.ToInt(entry.OriginalSize, ErrSizeOverflow)
 	if err != nil {
 		return nil, nil, fmt.Errorf("read %s: %w", entry.Path, err)
 	}
