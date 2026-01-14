@@ -1,11 +1,11 @@
 package blob
 
 import (
+	"bytes"
 	"errors"
 	"io/fs"
 	"iter"
 	"sort"
-	"strings"
 	"time"
 
 	"github.com/meigma/blob/internal/fb"
@@ -87,6 +87,7 @@ func (idx *Index) EntriesWithPrefix(prefix string) iter.Seq[Entry] {
 		if n == 0 {
 			return
 		}
+		prefixBytes := []byte(prefix)
 
 		// Binary search to find the first entry with path >= prefix
 		start := sort.Search(n, func(i int) bool {
@@ -94,7 +95,7 @@ func (idx *Index) EntriesWithPrefix(prefix string) iter.Seq[Entry] {
 			if !idx.root.Entries(&fbEntry, i) {
 				return false
 			}
-			return string(fbEntry.Path()) >= prefix
+			return bytes.Compare(fbEntry.Path(), prefixBytes) >= 0
 		})
 
 		// Iterate while prefix matches
@@ -103,8 +104,8 @@ func (idx *Index) EntriesWithPrefix(prefix string) iter.Seq[Entry] {
 			if !idx.root.Entries(&fbEntry, i) {
 				return
 			}
-			path := string(fbEntry.Path())
-			if !strings.HasPrefix(path, prefix) {
+			pathBytes := fbEntry.Path()
+			if !bytes.HasPrefix(pathBytes, prefixBytes) {
 				return
 			}
 			if !yield(entryFromFlatBuffers(&fbEntry)) {

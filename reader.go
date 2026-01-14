@@ -9,6 +9,7 @@ import (
 	"io"
 	"io/fs"
 	"iter"
+	"sync"
 	"time"
 
 	"github.com/klauspost/compress/zstd"
@@ -67,6 +68,7 @@ type Reader struct {
 	maxFileSize      uint64
 	maxDecoderMemory uint64
 	verifyOnClose    bool
+	zstdPool         *sync.Pool
 }
 
 // Interface compliance.
@@ -92,6 +94,7 @@ func NewReader(index *Index, source ByteSource, opts ...ReaderOption) *Reader {
 	for _, opt := range opts {
 		opt(r)
 	}
+	r.initZstdPool()
 	return r
 }
 
@@ -736,14 +739,68 @@ func (r *Reader) entryReader(entry *Entry, section *io.SectionReader) (io.Reader
 	case CompressionNone:
 		return section, func() {}, nil
 	case CompressionZstd:
-		dec, err := newZstdDecoder(section, r.maxDecoderMemory)
+		dec, closeFn, err := r.getZstdDecoder(section)
 		if err != nil {
 			return nil, func() {}, fmt.Errorf("%w: %v", ErrDecompression, err)
 		}
-		return dec, dec.Close, nil
+		return dec, closeFn, nil
 	default:
 		return nil, func() {}, fmt.Errorf("unknown compression algorithm: %d", entry.Compression)
 	}
+}
+
+func (r *Reader) initZstdPool() {
+	r.zstdPool = &sync.Pool{
+		New: func() any {
+			dec, err := newZstdDecoder(nil, r.maxDecoderMemory)
+			if err != nil {
+				return nil
+			}
+			return dec
+		},
+	}
+}
+
+func (r *Reader) getZstdDecoder(reader io.Reader) (*zstd.Decoder, func(), error) {
+	if r.zstdPool == nil {
+		dec, err := newZstdDecoder(reader, r.maxDecoderMemory)
+		if err != nil {
+			return nil, nil, err
+		}
+		return dec, dec.Close, nil
+	}
+
+	value := r.zstdPool.Get()
+	if value == nil {
+		dec, err := newZstdDecoder(reader, r.maxDecoderMemory)
+		if err != nil {
+			return nil, nil, err
+		}
+		return dec, dec.Close, nil
+	}
+
+	dec, ok := value.(*zstd.Decoder)
+	if !ok {
+		dec, err := newZstdDecoder(reader, r.maxDecoderMemory)
+		if err != nil {
+			return nil, nil, err
+		}
+		return dec, dec.Close, nil
+	}
+
+	if err := dec.Reset(reader); err != nil {
+		dec.Close()
+		dec, err = newZstdDecoder(reader, r.maxDecoderMemory)
+		if err != nil {
+			return nil, nil, err
+		}
+		return dec, dec.Close, nil
+	}
+
+	return dec, func() {
+		_ = dec.Reset(nil)
+		r.zstdPool.Put(dec)
+	}, nil
 }
 
 func readContentAndHash(entry *Entry, reader io.Reader) (content, sum []byte, err error) {
