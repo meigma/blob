@@ -1,0 +1,50 @@
+// Blob archive index schema
+// This index is stored as a separate OCI blob and enables random access
+// to files in the companion data blob via HTTP range requests.
+
+namespace blob;
+
+enum Compression : byte {
+  None = 0,
+  Zstd = 1,
+}
+
+enum HashAlgorithm : byte {
+  SHA256 = 0,
+}
+
+table Entry {
+  // Path relative to archive root, e.g., "src/main.go"
+  // Key attribute enables O(log n) binary search via LookupByKey
+  path: string (key, required);
+
+  // Location in data blob
+  data_offset: uint64;
+  data_size: uint64;         // Size in blob (compressed if applicable)
+  original_size: uint64;     // Uncompressed size
+
+  // Integrity - length determined by hash_algorithm in Index
+  hash: [ubyte] (required);
+
+  // Metadata
+  mode: uint32;              // Unix file mode (permissions)
+  uid: uint32;               // Owner user ID
+  gid: uint32;               // Owner group ID
+  mtime_ns: int64;           // Nanoseconds since Unix epoch
+
+  // Compression algorithm used for this entry
+  compression: Compression = None;
+}
+
+table Index {
+  // Protocol version for future evolution
+  version: uint32 = 1;
+
+  // Hash algorithm used for all entry hashes
+  hash_algorithm: HashAlgorithm = SHA256;
+
+  // File entries, sorted by path for binary search
+  entries: [Entry] (required);
+}
+
+root_type Index;
