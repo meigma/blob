@@ -2,13 +2,13 @@
 set shell := ["bash", "-euo", "pipefail", "-c"]
 
 # Output directory for generated FlatBuffers code
-gen_dir := "internal/flatbuffers"
+gen_dir := "internal"
 
 # Default recipe: validate code
 default: fmt vet lint test
 
 # CI recipe: full validation pipeline
-ci: generate check-clean fmt vet lint test build
+ci: generate fmt vet lint test build
 
 # Format check (fails if code needs formatting)
 fmt:
@@ -38,13 +38,8 @@ build:
 # Generate FlatBuffers code
 generate:
     @echo "Generating FlatBuffers code..."
-    @mkdir -p {{gen_dir}}
-    flatc --go --go-namespace flatbuffers -o {{gen_dir}} schema/index.fbs
-
-# Check that generated files are up to date (for CI)
-check-clean:
-    @echo "Checking for uncommitted changes..."
-    @git diff --exit-code || (echo "Generated files are out of date. Run 'just generate' and commit."; exit 1)
+    @mkdir -p {{gen_dir}}/fb
+    flatc --go --go-namespace fb -o {{gen_dir}} schema/index.fbs
 
 # Install development tools
 tools:

@@ -1,5 +1,4 @@
-//go:generate mkdir -p internal/flatbuffers
-//go:generate flatc --go --go-namespace flatbuffers -o internal/flatbuffers schema/index.fbs
+//go:generate flatc --go --go-namespace fb -o internal schema/index.fbs
 
 // Package blob provides a file archive format optimized for random access
 // via HTTP range requests against OCI registries.
@@ -24,6 +23,15 @@ var (
 
 	// ErrDecompression is returned when decompression fails.
 	ErrDecompression = errors.New("blob: decompression failed")
+
+	// ErrSizeOverflow is returned when byte counts exceed supported limits.
+	ErrSizeOverflow = errors.New("blob: size overflow")
+
+	// ErrSymlink is returned when a symlink is encountered where not allowed.
+	ErrSymlink = errors.New("blob: symlink")
+
+	// ErrTooManyFiles is returned when the file count exceeds the configured limit.
+	ErrTooManyFiles = errors.New("blob: too many files")
 )
 
 // Compression identifies the compression algorithm used for a file.
