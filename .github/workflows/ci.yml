@@ -31,8 +31,8 @@ jobs:
 
       - name: Install FlatBuffers compiler
         run: |
-          FLATC_VERSION="24.3.25"
-          curl -fsSL "https://github.com/google/flatbuffers/releases/download/v${FLATC_VERSION}/Linux.flatc.binary.g++-13.zip" -o flatc.zip
+          FLATC_VERSION="25.12.19"
+          curl -fsSL "https://github.com/google/flatbuffers/releases/download/v${FLATC_VERSION}/Linux.flatc.binary.clang++-18.zip" -o flatc.zip
           unzip flatc.zip
           sudo mv flatc /usr/local/bin/
           flatc --version
@@ -46,7 +46,11 @@ jobs:
         run: |
           if [ -n "$(git status --porcelain)" ]; then
             echo "::error::Generated files are out of date. Run 'just generate' locally and commit the changes."
+            echo "Changed files:"
+            git status --porcelain
+            echo "Diff:"
             git diff
+            git diff --cached
             exit 1
           fi
 
