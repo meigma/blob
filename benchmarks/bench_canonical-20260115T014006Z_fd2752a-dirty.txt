@@ -1,0 +1,564 @@
+goos: linux
+goarch: amd64
+pkg: github.com/meigma/blob
+cpu: AMD EPYC 9254 24-Core Processor
+BenchmarkWriterCreate/files=128/size=16k/none/compressible-48         	     186	   6994101 ns/op	 299.85 MB/s	  381700 B/op	    3088 allocs/op
+BenchmarkWriterCreate/files=128/size=16k/none/compressible-48         	     159	   7399065 ns/op	 283.43 MB/s	  385900 B/op	    3088 allocs/op
+BenchmarkWriterCreate/files=128/size=16k/none/compressible-48         	     146	   7519024 ns/op	 278.91 MB/s	  388551 B/op	    3088 allocs/op
+BenchmarkWriterCreate/files=128/size=16k/none/compressible-48         	     150	   8042402 ns/op	 260.76 MB/s	  388032 B/op	    3088 allocs/op
+BenchmarkWriterCreate/files=128/size=16k/none/compressible-48         	     174	   7655909 ns/op	 273.93 MB/s	  383529 B/op	    3088 allocs/op
+BenchmarkWriterCreate/files=128/size=16k/none/compressible-48         	     150	   7510899 ns/op	 279.21 MB/s	  387394 B/op	    3088 allocs/op
+BenchmarkWriterCreate/files=128/size=16k/none/compressible-48         	     156	   7899512 ns/op	 265.48 MB/s	  386604 B/op	    3088 allocs/op
+BenchmarkWriterCreate/files=128/size=16k/none/compressible-48         	     153	   7301564 ns/op	 287.22 MB/s	  387076 B/op	    3088 allocs/op
+BenchmarkWriterCreate/files=128/size=16k/none/compressible-48         	     184	   7040354 ns/op	 297.88 MB/s	  382320 B/op	    3088 allocs/op
+BenchmarkWriterCreate/files=128/size=16k/none/compressible-48         	     142	   8243749 ns/op	 254.39 MB/s	  389088 B/op	    3088 allocs/op
+BenchmarkWriterCreate/files=128/size=16k/zstd/compressible-48         	     100	  10939172 ns/op	 191.71 MB/s	 1847198 B/op	    3126 allocs/op
+BenchmarkWriterCreate/files=128/size=16k/zstd/compressible-48         	      98	  11200821 ns/op	 187.23 MB/s	 1846781 B/op	    3126 allocs/op
+BenchmarkWriterCreate/files=128/size=16k/zstd/compressible-48         	      96	  11191865 ns/op	 187.38 MB/s	 1846911 B/op	    3126 allocs/op
+BenchmarkWriterCreate/files=128/size=16k/zstd/compressible-48         	      94	  11281876 ns/op	 185.89 MB/s	 1847871 B/op	    3126 allocs/op
+BenchmarkWriterCreate/files=128/size=16k/zstd/compressible-48         	      94	  10846063 ns/op	 193.36 MB/s	 1846898 B/op	    3126 allocs/op
+BenchmarkWriterCreate/files=128/size=16k/zstd/compressible-48         	     100	  10889795 ns/op	 192.58 MB/s	 1847123 B/op	    3126 allocs/op
+BenchmarkWriterCreate/files=128/size=16k/zstd/compressible-48         	     100	  11194918 ns/op	 187.33 MB/s	 1847220 B/op	    3126 allocs/op
+BenchmarkWriterCreate/files=128/size=16k/zstd/compressible-48         	      91	  11327201 ns/op	 185.14 MB/s	 1848192 B/op	    3126 allocs/op
+BenchmarkWriterCreate/files=128/size=16k/zstd/compressible-48         	      92	  11301684 ns/op	 185.56 MB/s	 1846763 B/op	    3126 allocs/op
+BenchmarkWriterCreate/files=128/size=16k/zstd/compressible-48         	      91	  11423738 ns/op	 183.58 MB/s	 1846655 B/op	    3126 allocs/op
+BenchmarkWriterCreate/files=128/size=16k/zstd/random-48               	     111	  10807445 ns/op	 194.05 MB/s	 1909373 B/op	    3108 allocs/op
+BenchmarkWriterCreate/files=128/size=16k/zstd/random-48               	      99	  11839730 ns/op	 177.13 MB/s	 1915211 B/op	    3108 allocs/op
+BenchmarkWriterCreate/files=128/size=16k/zstd/random-48               	      99	  11709254 ns/op	 179.10 MB/s	 1915428 B/op	    3108 allocs/op
+BenchmarkWriterCreate/files=128/size=16k/zstd/random-48               	     100	  11734059 ns/op	 178.72 MB/s	 1915017 B/op	    3108 allocs/op
+BenchmarkWriterCreate/files=128/size=16k/zstd/random-48               	     105	  11254733 ns/op	 186.34 MB/s	 1912420 B/op	    3108 allocs/op
+BenchmarkWriterCreate/files=128/size=16k/zstd/random-48               	     103	  11458190 ns/op	 183.03 MB/s	 1913417 B/op	    3108 allocs/op
+BenchmarkWriterCreate/files=128/size=16k/zstd/random-48               	     105	  11245691 ns/op	 186.48 MB/s	 1912109 B/op	    3108 allocs/op
+BenchmarkWriterCreate/files=128/size=16k/zstd/random-48               	      98	  11731428 ns/op	 178.76 MB/s	 1915849 B/op	    3108 allocs/op
+BenchmarkWriterCreate/files=128/size=16k/zstd/random-48               	     104	  11429272 ns/op	 183.49 MB/s	 1913024 B/op	    3108 allocs/op
+BenchmarkWriterCreate/files=128/size=16k/zstd/random-48               	     105	  11438895 ns/op	 183.34 MB/s	 1912189 B/op	    3108 allocs/op
+BenchmarkIndexLookup/files=256/size=4k-48                             	 7885479	       149.8 ns/op	       0 B/op	       0 allocs/op
+BenchmarkIndexLookup/files=256/size=4k-48                             	 8604348	       144.9 ns/op	       0 B/op	       0 allocs/op
+BenchmarkIndexLookup/files=256/size=4k-48                             	 7831419	       151.0 ns/op	       0 B/op	       0 allocs/op
+BenchmarkIndexLookup/files=256/size=4k-48                             	 7728585	       154.0 ns/op	       0 B/op	       0 allocs/op
+BenchmarkIndexLookup/files=256/size=4k-48                             	 8128909	       149.3 ns/op	       0 B/op	       0 allocs/op
+BenchmarkIndexLookup/files=256/size=4k-48                             	 7930094	       150.7 ns/op	       0 B/op	       0 allocs/op
+BenchmarkIndexLookup/files=256/size=4k-48                             	 7834774	       151.2 ns/op	       0 B/op	       0 allocs/op
+BenchmarkIndexLookup/files=256/size=4k-48                             	 8214132	       147.5 ns/op	       0 B/op	       0 allocs/op
+BenchmarkIndexLookup/files=256/size=4k-48                             	 8049142	       141.5 ns/op	       0 B/op	       0 allocs/op
+BenchmarkIndexLookup/files=256/size=4k-48                             	 7834602	       150.3 ns/op	       0 B/op	       0 allocs/op
+BenchmarkIndexLookup/files=1024/size=4k-48                            	 5049448	       205.7 ns/op	       0 B/op	       0 allocs/op
+BenchmarkIndexLookup/files=1024/size=4k-48                            	 5105416	       211.7 ns/op	       0 B/op	       0 allocs/op
+BenchmarkIndexLookup/files=1024/size=4k-48                            	 4791693	       214.0 ns/op	       0 B/op	       0 allocs/op
+BenchmarkIndexLookup/files=1024/size=4k-48                            	 4780915	       211.6 ns/op	       0 B/op	       0 allocs/op
+BenchmarkIndexLookup/files=1024/size=4k-48                            	 4807710	       210.3 ns/op	       0 B/op	       0 allocs/op
+BenchmarkIndexLookup/files=1024/size=4k-48                            	 5325420	       210.4 ns/op	       0 B/op	       0 allocs/op
+BenchmarkIndexLookup/files=1024/size=4k-48                            	 5710346	       205.4 ns/op	       0 B/op	       0 allocs/op
+BenchmarkIndexLookup/files=1024/size=4k-48                            	 5694474	       212.6 ns/op	       0 B/op	       0 allocs/op
+BenchmarkIndexLookup/files=1024/size=4k-48                            	 5662153	       203.1 ns/op	       0 B/op	       0 allocs/op
+BenchmarkIndexLookup/files=1024/size=4k-48                            	 5679710	       211.7 ns/op	       0 B/op	       0 allocs/op
+BenchmarkIndexLookupCopy/files=256/size=4k-48                         	 1907628	       590.7 ns/op	      56 B/op	       2 allocs/op
+BenchmarkIndexLookupCopy/files=256/size=4k-48                         	 2973740	       515.3 ns/op	      56 B/op	       2 allocs/op
+BenchmarkIndexLookupCopy/files=256/size=4k-48                         	 2198812	       472.7 ns/op	      56 B/op	       2 allocs/op
+BenchmarkIndexLookupCopy/files=256/size=4k-48                         	 2987900	       533.3 ns/op	      56 B/op	       2 allocs/op
+BenchmarkIndexLookupCopy/files=256/size=4k-48                         	 2886110	       502.5 ns/op	      56 B/op	       2 allocs/op
+BenchmarkIndexLookupCopy/files=256/size=4k-48                         	 2087936	       490.5 ns/op	      56 B/op	       2 allocs/op
+BenchmarkIndexLookupCopy/files=256/size=4k-48                         	 2953790	       549.6 ns/op	      56 B/op	       2 allocs/op
+BenchmarkIndexLookupCopy/files=256/size=4k-48                         	 2841634	       556.9 ns/op	      56 B/op	       2 allocs/op
+BenchmarkIndexLookupCopy/files=256/size=4k-48                         	 2285109	       460.3 ns/op	      56 B/op	       2 allocs/op
+BenchmarkIndexLookupCopy/files=256/size=4k-48                         	 2622435	       543.6 ns/op	      56 B/op	       2 allocs/op
+BenchmarkIndexLookupCopy/files=1024/size=4k-48                        	 2636296	       555.6 ns/op	      56 B/op	       2 allocs/op
+BenchmarkIndexLookupCopy/files=1024/size=4k-48                        	 1657117	       668.1 ns/op	      56 B/op	       2 allocs/op
+BenchmarkIndexLookupCopy/files=1024/size=4k-48                        	 1609704	       825.0 ns/op	      56 B/op	       2 allocs/op
+BenchmarkIndexLookupCopy/files=1024/size=4k-48                        	 1320926	       976.0 ns/op	      56 B/op	       2 allocs/op
+BenchmarkIndexLookupCopy/files=1024/size=4k-48                        	 1402616	       767.8 ns/op	      56 B/op	       2 allocs/op
+BenchmarkIndexLookupCopy/files=1024/size=4k-48                        	 1575451	       780.1 ns/op	      56 B/op	       2 allocs/op
+BenchmarkIndexLookupCopy/files=1024/size=4k-48                        	 1858105	       732.7 ns/op	      56 B/op	       2 allocs/op
+BenchmarkIndexLookupCopy/files=1024/size=4k-48                        	 1943072	       546.8 ns/op	      56 B/op	       2 allocs/op
+BenchmarkIndexLookupCopy/files=1024/size=4k-48                        	 2289402	       527.3 ns/op	      56 B/op	       2 allocs/op
+BenchmarkIndexLookupCopy/files=1024/size=4k-48                        	 2553534	       468.7 ns/op	      56 B/op	       2 allocs/op
+BenchmarkEntriesWithPrefix/files=256/size=4k-48                       	 1724054	       642.9 ns/op	      72 B/op	       3 allocs/op
+BenchmarkEntriesWithPrefix/files=256/size=4k-48                       	 2111757	       617.7 ns/op	      72 B/op	       3 allocs/op
+BenchmarkEntriesWithPrefix/files=256/size=4k-48                       	 2112796	       570.6 ns/op	      72 B/op	       3 allocs/op
+BenchmarkEntriesWithPrefix/files=256/size=4k-48                       	 1757108	       628.8 ns/op	      72 B/op	       3 allocs/op
+BenchmarkEntriesWithPrefix/files=256/size=4k-48                       	 2129112	       566.9 ns/op	      72 B/op	       3 allocs/op
+BenchmarkEntriesWithPrefix/files=256/size=4k-48                       	 1730008	       641.6 ns/op	      72 B/op	       3 allocs/op
+BenchmarkEntriesWithPrefix/files=256/size=4k-48                       	 2084618	       713.3 ns/op	      72 B/op	       3 allocs/op
+BenchmarkEntriesWithPrefix/files=256/size=4k-48                       	  891418	      1318 ns/op	      72 B/op	       3 allocs/op
+BenchmarkEntriesWithPrefix/files=256/size=4k-48                       	  887635	      1334 ns/op	      72 B/op	       3 allocs/op
+BenchmarkEntriesWithPrefix/files=256/size=4k-48                       	  864596	      1350 ns/op	      72 B/op	       3 allocs/op
+BenchmarkEntriesWithPrefix/files=1024/size=4k-48                      	  505944	      2443 ns/op	      72 B/op	       3 allocs/op
+BenchmarkEntriesWithPrefix/files=1024/size=4k-48                      	  604202	      2154 ns/op	      72 B/op	       3 allocs/op
+BenchmarkEntriesWithPrefix/files=1024/size=4k-48                      	  550984	      2125 ns/op	      72 B/op	       3 allocs/op
+BenchmarkEntriesWithPrefix/files=1024/size=4k-48                      	  878570	      1972 ns/op	      72 B/op	       3 allocs/op
+BenchmarkEntriesWithPrefix/files=1024/size=4k-48                      	  645724	      2107 ns/op	      72 B/op	       3 allocs/op
+BenchmarkEntriesWithPrefix/files=1024/size=4k-48                      	  555382	      2244 ns/op	      72 B/op	       3 allocs/op
+BenchmarkEntriesWithPrefix/files=1024/size=4k-48                      	  816525	      2197 ns/op	      72 B/op	       3 allocs/op
+BenchmarkEntriesWithPrefix/files=1024/size=4k-48                      	  608522	      2038 ns/op	      72 B/op	       3 allocs/op
+BenchmarkEntriesWithPrefix/files=1024/size=4k-48                      	  604556	      1915 ns/op	      72 B/op	       3 allocs/op
+BenchmarkEntriesWithPrefix/files=1024/size=4k-48                      	  496122	      2036 ns/op	      72 B/op	       3 allocs/op
+BenchmarkEntriesWithPrefixCopy/files=256/size=4k-48                   	  108530	     11321 ns/op	     968 B/op	      35 allocs/op
+BenchmarkEntriesWithPrefixCopy/files=256/size=4k-48                   	   97119	     12835 ns/op	     968 B/op	      35 allocs/op
+BenchmarkEntriesWithPrefixCopy/files=256/size=4k-48                   	   96700	     12802 ns/op	     968 B/op	      35 allocs/op
+BenchmarkEntriesWithPrefixCopy/files=256/size=4k-48                   	   90536	     13044 ns/op	     968 B/op	      35 allocs/op
+BenchmarkEntriesWithPrefixCopy/files=256/size=4k-48                   	   89406	     13376 ns/op	     968 B/op	      35 allocs/op
+BenchmarkEntriesWithPrefixCopy/files=256/size=4k-48                   	   89733	     12973 ns/op	     968 B/op	      35 allocs/op
+BenchmarkEntriesWithPrefixCopy/files=256/size=4k-48                   	   96507	     13214 ns/op	     968 B/op	      35 allocs/op
+BenchmarkEntriesWithPrefixCopy/files=256/size=4k-48                   	   94897	     12628 ns/op	     968 B/op	      35 allocs/op
+BenchmarkEntriesWithPrefixCopy/files=256/size=4k-48                   	   90200	     13074 ns/op	     968 B/op	      35 allocs/op
+BenchmarkEntriesWithPrefixCopy/files=256/size=4k-48                   	   86785	     12738 ns/op	     968 B/op	      35 allocs/op
+BenchmarkEntriesWithPrefixCopy/files=1024/size=4k-48                  	   29065	     44575 ns/op	    3656 B/op	     131 allocs/op
+BenchmarkEntriesWithPrefixCopy/files=1024/size=4k-48                  	   26696	     47481 ns/op	    3656 B/op	     131 allocs/op
+BenchmarkEntriesWithPrefixCopy/files=1024/size=4k-48                  	   26060	     47019 ns/op	    3656 B/op	     131 allocs/op
+BenchmarkEntriesWithPrefixCopy/files=1024/size=4k-48                  	   28227	     45690 ns/op	    3656 B/op	     131 allocs/op
+BenchmarkEntriesWithPrefixCopy/files=1024/size=4k-48                  	   25648	     47051 ns/op	    3656 B/op	     131 allocs/op
+BenchmarkEntriesWithPrefixCopy/files=1024/size=4k-48                  	   26839	     46448 ns/op	    3656 B/op	     131 allocs/op
+BenchmarkEntriesWithPrefixCopy/files=1024/size=4k-48                  	   26706	     46002 ns/op	    3656 B/op	     131 allocs/op
+BenchmarkEntriesWithPrefixCopy/files=1024/size=4k-48                  	   25072	     49235 ns/op	    3656 B/op	     131 allocs/op
+BenchmarkEntriesWithPrefixCopy/files=1024/size=4k-48                  	   30040	     40562 ns/op	    3656 B/op	     131 allocs/op
+BenchmarkEntriesWithPrefixCopy/files=1024/size=4k-48                  	   25782	     42297 ns/op	    3656 B/op	     131 allocs/op
+BenchmarkReaderReadFile/files=64/size=4k/compressible/none-48         	  147434	      8116 ns/op	 504.69 MB/s	    4337 B/op	       6 allocs/op
+BenchmarkReaderReadFile/files=64/size=4k/compressible/none-48         	  147397	      7836 ns/op	 522.74 MB/s	    4337 B/op	       6 allocs/op
+BenchmarkReaderReadFile/files=64/size=4k/compressible/none-48         	  178747	      7806 ns/op	 524.73 MB/s	    4337 B/op	       6 allocs/op
+BenchmarkReaderReadFile/files=64/size=4k/compressible/none-48         	  145348	      8094 ns/op	 506.07 MB/s	    4337 B/op	       6 allocs/op
+BenchmarkReaderReadFile/files=64/size=4k/compressible/none-48         	  146161	      7830 ns/op	 523.09 MB/s	    4337 B/op	       6 allocs/op
+BenchmarkReaderReadFile/files=64/size=4k/compressible/none-48         	  150400	      7700 ns/op	 531.97 MB/s	    4337 B/op	       6 allocs/op
+BenchmarkReaderReadFile/files=64/size=4k/compressible/none-48         	  157120	      7695 ns/op	 532.29 MB/s	    4337 B/op	       6 allocs/op
+BenchmarkReaderReadFile/files=64/size=4k/compressible/none-48         	  152778	      7817 ns/op	 524.00 MB/s	    4337 B/op	       6 allocs/op
+BenchmarkReaderReadFile/files=64/size=4k/compressible/none-48         	  148177	      7759 ns/op	 527.93 MB/s	    4337 B/op	       6 allocs/op
+BenchmarkReaderReadFile/files=64/size=4k/compressible/none-48         	  149083	      7935 ns/op	 516.19 MB/s	    4337 B/op	       6 allocs/op
+BenchmarkReaderReadFile/files=64/size=4k/compressible/zstd-48         	   22231	     54447 ns/op	  75.23 MB/s	    5874 B/op	      24 allocs/op
+BenchmarkReaderReadFile/files=64/size=4k/compressible/zstd-48         	   23371	     53487 ns/op	  76.58 MB/s	    5870 B/op	      24 allocs/op
+BenchmarkReaderReadFile/files=64/size=4k/compressible/zstd-48         	   21102	     56062 ns/op	  73.06 MB/s	    5882 B/op	      24 allocs/op
+BenchmarkReaderReadFile/files=64/size=4k/compressible/zstd-48         	   21470	     54767 ns/op	  74.79 MB/s	    5881 B/op	      24 allocs/op
+BenchmarkReaderReadFile/files=64/size=4k/compressible/zstd-48         	   21021	     57792 ns/op	  70.87 MB/s	    5872 B/op	      24 allocs/op
+BenchmarkReaderReadFile/files=64/size=4k/compressible/zstd-48         	   20857	     57601 ns/op	  71.11 MB/s	    5888 B/op	      24 allocs/op
+BenchmarkReaderReadFile/files=64/size=4k/compressible/zstd-48         	   21025	     58031 ns/op	  70.58 MB/s	    5885 B/op	      24 allocs/op
+BenchmarkReaderReadFile/files=64/size=4k/compressible/zstd-48         	   20763	     56748 ns/op	  72.18 MB/s	    5881 B/op	      24 allocs/op
+BenchmarkReaderReadFile/files=64/size=4k/compressible/zstd-48         	   22051	     54934 ns/op	  74.56 MB/s	    5880 B/op	      24 allocs/op
+BenchmarkReaderReadFile/files=64/size=4k/compressible/zstd-48         	   21447	     57070 ns/op	  71.77 MB/s	    5884 B/op	      24 allocs/op
+BenchmarkReaderReadFile/files=64/size=4k/random/none-48               	  137436	      8675 ns/op	 472.15 MB/s	    4337 B/op	       6 allocs/op
+BenchmarkReaderReadFile/files=64/size=4k/random/none-48               	  133249	      8633 ns/op	 474.47 MB/s	    4337 B/op	       6 allocs/op
+BenchmarkReaderReadFile/files=64/size=4k/random/none-48               	  136954	      8567 ns/op	 478.11 MB/s	    4337 B/op	       6 allocs/op
+BenchmarkReaderReadFile/files=64/size=4k/random/none-48               	  133093	      8686 ns/op	 471.55 MB/s	    4337 B/op	       6 allocs/op
+BenchmarkReaderReadFile/files=64/size=4k/random/none-48               	  135176	      8713 ns/op	 470.10 MB/s	    4337 B/op	       6 allocs/op
+BenchmarkReaderReadFile/files=64/size=4k/random/none-48               	  134277	      8514 ns/op	 481.09 MB/s	    4337 B/op	       6 allocs/op
+BenchmarkReaderReadFile/files=64/size=4k/random/none-48               	  148893	      8456 ns/op	 484.37 MB/s	    4337 B/op	       6 allocs/op
+BenchmarkReaderReadFile/files=64/size=4k/random/none-48               	  135384	      7678 ns/op	 533.49 MB/s	    4337 B/op	       6 allocs/op
+BenchmarkReaderReadFile/files=64/size=4k/random/none-48               	  284546	      4284 ns/op	 956.05 MB/s	    4337 B/op	       6 allocs/op
+BenchmarkReaderReadFile/files=64/size=4k/random/none-48               	  153980	      6868 ns/op	 596.35 MB/s	    4337 B/op	       6 allocs/op
+BenchmarkReaderReadFile/files=64/size=4k/random/zstd-48               	   99973	     15331 ns/op	 267.18 MB/s	    5775 B/op	      23 allocs/op
+BenchmarkReaderReadFile/files=64/size=4k/random/zstd-48               	   97815	     11681 ns/op	 350.66 MB/s	    5774 B/op	      23 allocs/op
+BenchmarkReaderReadFile/files=64/size=4k/random/zstd-48               	   61000	     19819 ns/op	 206.67 MB/s	    5776 B/op	      23 allocs/op
+BenchmarkReaderReadFile/files=64/size=4k/random/zstd-48               	   98202	     15723 ns/op	 260.51 MB/s	    5777 B/op	      23 allocs/op
+BenchmarkReaderReadFile/files=64/size=4k/random/zstd-48               	   84093	     13508 ns/op	 303.23 MB/s	    5775 B/op	      23 allocs/op
+BenchmarkReaderReadFile/files=64/size=4k/random/zstd-48               	  100063	     16220 ns/op	 252.53 MB/s	    5778 B/op	      23 allocs/op
+BenchmarkReaderReadFile/files=64/size=4k/random/zstd-48               	  110556	     16154 ns/op	 253.56 MB/s	    5778 B/op	      23 allocs/op
+BenchmarkReaderReadFile/files=64/size=4k/random/zstd-48               	   95553	     15861 ns/op	 258.24 MB/s	    5778 B/op	      23 allocs/op
+BenchmarkReaderReadFile/files=64/size=4k/random/zstd-48               	   99268	     12057 ns/op	 339.73 MB/s	    5775 B/op	      23 allocs/op
+BenchmarkReaderReadFile/files=64/size=4k/random/zstd-48               	  102981	     16424 ns/op	 249.39 MB/s	    5778 B/op	      23 allocs/op
+BenchmarkReaderReadFile/files=64/size=64k/compressible/none-48        	   26286	     67149 ns/op	 975.99 MB/s	   65777 B/op	       6 allocs/op
+BenchmarkReaderReadFile/files=64/size=64k/compressible/none-48        	   25724	     66524 ns/op	 985.15 MB/s	   65777 B/op	       6 allocs/op
+BenchmarkReaderReadFile/files=64/size=64k/compressible/none-48        	   10890	    110664 ns/op	 592.21 MB/s	   65777 B/op	       6 allocs/op
+BenchmarkReaderReadFile/files=64/size=64k/compressible/none-48        	   10840	    109203 ns/op	 600.13 MB/s	   65777 B/op	       6 allocs/op
+BenchmarkReaderReadFile/files=64/size=64k/compressible/none-48        	   10964	    111929 ns/op	 585.52 MB/s	   65777 B/op	       6 allocs/op
+BenchmarkReaderReadFile/files=64/size=64k/compressible/none-48        	   11286	    105567 ns/op	 620.80 MB/s	   65777 B/op	       6 allocs/op
+BenchmarkReaderReadFile/files=64/size=64k/compressible/none-48        	   11074	    109524 ns/op	 598.37 MB/s	   65777 B/op	       6 allocs/op
+BenchmarkReaderReadFile/files=64/size=64k/compressible/none-48        	   11629	    104982 ns/op	 624.26 MB/s	   65777 B/op	       6 allocs/op
+BenchmarkReaderReadFile/files=64/size=64k/compressible/none-48        	   10978	    109401 ns/op	 599.04 MB/s	   65777 B/op	       6 allocs/op
+BenchmarkReaderReadFile/files=64/size=64k/compressible/none-48        	   11199	    108283 ns/op	 605.23 MB/s	   65777 B/op	       6 allocs/op
+BenchmarkReaderReadFile/files=64/size=64k/compressible/zstd-48        	    2199	    518007 ns/op	 126.52 MB/s	   68598 B/op	      24 allocs/op
+BenchmarkReaderReadFile/files=64/size=64k/compressible/zstd-48        	    2313	    533288 ns/op	 122.89 MB/s	   68699 B/op	      24 allocs/op
+BenchmarkReaderReadFile/files=64/size=64k/compressible/zstd-48        	    2199	    529566 ns/op	 123.75 MB/s	   68420 B/op	      24 allocs/op
+BenchmarkReaderReadFile/files=64/size=64k/compressible/zstd-48        	    2590	    518645 ns/op	 126.36 MB/s	   68425 B/op	      24 allocs/op
+BenchmarkReaderReadFile/files=64/size=64k/compressible/zstd-48        	    2229	    485331 ns/op	 135.03 MB/s	   68722 B/op	      24 allocs/op
+BenchmarkReaderReadFile/files=64/size=64k/compressible/zstd-48        	    2624	    487650 ns/op	 134.39 MB/s	   68503 B/op	      24 allocs/op
+BenchmarkReaderReadFile/files=64/size=64k/compressible/zstd-48        	    2188	    512805 ns/op	 127.80 MB/s	   68406 B/op	      24 allocs/op
+BenchmarkReaderReadFile/files=64/size=64k/compressible/zstd-48        	    2269	    512540 ns/op	 127.87 MB/s	   68861 B/op	      24 allocs/op
+BenchmarkReaderReadFile/files=64/size=64k/compressible/zstd-48        	    2517	    490743 ns/op	 133.54 MB/s	   68383 B/op	      24 allocs/op
+BenchmarkReaderReadFile/files=64/size=64k/compressible/zstd-48        	    2310	    522074 ns/op	 125.53 MB/s	   68439 B/op	      24 allocs/op
+BenchmarkReaderReadFile/files=64/size=64k/random/none-48              	   10872	    110583 ns/op	 592.64 MB/s	   65777 B/op	       6 allocs/op
+BenchmarkReaderReadFile/files=64/size=64k/random/none-48              	   10946	    110461 ns/op	 593.29 MB/s	   65777 B/op	       6 allocs/op
+BenchmarkReaderReadFile/files=64/size=64k/random/none-48              	    9627	    110698 ns/op	 592.03 MB/s	   65777 B/op	       6 allocs/op
+BenchmarkReaderReadFile/files=64/size=64k/random/none-48              	   10855	    110569 ns/op	 592.72 MB/s	   65777 B/op	       6 allocs/op
+BenchmarkReaderReadFile/files=64/size=64k/random/none-48              	   11200	    106690 ns/op	 614.27 MB/s	   65777 B/op	       6 allocs/op
+BenchmarkReaderReadFile/files=64/size=64k/random/none-48              	    9266	    112573 ns/op	 582.17 MB/s	   65777 B/op	       6 allocs/op
+BenchmarkReaderReadFile/files=64/size=64k/random/none-48              	    9253	    110482 ns/op	 593.18 MB/s	   65777 B/op	       6 allocs/op
+BenchmarkReaderReadFile/files=64/size=64k/random/none-48              	    9733	    111145 ns/op	 589.64 MB/s	   65777 B/op	       6 allocs/op
+BenchmarkReaderReadFile/files=64/size=64k/random/none-48              	    9168	    111013 ns/op	 590.34 MB/s	   65777 B/op	       6 allocs/op
+BenchmarkReaderReadFile/files=64/size=64k/random/none-48              	    9775	    112250 ns/op	 583.84 MB/s	   65777 B/op	       6 allocs/op
+BenchmarkReaderReadFile/files=64/size=64k/random/zstd-48              	    7869	    152607 ns/op	 429.44 MB/s	   68301 B/op	      23 allocs/op
+BenchmarkReaderReadFile/files=64/size=64k/random/zstd-48              	    7834	    152617 ns/op	 429.42 MB/s	   68342 B/op	      23 allocs/op
+BenchmarkReaderReadFile/files=64/size=64k/random/zstd-48              	    7704	    155159 ns/op	 422.38 MB/s	   68425 B/op	      23 allocs/op
+BenchmarkReaderReadFile/files=64/size=64k/random/zstd-48              	    7932	    150915 ns/op	 434.26 MB/s	   68151 B/op	      23 allocs/op
+BenchmarkReaderReadFile/files=64/size=64k/random/zstd-48              	    6693	    151792 ns/op	 431.75 MB/s	   68305 B/op	      23 allocs/op
+BenchmarkReaderReadFile/files=64/size=64k/random/zstd-48              	    7893	    151686 ns/op	 432.05 MB/s	   68405 B/op	      23 allocs/op
+BenchmarkReaderReadFile/files=64/size=64k/random/zstd-48              	    7678	    155233 ns/op	 422.18 MB/s	   68512 B/op	      23 allocs/op
+BenchmarkReaderReadFile/files=64/size=64k/random/zstd-48              	    7959	    150212 ns/op	 436.29 MB/s	   68326 B/op	      23 allocs/op
+BenchmarkReaderReadFile/files=64/size=64k/random/zstd-48              	    7848	    152210 ns/op	 430.56 MB/s	   68307 B/op	      23 allocs/op
+BenchmarkReaderReadFile/files=64/size=64k/random/zstd-48              	    7906	    152084 ns/op	 430.92 MB/s	   68154 B/op	      23 allocs/op
+BenchmarkReaderReadFile/files=64/size=1m/compressible/none-48         	     952	   1272613 ns/op	 823.95 MB/s	 1048817 B/op	       6 allocs/op
+BenchmarkReaderReadFile/files=64/size=1m/compressible/none-48         	     967	   1330306 ns/op	 788.22 MB/s	 1048817 B/op	       6 allocs/op
+BenchmarkReaderReadFile/files=64/size=1m/compressible/none-48         	     951	   1291045 ns/op	 812.19 MB/s	 1048817 B/op	       6 allocs/op
+BenchmarkReaderReadFile/files=64/size=1m/compressible/none-48         	     991	   1283738 ns/op	 816.81 MB/s	 1048817 B/op	       6 allocs/op
+BenchmarkReaderReadFile/files=64/size=1m/compressible/none-48         	    1114	   1280227 ns/op	 819.06 MB/s	 1048817 B/op	       6 allocs/op
+BenchmarkReaderReadFile/files=64/size=1m/compressible/none-48         	    1004	   1272052 ns/op	 824.32 MB/s	 1048817 B/op	       6 allocs/op
+BenchmarkReaderReadFile/files=64/size=1m/compressible/none-48         	    1082	   1259314 ns/op	 832.66 MB/s	 1048817 B/op	       6 allocs/op
+BenchmarkReaderReadFile/files=64/size=1m/compressible/none-48         	     961	   1296036 ns/op	 809.06 MB/s	 1048817 B/op	       6 allocs/op
+BenchmarkReaderReadFile/files=64/size=1m/compressible/none-48         	    1176	   1247851 ns/op	 840.31 MB/s	 1048817 B/op	       6 allocs/op
+BenchmarkReaderReadFile/files=64/size=1m/compressible/none-48         	     961	   1298058 ns/op	 807.80 MB/s	 1048817 B/op	       6 allocs/op
+BenchmarkReaderReadFile/files=64/size=1m/compressible/zstd-48         	     432	   2670673 ns/op	 392.63 MB/s	 1098622 B/op	      25 allocs/op
+BenchmarkReaderReadFile/files=64/size=1m/compressible/zstd-48         	     429	   2639173 ns/op	 397.31 MB/s	 1075507 B/op	      25 allocs/op
+BenchmarkReaderReadFile/files=64/size=1m/compressible/zstd-48         	     440	   2638724 ns/op	 397.38 MB/s	 1074974 B/op	      25 allocs/op
+BenchmarkReaderReadFile/files=64/size=1m/compressible/zstd-48         	     445	   2615322 ns/op	 400.94 MB/s	 1074692 B/op	      25 allocs/op
+BenchmarkReaderReadFile/files=64/size=1m/compressible/zstd-48         	     471	   2605651 ns/op	 402.42 MB/s	 1073437 B/op	      25 allocs/op
+BenchmarkReaderReadFile/files=64/size=1m/compressible/zstd-48         	     441	   2640932 ns/op	 397.05 MB/s	 1074903 B/op	      25 allocs/op
+BenchmarkReaderReadFile/files=64/size=1m/compressible/zstd-48         	     432	   2662784 ns/op	 393.79 MB/s	 1075265 B/op	      25 allocs/op
+BenchmarkReaderReadFile/files=64/size=1m/compressible/zstd-48         	     447	   2569139 ns/op	 408.14 MB/s	 1074596 B/op	      25 allocs/op
+BenchmarkReaderReadFile/files=64/size=1m/compressible/zstd-48         	     438	   2663547 ns/op	 393.68 MB/s	 1075083 B/op	      25 allocs/op
+BenchmarkReaderReadFile/files=64/size=1m/compressible/zstd-48         	     432	   2669175 ns/op	 392.85 MB/s	 1075392 B/op	      25 allocs/op
+BenchmarkReaderReadFile/files=64/size=1m/random/none-48               	     968	   1251349 ns/op	 837.96 MB/s	 1048817 B/op	       6 allocs/op
+BenchmarkReaderReadFile/files=64/size=1m/random/none-48               	    1372	   1284006 ns/op	 816.64 MB/s	 1048817 B/op	       6 allocs/op
+BenchmarkReaderReadFile/files=64/size=1m/random/none-48               	    1354	   1257696 ns/op	 833.73 MB/s	 1048817 B/op	       6 allocs/op
+BenchmarkReaderReadFile/files=64/size=1m/random/none-48               	     966	   1302018 ns/op	 805.35 MB/s	 1048817 B/op	       6 allocs/op
+BenchmarkReaderReadFile/files=64/size=1m/random/none-48               	     978	   1298180 ns/op	 807.73 MB/s	 1048817 B/op	       6 allocs/op
+BenchmarkReaderReadFile/files=64/size=1m/random/none-48               	     990	   1248525 ns/op	 839.85 MB/s	 1048817 B/op	       6 allocs/op
+BenchmarkReaderReadFile/files=64/size=1m/random/none-48               	    1371	   1287450 ns/op	 814.46 MB/s	 1048817 B/op	       6 allocs/op
+BenchmarkReaderReadFile/files=64/size=1m/random/none-48               	    1329	   1291279 ns/op	 812.04 MB/s	 1048817 B/op	       6 allocs/op
+BenchmarkReaderReadFile/files=64/size=1m/random/none-48               	     979	   1274276 ns/op	 822.88 MB/s	 1048817 B/op	       6 allocs/op
+BenchmarkReaderReadFile/files=64/size=1m/random/none-48               	     955	   1295247 ns/op	 809.56 MB/s	 1048817 B/op	       6 allocs/op
+BenchmarkReaderReadFile/files=64/size=1m/random/zstd-48               	     507	   2022611 ns/op	 518.43 MB/s	 1070041 B/op	      23 allocs/op
+BenchmarkReaderReadFile/files=64/size=1m/random/zstd-48               	     594	   2159956 ns/op	 485.46 MB/s	 1067146 B/op	      23 allocs/op
+BenchmarkReaderReadFile/files=64/size=1m/random/zstd-48               	     688	   1956660 ns/op	 535.90 MB/s	 1064853 B/op	      23 allocs/op
+BenchmarkReaderReadFile/files=64/size=1m/random/zstd-48               	     555	   2212187 ns/op	 474.00 MB/s	 1068325 B/op	      23 allocs/op
+BenchmarkReaderReadFile/files=64/size=1m/random/zstd-48               	     541	   2286080 ns/op	 458.68 MB/s	 1068796 B/op	      23 allocs/op
+BenchmarkReaderReadFile/files=64/size=1m/random/zstd-48               	     706	   1994794 ns/op	 525.66 MB/s	 1064473 B/op	      23 allocs/op
+BenchmarkReaderReadFile/files=64/size=1m/random/zstd-48               	     684	   2111368 ns/op	 496.63 MB/s	 1064936 B/op	      23 allocs/op
+BenchmarkReaderReadFile/files=64/size=1m/random/zstd-48               	     550	   2159105 ns/op	 485.65 MB/s	 1068497 B/op	      23 allocs/op
+BenchmarkReaderReadFile/files=64/size=1m/random/zstd-48               	     768	   2085249 ns/op	 502.85 MB/s	 1063342 B/op	      23 allocs/op
+BenchmarkReaderReadFile/files=64/size=1m/random/zstd-48               	     829	   2193456 ns/op	 478.05 MB/s	 1062385 B/op	      23 allocs/op
+BenchmarkReaderCopyDir/serial/files=512/size=16k/none/compressible-48 	     274	   4202415 ns/op	 124.76 MB/s	  595586 B/op	     695 allocs/op
+BenchmarkReaderCopyDir/serial/files=512/size=16k/none/compressible-48 	     265	   4368864 ns/op	 120.01 MB/s	  595603 B/op	     695 allocs/op
+BenchmarkReaderCopyDir/serial/files=512/size=16k/none/compressible-48 	     277	   4335091 ns/op	 120.94 MB/s	  595603 B/op	     695 allocs/op
+BenchmarkReaderCopyDir/serial/files=512/size=16k/none/compressible-48 	     267	   4362453 ns/op	 120.18 MB/s	  595604 B/op	     695 allocs/op
+BenchmarkReaderCopyDir/serial/files=512/size=16k/none/compressible-48 	     333	   3867304 ns/op	 135.57 MB/s	  595604 B/op	     695 allocs/op
+BenchmarkReaderCopyDir/serial/files=512/size=16k/none/compressible-48 	     288	   3990596 ns/op	 131.38 MB/s	  595604 B/op	     695 allocs/op
+BenchmarkReaderCopyDir/serial/files=512/size=16k/none/compressible-48 	     280	   4159964 ns/op	 126.03 MB/s	  595604 B/op	     695 allocs/op
+BenchmarkReaderCopyDir/serial/files=512/size=16k/none/compressible-48 	     274	   3990648 ns/op	 131.38 MB/s	  595604 B/op	     695 allocs/op
+BenchmarkReaderCopyDir/serial/files=512/size=16k/none/compressible-48 	     273	   3963178 ns/op	 132.29 MB/s	  595604 B/op	     695 allocs/op
+BenchmarkReaderCopyDir/serial/files=512/size=16k/none/compressible-48 	     276	   4209861 ns/op	 124.54 MB/s	  595604 B/op	     695 allocs/op
+BenchmarkReaderCopyDir/serial/files=512/size=16k/zstd/compressible-48 	     134	   8928113 ns/op	  58.72 MB/s	  663832 B/op	    1501 allocs/op
+BenchmarkReaderCopyDir/serial/files=512/size=16k/zstd/compressible-48 	     134	   8961441 ns/op	  58.50 MB/s	  661904 B/op	    1500 allocs/op
+BenchmarkReaderCopyDir/serial/files=512/size=16k/zstd/compressible-48 	     129	   9179600 ns/op	  57.11 MB/s	  662228 B/op	    1500 allocs/op
+BenchmarkReaderCopyDir/serial/files=512/size=16k/zstd/compressible-48 	     133	   8934044 ns/op	  58.68 MB/s	  663325 B/op	    1500 allocs/op
+BenchmarkReaderCopyDir/serial/files=512/size=16k/zstd/compressible-48 	     133	   8941718 ns/op	  58.63 MB/s	  662941 B/op	    1500 allocs/op
+BenchmarkReaderCopyDir/serial/files=512/size=16k/zstd/compressible-48 	     132	   9071567 ns/op	  57.79 MB/s	  663703 B/op	    1501 allocs/op
+BenchmarkReaderCopyDir/serial/files=512/size=16k/zstd/compressible-48 	     134	   8894615 ns/op	  58.94 MB/s	  662807 B/op	    1500 allocs/op
+BenchmarkReaderCopyDir/serial/files=512/size=16k/zstd/compressible-48 	     135	   8845107 ns/op	  59.27 MB/s	  662617 B/op	    1500 allocs/op
+BenchmarkReaderCopyDir/serial/files=512/size=16k/zstd/compressible-48 	     139	   8640211 ns/op	  60.68 MB/s	  664631 B/op	    1501 allocs/op
+BenchmarkReaderCopyDir/serial/files=512/size=16k/zstd/compressible-48 	     134	   8996602 ns/op	  58.28 MB/s	  661810 B/op	    1500 allocs/op
+BenchmarkReaderCopyDir/serial/files=512/size=16k/zstd/random-48       	     199	   5808539 ns/op	  90.26 MB/s	 1183957 B/op	    1464 allocs/op
+BenchmarkReaderCopyDir/serial/files=512/size=16k/zstd/random-48       	     200	   5876199 ns/op	  89.22 MB/s	 1184346 B/op	    1464 allocs/op
+BenchmarkReaderCopyDir/serial/files=512/size=16k/zstd/random-48       	     195	   6103917 ns/op	  85.89 MB/s	 1184763 B/op	    1464 allocs/op
+BenchmarkReaderCopyDir/serial/files=512/size=16k/zstd/random-48       	     195	   5916218 ns/op	  88.62 MB/s	 1184756 B/op	    1464 allocs/op
+BenchmarkReaderCopyDir/serial/files=512/size=16k/zstd/random-48       	     198	   6035312 ns/op	  86.87 MB/s	 1185069 B/op	    1464 allocs/op
+BenchmarkReaderCopyDir/serial/files=512/size=16k/zstd/random-48       	     200	   5913692 ns/op	  88.66 MB/s	 1185706 B/op	    1464 allocs/op
+BenchmarkReaderCopyDir/serial/files=512/size=16k/zstd/random-48       	     192	   6116618 ns/op	  85.72 MB/s	 1186316 B/op	    1464 allocs/op
+BenchmarkReaderCopyDir/serial/files=512/size=16k/zstd/random-48       	     194	   6121160 ns/op	  85.65 MB/s	 1184779 B/op	    1464 allocs/op
+BenchmarkReaderCopyDir/serial/files=512/size=16k/zstd/random-48       	     202	   5772367 ns/op	  90.83 MB/s	 1185746 B/op	    1464 allocs/op
+BenchmarkReaderCopyDir/serial/files=512/size=16k/zstd/random-48       	     204	   5923416 ns/op	  88.51 MB/s	 1184596 B/op	    1464 allocs/op
+BenchmarkReaderCopyDir/serial/files=512/size=64k/zstd/compressible-48 	      74	  22557105 ns/op	  92.97 MB/s	 1198172 B/op	    1503 allocs/op
+BenchmarkReaderCopyDir/serial/files=512/size=64k/zstd/compressible-48 	      64	  22209724 ns/op	  94.42 MB/s	 1199443 B/op	    1503 allocs/op
+BenchmarkReaderCopyDir/serial/files=512/size=64k/zstd/compressible-48 	      50	  22482457 ns/op	  93.28 MB/s	 1202052 B/op	    1503 allocs/op
+BenchmarkReaderCopyDir/serial/files=512/size=64k/zstd/compressible-48 	      50	  21742442 ns/op	  96.45 MB/s	 1201282 B/op	    1503 allocs/op
+BenchmarkReaderCopyDir/serial/files=512/size=64k/zstd/compressible-48 	      62	  22024095 ns/op	  95.22 MB/s	 1198578 B/op	    1503 allocs/op
+BenchmarkReaderCopyDir/serial/files=512/size=64k/zstd/compressible-48 	      51	  22659142 ns/op	  92.55 MB/s	 1205608 B/op	    1503 allocs/op
+BenchmarkReaderCopyDir/serial/files=512/size=64k/zstd/compressible-48 	      50	  22429570 ns/op	  93.50 MB/s	 1200730 B/op	    1503 allocs/op
+BenchmarkReaderCopyDir/serial/files=512/size=64k/zstd/compressible-48 	      69	  22392345 ns/op	  93.65 MB/s	 1197893 B/op	    1502 allocs/op
+BenchmarkReaderCopyDir/serial/files=512/size=64k/zstd/compressible-48 	      51	  22422669 ns/op	  93.53 MB/s	 1200969 B/op	    1502 allocs/op
+BenchmarkReaderCopyDir/serial/files=512/size=64k/zstd/compressible-48 	      52	  22152493 ns/op	  94.67 MB/s	 1195395 B/op	    1502 allocs/op
+BenchmarkReaderCopyDir/serial/files=512/size=64k/zstd/random-48       	     100	  11179283 ns/op	 187.59 MB/s	 3281596 B/op	    1463 allocs/op
+BenchmarkReaderCopyDir/serial/files=512/size=64k/zstd/random-48       	     100	  11282540 ns/op	 185.88 MB/s	 3287302 B/op	    1464 allocs/op
+BenchmarkReaderCopyDir/serial/files=512/size=64k/zstd/random-48       	     100	  11146022 ns/op	 188.15 MB/s	 3284431 B/op	    1463 allocs/op
+BenchmarkReaderCopyDir/serial/files=512/size=64k/zstd/random-48       	     100	  11068891 ns/op	 189.46 MB/s	 3284468 B/op	    1464 allocs/op
+BenchmarkReaderCopyDir/serial/files=512/size=64k/zstd/random-48       	     100	  11091903 ns/op	 189.07 MB/s	 3284477 B/op	    1464 allocs/op
+BenchmarkReaderCopyDir/serial/files=512/size=64k/zstd/random-48       	     100	  11122991 ns/op	 188.54 MB/s	 3284476 B/op	    1464 allocs/op
+BenchmarkReaderCopyDir/serial/files=512/size=64k/zstd/random-48       	     100	  11041263 ns/op	 189.94 MB/s	 3295749 B/op	    1464 allocs/op
+BenchmarkReaderCopyDir/serial/files=512/size=64k/zstd/random-48       	      98	  11417571 ns/op	 183.68 MB/s	 3293276 B/op	    1464 allocs/op
+BenchmarkReaderCopyDir/serial/files=512/size=64k/zstd/random-48       	     100	  11151552 ns/op	 188.06 MB/s	 3284490 B/op	    1464 allocs/op
+BenchmarkReaderCopyDir/serial/files=512/size=64k/zstd/random-48       	     100	  11168131 ns/op	 187.78 MB/s	 3293014 B/op	    1465 allocs/op
+BenchmarkReaderCopyDir/serial/files=2048/size=16k/zstd/compressible-48         	      32	  38190301 ns/op	  54.91 MB/s	 2645193 B/op	    5935 allocs/op
+BenchmarkReaderCopyDir/serial/files=2048/size=16k/zstd/compressible-48         	      32	  38382543 ns/op	  54.64 MB/s	 2639380 B/op	    5933 allocs/op
+BenchmarkReaderCopyDir/serial/files=2048/size=16k/zstd/compressible-48         	      32	  38118750 ns/op	  55.02 MB/s	 2646148 B/op	    5934 allocs/op
+BenchmarkReaderCopyDir/serial/files=2048/size=16k/zstd/compressible-48         	      32	  37258202 ns/op	  56.29 MB/s	 2640042 B/op	    5933 allocs/op
+BenchmarkReaderCopyDir/serial/files=2048/size=16k/zstd/compressible-48         	      34	  37353717 ns/op	  56.14 MB/s	 2646214 B/op	    5934 allocs/op
+BenchmarkReaderCopyDir/serial/files=2048/size=16k/zstd/compressible-48         	      31	  38262613 ns/op	  54.81 MB/s	 2644024 B/op	    5935 allocs/op
+BenchmarkReaderCopyDir/serial/files=2048/size=16k/zstd/compressible-48         	      37	  38214538 ns/op	  54.88 MB/s	 2648446 B/op	    5936 allocs/op
+BenchmarkReaderCopyDir/serial/files=2048/size=16k/zstd/compressible-48         	      31	  37746983 ns/op	  55.56 MB/s	 2641596 B/op	    5934 allocs/op
+BenchmarkReaderCopyDir/serial/files=2048/size=16k/zstd/compressible-48         	      32	  37830028 ns/op	  55.44 MB/s	 2642298 B/op	    5933 allocs/op
+BenchmarkReaderCopyDir/serial/files=2048/size=16k/zstd/compressible-48         	      30	  37786331 ns/op	  55.50 MB/s	 2646603 B/op	    5935 allocs/op
+BenchmarkReaderCopyDir/parallel/files=512/size=16k/none/compressible-48        	     544	   2408074 ns/op	 217.72 MB/s	  605323 B/op	     799 allocs/op
+BenchmarkReaderCopyDir/parallel/files=512/size=16k/none/compressible-48        	     468	   2471877 ns/op	 212.10 MB/s	  604567 B/op	     797 allocs/op
+BenchmarkReaderCopyDir/parallel/files=512/size=16k/none/compressible-48        	     475	   2510571 ns/op	 208.83 MB/s	  604844 B/op	     799 allocs/op
+BenchmarkReaderCopyDir/parallel/files=512/size=16k/none/compressible-48        	     490	   2482369 ns/op	 211.20 MB/s	  604560 B/op	     797 allocs/op
+BenchmarkReaderCopyDir/parallel/files=512/size=16k/none/compressible-48        	     469	   2532313 ns/op	 207.04 MB/s	  604724 B/op	     798 allocs/op
+BenchmarkReaderCopyDir/parallel/files=512/size=16k/none/compressible-48        	     474	   2492431 ns/op	 210.35 MB/s	  604550 B/op	     797 allocs/op
+BenchmarkReaderCopyDir/parallel/files=512/size=16k/none/compressible-48        	     477	   2461595 ns/op	 212.99 MB/s	  604552 B/op	     797 allocs/op
+BenchmarkReaderCopyDir/parallel/files=512/size=16k/none/compressible-48        	     462	   2523582 ns/op	 207.76 MB/s	  604795 B/op	     799 allocs/op
+BenchmarkReaderCopyDir/parallel/files=512/size=16k/none/compressible-48        	     482	   2531870 ns/op	 207.08 MB/s	  604630 B/op	     798 allocs/op
+BenchmarkReaderCopyDir/parallel/files=512/size=16k/none/compressible-48        	     475	   2488358 ns/op	 210.70 MB/s	  604821 B/op	     799 allocs/op
+BenchmarkReaderCopyDir/parallel/files=512/size=16k/zstd/compressible-48        	     364	   3261211 ns/op	 160.76 MB/s	 1944129 B/op	    2044 allocs/op
+BenchmarkReaderCopyDir/parallel/files=512/size=16k/zstd/compressible-48        	     361	   3281808 ns/op	 159.76 MB/s	 1967345 B/op	    2052 allocs/op
+BenchmarkReaderCopyDir/parallel/files=512/size=16k/zstd/compressible-48        	     358	   3298659 ns/op	 158.94 MB/s	 1985606 B/op	    2056 allocs/op
+BenchmarkReaderCopyDir/parallel/files=512/size=16k/zstd/compressible-48        	     360	   3245701 ns/op	 161.53 MB/s	 1985972 B/op	    2057 allocs/op
+BenchmarkReaderCopyDir/parallel/files=512/size=16k/zstd/compressible-48        	     362	   3214556 ns/op	 163.10 MB/s	 1998257 B/op	    2064 allocs/op
+BenchmarkReaderCopyDir/parallel/files=512/size=16k/zstd/compressible-48        	     361	   3267401 ns/op	 160.46 MB/s	 1998747 B/op	    2062 allocs/op
+BenchmarkReaderCopyDir/parallel/files=512/size=16k/zstd/compressible-48        	     363	   3299724 ns/op	 158.89 MB/s	 1994898 B/op	    2063 allocs/op
+BenchmarkReaderCopyDir/parallel/files=512/size=16k/zstd/compressible-48        	     360	   3308614 ns/op	 158.46 MB/s	 1988616 B/op	    2058 allocs/op
+BenchmarkReaderCopyDir/parallel/files=512/size=16k/zstd/compressible-48        	     360	   3277174 ns/op	 159.98 MB/s	 1992472 B/op	    2060 allocs/op
+BenchmarkReaderCopyDir/parallel/files=512/size=16k/zstd/compressible-48        	     361	   3265421 ns/op	 160.56 MB/s	 1990029 B/op	    2060 allocs/op
+BenchmarkReaderCopyDir/parallel/files=512/size=16k/zstd/random-48              	     454	   2558361 ns/op	 204.93 MB/s	 1322847 B/op	    1604 allocs/op
+BenchmarkReaderCopyDir/parallel/files=512/size=16k/zstd/random-48              	     450	   2557944 ns/op	 204.96 MB/s	 1315526 B/op	    1604 allocs/op
+BenchmarkReaderCopyDir/parallel/files=512/size=16k/zstd/random-48              	     454	   2615891 ns/op	 200.42 MB/s	 1317823 B/op	    1602 allocs/op
+BenchmarkReaderCopyDir/parallel/files=512/size=16k/zstd/random-48              	     456	   2597987 ns/op	 201.81 MB/s	 1317411 B/op	    1604 allocs/op
+BenchmarkReaderCopyDir/parallel/files=512/size=16k/zstd/random-48              	     448	   2613333 ns/op	 200.62 MB/s	 1301630 B/op	    1599 allocs/op
+BenchmarkReaderCopyDir/parallel/files=512/size=16k/zstd/random-48              	     438	   2637052 ns/op	 198.82 MB/s	 1321170 B/op	    1605 allocs/op
+BenchmarkReaderCopyDir/parallel/files=512/size=16k/zstd/random-48              	     452	   2601354 ns/op	 201.54 MB/s	 1323568 B/op	    1603 allocs/op
+BenchmarkReaderCopyDir/parallel/files=512/size=16k/zstd/random-48              	     459	   2593589 ns/op	 202.15 MB/s	 1315044 B/op	    1603 allocs/op
+BenchmarkReaderCopyDir/parallel/files=512/size=16k/zstd/random-48              	     468	   2607898 ns/op	 201.04 MB/s	 1311161 B/op	    1603 allocs/op
+BenchmarkReaderCopyDir/parallel/files=512/size=16k/zstd/random-48              	     450	   2566892 ns/op	 204.25 MB/s	 1311281 B/op	    1601 allocs/op
+BenchmarkReaderCopyDir/parallel/files=512/size=64k/zstd/compressible-48        	     417	   2652708 ns/op	 790.57 MB/s	 1826029 B/op	    1674 allocs/op
+BenchmarkReaderCopyDir/parallel/files=512/size=64k/zstd/compressible-48        	     466	   2503457 ns/op	 837.70 MB/s	 1777253 B/op	    1669 allocs/op
+BenchmarkReaderCopyDir/parallel/files=512/size=64k/zstd/compressible-48        	     438	   2652153 ns/op	 790.74 MB/s	 1815275 B/op	    1674 allocs/op
+BenchmarkReaderCopyDir/parallel/files=512/size=64k/zstd/compressible-48        	     424	   2669263 ns/op	 785.67 MB/s	 1796768 B/op	    1670 allocs/op
+BenchmarkReaderCopyDir/parallel/files=512/size=64k/zstd/compressible-48        	     422	   2726713 ns/op	 769.11 MB/s	 1859261 B/op	    1679 allocs/op
+BenchmarkReaderCopyDir/parallel/files=512/size=64k/zstd/compressible-48        	     423	   2676717 ns/op	 783.48 MB/s	 1838944 B/op	    1674 allocs/op
+BenchmarkReaderCopyDir/parallel/files=512/size=64k/zstd/compressible-48        	     424	   2687653 ns/op	 780.29 MB/s	 1864975 B/op	    1680 allocs/op
+BenchmarkReaderCopyDir/parallel/files=512/size=64k/zstd/compressible-48        	     430	   2752639 ns/op	 761.87 MB/s	 1798016 B/op	    1672 allocs/op
+BenchmarkReaderCopyDir/parallel/files=512/size=64k/zstd/compressible-48        	     422	   2721476 ns/op	 770.59 MB/s	 1803493 B/op	    1674 allocs/op
+BenchmarkReaderCopyDir/parallel/files=512/size=64k/zstd/compressible-48        	     445	   2654859 ns/op	 789.93 MB/s	 1839217 B/op	    1675 allocs/op
+BenchmarkReaderCopyDir/parallel/files=512/size=64k/zstd/random-48              	     411	   2815118 ns/op	 744.96 MB/s	 3585731 B/op	    1593 allocs/op
+BenchmarkReaderCopyDir/parallel/files=512/size=64k/zstd/random-48              	     411	   2789476 ns/op	 751.81 MB/s	 3575771 B/op	    1590 allocs/op
+BenchmarkReaderCopyDir/parallel/files=512/size=64k/zstd/random-48              	     421	   2756099 ns/op	 760.91 MB/s	 3600752 B/op	    1594 allocs/op
+BenchmarkReaderCopyDir/parallel/files=512/size=64k/zstd/random-48              	     418	   2771515 ns/op	 756.68 MB/s	 3573096 B/op	    1590 allocs/op
+BenchmarkReaderCopyDir/parallel/files=512/size=64k/zstd/random-48              	     438	   2722338 ns/op	 770.35 MB/s	 3572860 B/op	    1592 allocs/op
+BenchmarkReaderCopyDir/parallel/files=512/size=64k/zstd/random-48              	     421	   2742090 ns/op	 764.80 MB/s	 3573629 B/op	    1590 allocs/op
+BenchmarkReaderCopyDir/parallel/files=512/size=64k/zstd/random-48              	     409	   2774827 ns/op	 755.78 MB/s	 3606515 B/op	    1591 allocs/op
+BenchmarkReaderCopyDir/parallel/files=512/size=64k/zstd/random-48              	     396	   2858987 ns/op	 733.53 MB/s	 3581901 B/op	    1592 allocs/op
+BenchmarkReaderCopyDir/parallel/files=512/size=64k/zstd/random-48              	     405	   2770712 ns/op	 756.90 MB/s	 3599034 B/op	    1591 allocs/op
+BenchmarkReaderCopyDir/parallel/files=512/size=64k/zstd/random-48              	     423	   2699200 ns/op	 776.95 MB/s	 3587543 B/op	    1593 allocs/op
+BenchmarkReaderCopyDir/parallel/files=2048/size=16k/zstd/compressible-48       	      79	  12975931 ns/op	 161.62 MB/s	 7154078 B/op	    7620 allocs/op
+BenchmarkReaderCopyDir/parallel/files=2048/size=16k/zstd/compressible-48       	      80	  13403558 ns/op	 156.46 MB/s	 7113519 B/op	    7608 allocs/op
+BenchmarkReaderCopyDir/parallel/files=2048/size=16k/zstd/compressible-48       	      80	  13688629 ns/op	 153.20 MB/s	 7146007 B/op	    7620 allocs/op
+BenchmarkReaderCopyDir/parallel/files=2048/size=16k/zstd/compressible-48       	      80	  13709860 ns/op	 152.97 MB/s	 7104541 B/op	    7609 allocs/op
+BenchmarkReaderCopyDir/parallel/files=2048/size=16k/zstd/compressible-48       	      75	  13344361 ns/op	 157.16 MB/s	 7281873 B/op	    7666 allocs/op
+BenchmarkReaderCopyDir/parallel/files=2048/size=16k/zstd/compressible-48       	      74	  13664522 ns/op	 153.47 MB/s	 7205412 B/op	    7645 allocs/op
+BenchmarkReaderCopyDir/parallel/files=2048/size=16k/zstd/compressible-48       	      76	  13449911 ns/op	 155.92 MB/s	 7063864 B/op	    7596 allocs/op
+BenchmarkReaderCopyDir/parallel/files=2048/size=16k/zstd/compressible-48       	      86	  13803764 ns/op	 151.93 MB/s	 7065332 B/op	    7596 allocs/op
+BenchmarkReaderCopyDir/parallel/files=2048/size=16k/zstd/compressible-48       	      90	  13305182 ns/op	 157.62 MB/s	 7198644 B/op	    7641 allocs/op
+BenchmarkReaderCopyDir/parallel/files=2048/size=16k/zstd/compressible-48       	      76	  13644146 ns/op	 153.70 MB/s	 7043558 B/op	    7590 allocs/op
+PASS
+ok  	github.com/meigma/blob	548.692s
+goos: linux
+goarch: amd64
+pkg: github.com/meigma/blob/cache
+cpu: AMD EPYC 9254 24-Core Processor
+BenchmarkCachedReaderReadFileHit-48                	 7035464	       169.3 ns/op	193549.30 MB/s	       0 B/op	       0 allocs/op
+BenchmarkCachedReaderReadFileHit-48                	 6337796	       167.6 ns/op	195484.26 MB/s	       0 B/op	       0 allocs/op
+BenchmarkCachedReaderReadFileHit-48                	 6983110	       170.1 ns/op	192631.71 MB/s	       0 B/op	       0 allocs/op
+BenchmarkCachedReaderReadFileHit-48                	 6973142	       170.5 ns/op	192191.75 MB/s	       0 B/op	       0 allocs/op
+BenchmarkCachedReaderReadFileHit-48                	 6952261	       170.7 ns/op	191910.87 MB/s	       0 B/op	       0 allocs/op
+BenchmarkCachedReaderReadFileHit-48                	 6950010	       170.7 ns/op	191964.65 MB/s	       0 B/op	       0 allocs/op
+BenchmarkCachedReaderReadFileHit-48                	 6980206	       170.4 ns/op	192316.83 MB/s	       0 B/op	       0 allocs/op
+BenchmarkCachedReaderReadFileHit-48                	 7055622	       168.9 ns/op	194041.16 MB/s	       0 B/op	       0 allocs/op
+BenchmarkCachedReaderReadFileHit-48                	 6805108	       174.9 ns/op	187346.04 MB/s	       0 B/op	       0 allocs/op
+BenchmarkCachedReaderReadFileHit-48                	 6944769	       171.1 ns/op	191480.45 MB/s	       0 B/op	       0 allocs/op
+BenchmarkCachedReaderPrefetchDir/files=512/size=16k/none/compressible-48         	    2244	    503016 ns/op	1042.29 MB/s	  546261 B/op	     129 allocs/op
+BenchmarkCachedReaderPrefetchDir/files=512/size=16k/none/compressible-48         	    2174	    500694 ns/op	1047.12 MB/s	  546114 B/op	     129 allocs/op
+BenchmarkCachedReaderPrefetchDir/files=512/size=16k/none/compressible-48         	    2132	    504826 ns/op	1038.55 MB/s	  546110 B/op	     129 allocs/op
+BenchmarkCachedReaderPrefetchDir/files=512/size=16k/none/compressible-48         	    2239	    493032 ns/op	1063.40 MB/s	  546106 B/op	     129 allocs/op
+BenchmarkCachedReaderPrefetchDir/files=512/size=16k/none/compressible-48         	    2282	    504382 ns/op	1039.47 MB/s	  546083 B/op	     129 allocs/op
+BenchmarkCachedReaderPrefetchDir/files=512/size=16k/none/compressible-48         	    2217	    519641 ns/op	1008.94 MB/s	  546087 B/op	     129 allocs/op
+BenchmarkCachedReaderPrefetchDir/files=512/size=16k/none/compressible-48         	    2155	    516772 ns/op	1014.54 MB/s	  546085 B/op	     129 allocs/op
+BenchmarkCachedReaderPrefetchDir/files=512/size=16k/none/compressible-48         	    2112	    516559 ns/op	1014.96 MB/s	  546085 B/op	     129 allocs/op
+BenchmarkCachedReaderPrefetchDir/files=512/size=16k/none/compressible-48         	    2240	    488097 ns/op	1074.15 MB/s	  546082 B/op	     129 allocs/op
+BenchmarkCachedReaderPrefetchDir/files=512/size=16k/none/compressible-48         	    2272	    495579 ns/op	1057.93 MB/s	  546085 B/op	     129 allocs/op
+BenchmarkCachedReaderPrefetchDir/files=512/size=16k/zstd/compressible-48         	    1413	    814783 ns/op	 643.47 MB/s	  823952 B/op	     892 allocs/op
+BenchmarkCachedReaderPrefetchDir/files=512/size=16k/zstd/compressible-48         	    1312	    788087 ns/op	 665.27 MB/s	  814068 B/op	     888 allocs/op
+BenchmarkCachedReaderPrefetchDir/files=512/size=16k/zstd/compressible-48         	    1356	    804724 ns/op	 651.51 MB/s	  821960 B/op	     891 allocs/op
+BenchmarkCachedReaderPrefetchDir/files=512/size=16k/zstd/compressible-48         	    1366	    818804 ns/op	 640.31 MB/s	  824571 B/op	     891 allocs/op
+BenchmarkCachedReaderPrefetchDir/files=512/size=16k/zstd/compressible-48         	    1478	    799898 ns/op	 655.44 MB/s	  812396 B/op	     887 allocs/op
+BenchmarkCachedReaderPrefetchDir/files=512/size=16k/zstd/compressible-48         	    1394	    821806 ns/op	 637.97 MB/s	  815115 B/op	     888 allocs/op
+BenchmarkCachedReaderPrefetchDir/files=512/size=16k/zstd/compressible-48         	    1256	    820231 ns/op	 639.20 MB/s	  820525 B/op	     890 allocs/op
+BenchmarkCachedReaderPrefetchDir/files=512/size=16k/zstd/compressible-48         	    1354	    811547 ns/op	 646.04 MB/s	  803317 B/op	     884 allocs/op
+BenchmarkCachedReaderPrefetchDir/files=512/size=16k/zstd/compressible-48         	    1459	    801205 ns/op	 654.37 MB/s	  795356 B/op	     882 allocs/op
+BenchmarkCachedReaderPrefetchDir/files=512/size=16k/zstd/compressible-48         	    1456	    821835 ns/op	 637.95 MB/s	  813206 B/op	     888 allocs/op
+BenchmarkCachedReaderPrefetchDir/files=512/size=16k/zstd/random-48               	    1784	    656133 ns/op	 799.06 MB/s	 1165707 B/op	     783 allocs/op
+BenchmarkCachedReaderPrefetchDir/files=512/size=16k/zstd/random-48               	    1772	    655953 ns/op	 799.28 MB/s	 1166658 B/op	     783 allocs/op
+BenchmarkCachedReaderPrefetchDir/files=512/size=16k/zstd/random-48               	    1800	    644628 ns/op	 813.32 MB/s	 1166562 B/op	     783 allocs/op
+BenchmarkCachedReaderPrefetchDir/files=512/size=16k/zstd/random-48               	    1740	    640462 ns/op	 818.61 MB/s	 1167096 B/op	     783 allocs/op
+BenchmarkCachedReaderPrefetchDir/files=512/size=16k/zstd/random-48               	    1755	    649031 ns/op	 807.80 MB/s	 1166040 B/op	     783 allocs/op
+BenchmarkCachedReaderPrefetchDir/files=512/size=16k/zstd/random-48               	    1774	    628835 ns/op	 833.74 MB/s	 1165048 B/op	     782 allocs/op
+BenchmarkCachedReaderPrefetchDir/files=512/size=16k/zstd/random-48               	    1746	    645381 ns/op	 812.37 MB/s	 1167772 B/op	     783 allocs/op
+BenchmarkCachedReaderPrefetchDir/files=512/size=16k/zstd/random-48               	    1784	    663159 ns/op	 790.59 MB/s	 1166279 B/op	     783 allocs/op
+BenchmarkCachedReaderPrefetchDir/files=512/size=16k/zstd/random-48               	    1580	    644951 ns/op	 812.91 MB/s	 1167385 B/op	     783 allocs/op
+BenchmarkCachedReaderPrefetchDir/files=512/size=16k/zstd/random-48               	    1734	    647387 ns/op	 809.85 MB/s	 1168673 B/op	     784 allocs/op
+BenchmarkCachedReaderPrefetchDir/files=512/size=64k/zstd/compressible-48         	     822	   1378124 ns/op	1521.74 MB/s	 3033731 B/op	     900 allocs/op
+BenchmarkCachedReaderPrefetchDir/files=512/size=64k/zstd/compressible-48         	     805	   1361396 ns/op	1540.44 MB/s	 3023494 B/op	     900 allocs/op
+BenchmarkCachedReaderPrefetchDir/files=512/size=64k/zstd/compressible-48         	     849	   1384241 ns/op	1515.02 MB/s	 2999654 B/op	     897 allocs/op
+BenchmarkCachedReaderPrefetchDir/files=512/size=64k/zstd/compressible-48         	     804	   1370887 ns/op	1529.78 MB/s	 2973155 B/op	     895 allocs/op
+BenchmarkCachedReaderPrefetchDir/files=512/size=64k/zstd/compressible-48         	     783	   1391534 ns/op	1507.08 MB/s	 2979571 B/op	     894 allocs/op
+BenchmarkCachedReaderPrefetchDir/files=512/size=64k/zstd/compressible-48         	     822	   1390807 ns/op	1507.87 MB/s	 2979753 B/op	     896 allocs/op
+BenchmarkCachedReaderPrefetchDir/files=512/size=64k/zstd/compressible-48         	     844	   1364260 ns/op	1537.21 MB/s	 2977631 B/op	     895 allocs/op
+BenchmarkCachedReaderPrefetchDir/files=512/size=64k/zstd/compressible-48         	     838	   1381213 ns/op	1518.34 MB/s	 2975109 B/op	     894 allocs/op
+BenchmarkCachedReaderPrefetchDir/files=512/size=64k/zstd/compressible-48         	     834	   1390051 ns/op	1508.69 MB/s	 2977467 B/op	     895 allocs/op
+BenchmarkCachedReaderPrefetchDir/files=512/size=64k/zstd/compressible-48         	     808	   1422324 ns/op	1474.45 MB/s	 3024940 B/op	     900 allocs/op
+BenchmarkCachedReaderPrefetchDir/files=2048/size=16k/none/compressible-48        	     716	   1547323 ns/op	1355.34 MB/s	 2172840 B/op	     265 allocs/op
+BenchmarkCachedReaderPrefetchDir/files=2048/size=16k/none/compressible-48        	     746	   1529018 ns/op	1371.57 MB/s	 2172796 B/op	     265 allocs/op
+BenchmarkCachedReaderPrefetchDir/files=2048/size=16k/none/compressible-48        	     718	   1556389 ns/op	1347.45 MB/s	 2172805 B/op	     265 allocs/op
+BenchmarkCachedReaderPrefetchDir/files=2048/size=16k/none/compressible-48        	     750	   1530944 ns/op	1369.84 MB/s	 2172820 B/op	     265 allocs/op
+BenchmarkCachedReaderPrefetchDir/files=2048/size=16k/none/compressible-48        	     762	   1530441 ns/op	1370.29 MB/s	 2172827 B/op	     265 allocs/op
+BenchmarkCachedReaderPrefetchDir/files=2048/size=16k/none/compressible-48        	     742	   1562972 ns/op	1341.77 MB/s	 2172828 B/op	     265 allocs/op
+BenchmarkCachedReaderPrefetchDir/files=2048/size=16k/none/compressible-48        	     742	   1525811 ns/op	1374.45 MB/s	 2172826 B/op	     265 allocs/op
+BenchmarkCachedReaderPrefetchDir/files=2048/size=16k/none/compressible-48        	     751	   1558732 ns/op	1345.42 MB/s	 2172826 B/op	     265 allocs/op
+BenchmarkCachedReaderPrefetchDir/files=2048/size=16k/none/compressible-48        	     728	   1553192 ns/op	1350.22 MB/s	 2172839 B/op	     265 allocs/op
+BenchmarkCachedReaderPrefetchDir/files=2048/size=16k/none/compressible-48        	     751	   1535153 ns/op	1366.09 MB/s	 2172822 B/op	     265 allocs/op
+BenchmarkCachedReaderPrefetchDir/files=2048/size=16k/zstd/compressible-48        	     391	   2953193 ns/op	 710.13 MB/s	 3471638 B/op	    3380 allocs/op
+BenchmarkCachedReaderPrefetchDir/files=2048/size=16k/zstd/compressible-48        	     412	   2890585 ns/op	 725.51 MB/s	 3465263 B/op	    3375 allocs/op
+BenchmarkCachedReaderPrefetchDir/files=2048/size=16k/zstd/compressible-48        	     409	   2862580 ns/op	 732.61 MB/s	 3388308 B/op	    3347 allocs/op
+BenchmarkCachedReaderPrefetchDir/files=2048/size=16k/zstd/compressible-48        	     387	   2929526 ns/op	 715.87 MB/s	 3468063 B/op	    3377 allocs/op
+BenchmarkCachedReaderPrefetchDir/files=2048/size=16k/zstd/compressible-48        	     409	   2842246 ns/op	 737.85 MB/s	 3452366 B/op	    3370 allocs/op
+BenchmarkCachedReaderPrefetchDir/files=2048/size=16k/zstd/compressible-48        	     424	   2854521 ns/op	 734.68 MB/s	 3431047 B/op	    3363 allocs/op
+BenchmarkCachedReaderPrefetchDir/files=2048/size=16k/zstd/compressible-48        	     415	   2835880 ns/op	 739.51 MB/s	 3411489 B/op	    3356 allocs/op
+BenchmarkCachedReaderPrefetchDir/files=2048/size=16k/zstd/compressible-48        	     421	   2810868 ns/op	 746.09 MB/s	 3380450 B/op	    3346 allocs/op
+BenchmarkCachedReaderPrefetchDir/files=2048/size=16k/zstd/compressible-48        	     408	   2847842 ns/op	 736.40 MB/s	 3424882 B/op	    3361 allocs/op
+BenchmarkCachedReaderPrefetchDir/files=2048/size=16k/zstd/compressible-48        	     404	   2816333 ns/op	 744.64 MB/s	 3408768 B/op	    3355 allocs/op
+BenchmarkCachedReaderPrefetchDirDisk/serial/files=512/size=16k/none/compressible-48         	     265	   4406686 ns/op	 118.98 MB/s	  611285 B/op	     755 allocs/op
+BenchmarkCachedReaderPrefetchDirDisk/serial/files=512/size=16k/none/compressible-48         	     282	   4352212 ns/op	 120.46 MB/s	  611286 B/op	     755 allocs/op
+BenchmarkCachedReaderPrefetchDirDisk/serial/files=512/size=16k/none/compressible-48         	     271	   4324492 ns/op	 121.24 MB/s	  611269 B/op	     755 allocs/op
+BenchmarkCachedReaderPrefetchDirDisk/serial/files=512/size=16k/none/compressible-48         	     289	   4257151 ns/op	 123.15 MB/s	  611285 B/op	     755 allocs/op
+BenchmarkCachedReaderPrefetchDirDisk/serial/files=512/size=16k/none/compressible-48         	     274	   4171875 ns/op	 125.67 MB/s	  611284 B/op	     755 allocs/op
+BenchmarkCachedReaderPrefetchDirDisk/serial/files=512/size=16k/none/compressible-48         	     270	   4355443 ns/op	 120.38 MB/s	  611289 B/op	     755 allocs/op
+BenchmarkCachedReaderPrefetchDirDisk/serial/files=512/size=16k/none/compressible-48         	     270	   4352167 ns/op	 120.47 MB/s	  611285 B/op	     755 allocs/op
+BenchmarkCachedReaderPrefetchDirDisk/serial/files=512/size=16k/none/compressible-48         	     354	   3903344 ns/op	 134.32 MB/s	  611284 B/op	     755 allocs/op
+BenchmarkCachedReaderPrefetchDirDisk/serial/files=512/size=16k/none/compressible-48         	     283	   4252443 ns/op	 123.29 MB/s	  611284 B/op	     755 allocs/op
+BenchmarkCachedReaderPrefetchDirDisk/serial/files=512/size=16k/none/compressible-48         	     270	   4435738 ns/op	 118.20 MB/s	  611286 B/op	     755 allocs/op
+BenchmarkCachedReaderPrefetchDirDisk/serial/files=512/size=16k/zstd/compressible-48         	     132	   9129798 ns/op	  57.43 MB/s	  693349 B/op	    1565 allocs/op
+BenchmarkCachedReaderPrefetchDirDisk/serial/files=512/size=16k/zstd/compressible-48         	     129	   9202343 ns/op	  56.97 MB/s	  691509 B/op	    1564 allocs/op
+BenchmarkCachedReaderPrefetchDirDisk/serial/files=512/size=16k/zstd/compressible-48         	     129	   9172026 ns/op	  57.16 MB/s	  690514 B/op	    1565 allocs/op
+BenchmarkCachedReaderPrefetchDirDisk/serial/files=512/size=16k/zstd/compressible-48         	     129	   9228358 ns/op	  56.81 MB/s	  691051 B/op	    1565 allocs/op
+BenchmarkCachedReaderPrefetchDirDisk/serial/files=512/size=16k/zstd/compressible-48         	     128	   9281136 ns/op	  56.49 MB/s	  692378 B/op	    1565 allocs/op
+BenchmarkCachedReaderPrefetchDirDisk/serial/files=512/size=16k/zstd/compressible-48         	     130	   9147642 ns/op	  57.31 MB/s	  692279 B/op	    1565 allocs/op
+BenchmarkCachedReaderPrefetchDirDisk/serial/files=512/size=16k/zstd/compressible-48         	     129	   9168066 ns/op	  57.19 MB/s	  688554 B/op	    1564 allocs/op
+BenchmarkCachedReaderPrefetchDirDisk/serial/files=512/size=16k/zstd/compressible-48         	     132	   9100938 ns/op	  57.61 MB/s	  691360 B/op	    1565 allocs/op
+BenchmarkCachedReaderPrefetchDirDisk/serial/files=512/size=16k/zstd/compressible-48         	     129	   9177632 ns/op	  57.13 MB/s	  694323 B/op	    1565 allocs/op
+BenchmarkCachedReaderPrefetchDirDisk/serial/files=512/size=16k/zstd/compressible-48         	     129	   9218749 ns/op	  56.87 MB/s	  695126 B/op	    1565 allocs/op
+BenchmarkCachedReaderPrefetchDirDisk/serial/files=512/size=16k/zstd/random-48               	     192	   6152748 ns/op	  85.21 MB/s	 1202478 B/op	    1524 allocs/op
+BenchmarkCachedReaderPrefetchDirDisk/serial/files=512/size=16k/zstd/random-48               	     193	   6201817 ns/op	  84.54 MB/s	 1202542 B/op	    1524 allocs/op
+BenchmarkCachedReaderPrefetchDirDisk/serial/files=512/size=16k/zstd/random-48               	     192	   6131466 ns/op	  85.51 MB/s	 1202558 B/op	    1524 allocs/op
+BenchmarkCachedReaderPrefetchDirDisk/serial/files=512/size=16k/zstd/random-48               	     194	   6118269 ns/op	  85.69 MB/s	 1202886 B/op	    1524 allocs/op
+BenchmarkCachedReaderPrefetchDirDisk/serial/files=512/size=16k/zstd/random-48               	     198	   5953811 ns/op	  88.06 MB/s	 1202062 B/op	    1525 allocs/op
+BenchmarkCachedReaderPrefetchDirDisk/serial/files=512/size=16k/zstd/random-48               	     192	   6166920 ns/op	  85.02 MB/s	 1202059 B/op	    1524 allocs/op
+BenchmarkCachedReaderPrefetchDirDisk/serial/files=512/size=16k/zstd/random-48               	     198	   6016050 ns/op	  87.15 MB/s	 1202743 B/op	    1524 allocs/op
+BenchmarkCachedReaderPrefetchDirDisk/serial/files=512/size=16k/zstd/random-48               	     198	   6061201 ns/op	  86.50 MB/s	 1202784 B/op	    1524 allocs/op
+BenchmarkCachedReaderPrefetchDirDisk/serial/files=512/size=16k/zstd/random-48               	     189	   6243346 ns/op	  83.98 MB/s	 1202178 B/op	    1524 allocs/op
+BenchmarkCachedReaderPrefetchDirDisk/serial/files=512/size=16k/zstd/random-48               	     193	   6201674 ns/op	  84.54 MB/s	 1202836 B/op	    1525 allocs/op
+BenchmarkCachedReaderPrefetchDirDisk/serial/files=512/size=64k/zstd/compressible-48         	      62	  23252066 ns/op	  90.19 MB/s	 1224580 B/op	    1564 allocs/op
+BenchmarkCachedReaderPrefetchDirDisk/serial/files=512/size=64k/zstd/compressible-48         	      55	  23462288 ns/op	  89.38 MB/s	 1222922 B/op	    1564 allocs/op
+BenchmarkCachedReaderPrefetchDirDisk/serial/files=512/size=64k/zstd/compressible-48         	      56	  23023689 ns/op	  91.09 MB/s	 1211329 B/op	    1563 allocs/op
+BenchmarkCachedReaderPrefetchDirDisk/serial/files=512/size=64k/zstd/compressible-48         	      57	  23034251 ns/op	  91.04 MB/s	 1227848 B/op	    1565 allocs/op
+BenchmarkCachedReaderPrefetchDirDisk/serial/files=512/size=64k/zstd/compressible-48         	      63	  22595697 ns/op	  92.81 MB/s	 1220863 B/op	    1564 allocs/op
+BenchmarkCachedReaderPrefetchDirDisk/serial/files=512/size=64k/zstd/compressible-48         	     100	  22569376 ns/op	  92.92 MB/s	 1215385 B/op	    1563 allocs/op
+BenchmarkCachedReaderPrefetchDirDisk/serial/files=512/size=64k/zstd/compressible-48         	      60	  23166323 ns/op	  90.53 MB/s	 1221593 B/op	    1563 allocs/op
+BenchmarkCachedReaderPrefetchDirDisk/serial/files=512/size=64k/zstd/compressible-48         	      57	  22031370 ns/op	  95.19 MB/s	 1212168 B/op	    1563 allocs/op
+BenchmarkCachedReaderPrefetchDirDisk/serial/files=512/size=64k/zstd/compressible-48         	      51	  23516956 ns/op	  89.18 MB/s	 1213564 B/op	    1564 allocs/op
+BenchmarkCachedReaderPrefetchDirDisk/serial/files=512/size=64k/zstd/compressible-48         	      79	  22956566 ns/op	  91.35 MB/s	 1218408 B/op	    1563 allocs/op
+BenchmarkCachedReaderPrefetchDirDisk/serial/files=2048/size=16k/none/compressible-48        	      88	  12990642 ns/op	 161.44 MB/s	 2445763 B/op	    2967 allocs/op
+BenchmarkCachedReaderPrefetchDirDisk/serial/files=2048/size=16k/none/compressible-48        	      94	  12653541 ns/op	 165.74 MB/s	 2445759 B/op	    2967 allocs/op
+BenchmarkCachedReaderPrefetchDirDisk/serial/files=2048/size=16k/none/compressible-48        	      94	  12961561 ns/op	 161.80 MB/s	 2445764 B/op	    2967 allocs/op
+BenchmarkCachedReaderPrefetchDirDisk/serial/files=2048/size=16k/none/compressible-48        	     117	  10329071 ns/op	 203.03 MB/s	 2445762 B/op	    2967 allocs/op
+BenchmarkCachedReaderPrefetchDirDisk/serial/files=2048/size=16k/none/compressible-48        	      90	  12470605 ns/op	 168.17 MB/s	 2445766 B/op	    2967 allocs/op
+BenchmarkCachedReaderPrefetchDirDisk/serial/files=2048/size=16k/none/compressible-48        	      93	  11441038 ns/op	 183.30 MB/s	 2445764 B/op	    2967 allocs/op
+BenchmarkCachedReaderPrefetchDirDisk/serial/files=2048/size=16k/none/compressible-48        	     115	  10659605 ns/op	 196.74 MB/s	 2445763 B/op	    2967 allocs/op
+BenchmarkCachedReaderPrefetchDirDisk/serial/files=2048/size=16k/none/compressible-48        	     100	  12171111 ns/op	 172.31 MB/s	 2445764 B/op	    2967 allocs/op
+BenchmarkCachedReaderPrefetchDirDisk/serial/files=2048/size=16k/none/compressible-48        	      94	  12144274 ns/op	 172.69 MB/s	 2445761 B/op	    2967 allocs/op
+BenchmarkCachedReaderPrefetchDirDisk/serial/files=2048/size=16k/none/compressible-48        	      94	  12616251 ns/op	 166.23 MB/s	 2445765 B/op	    2967 allocs/op
+BenchmarkCachedReaderPrefetchDirDisk/serial/files=2048/size=16k/zstd/compressible-48        	      30	  37908300 ns/op	  55.32 MB/s	 2767488 B/op	    6205 allocs/op
+BenchmarkCachedReaderPrefetchDirDisk/serial/files=2048/size=16k/zstd/compressible-48        	      31	  38028453 ns/op	  55.15 MB/s	 2748630 B/op	    6201 allocs/op
+BenchmarkCachedReaderPrefetchDirDisk/serial/files=2048/size=16k/zstd/compressible-48        	      30	  38216833 ns/op	  54.88 MB/s	 2762735 B/op	    6204 allocs/op
+BenchmarkCachedReaderPrefetchDirDisk/serial/files=2048/size=16k/zstd/compressible-48        	      31	  38081481 ns/op	  55.07 MB/s	 2752961 B/op	    6202 allocs/op
+BenchmarkCachedReaderPrefetchDirDisk/serial/files=2048/size=16k/zstd/compressible-48        	      32	  38166218 ns/op	  54.95 MB/s	 2766596 B/op	    6206 allocs/op
+BenchmarkCachedReaderPrefetchDirDisk/serial/files=2048/size=16k/zstd/compressible-48        	      30	  37514408 ns/op	  55.90 MB/s	 2757589 B/op	    6201 allocs/op
+BenchmarkCachedReaderPrefetchDirDisk/serial/files=2048/size=16k/zstd/compressible-48        	      31	  37933749 ns/op	  55.28 MB/s	 2763242 B/op	    6205 allocs/op
+BenchmarkCachedReaderPrefetchDirDisk/serial/files=2048/size=16k/zstd/compressible-48        	      31	  37716325 ns/op	  55.60 MB/s	 2751541 B/op	    6200 allocs/op
+BenchmarkCachedReaderPrefetchDirDisk/serial/files=2048/size=16k/zstd/compressible-48        	      31	  38095531 ns/op	  55.05 MB/s	 2762141 B/op	    6204 allocs/op
+BenchmarkCachedReaderPrefetchDirDisk/serial/files=2048/size=16k/zstd/compressible-48        	      31	  37838368 ns/op	  55.42 MB/s	 2762384 B/op	    6204 allocs/op
+BenchmarkCachedReaderPrefetchDirDiskParallel/parallel/files=512/size=16k/none/compressible-48         	     477	   2495903 ns/op	 210.06 MB/s	  618536 B/op	     823 allocs/op
+BenchmarkCachedReaderPrefetchDirDiskParallel/parallel/files=512/size=16k/none/compressible-48         	     474	   2521855 ns/op	 207.90 MB/s	  618534 B/op	     823 allocs/op
+BenchmarkCachedReaderPrefetchDirDiskParallel/parallel/files=512/size=16k/none/compressible-48         	     468	   2393851 ns/op	 219.01 MB/s	  616305 B/op	     823 allocs/op
+BenchmarkCachedReaderPrefetchDirDiskParallel/parallel/files=512/size=16k/none/compressible-48         	     472	   2501535 ns/op	 209.59 MB/s	  618528 B/op	     823 allocs/op
+BenchmarkCachedReaderPrefetchDirDiskParallel/parallel/files=512/size=16k/none/compressible-48         	     477	   2500410 ns/op	 209.68 MB/s	  618538 B/op	     823 allocs/op
+BenchmarkCachedReaderPrefetchDirDiskParallel/parallel/files=512/size=16k/none/compressible-48         	     487	   2472686 ns/op	 212.03 MB/s	  618551 B/op	     823 allocs/op
+BenchmarkCachedReaderPrefetchDirDiskParallel/parallel/files=512/size=16k/none/compressible-48         	     471	   2518301 ns/op	 208.19 MB/s	  616304 B/op	     823 allocs/op
+BenchmarkCachedReaderPrefetchDirDiskParallel/parallel/files=512/size=16k/none/compressible-48         	     465	   2543026 ns/op	 206.17 MB/s	  618530 B/op	     823 allocs/op
+BenchmarkCachedReaderPrefetchDirDiskParallel/parallel/files=512/size=16k/none/compressible-48         	     471	   2490642 ns/op	 210.50 MB/s	  618534 B/op	     823 allocs/op
+BenchmarkCachedReaderPrefetchDirDiskParallel/parallel/files=512/size=16k/none/compressible-48         	     474	   2554384 ns/op	 205.25 MB/s	  618531 B/op	     823 allocs/op
+BenchmarkCachedReaderPrefetchDirDiskParallel/parallel/files=512/size=16k/zstd/compressible-48         	     343	   3504495 ns/op	 149.60 MB/s	 1793744 B/op	    2008 allocs/op
+BenchmarkCachedReaderPrefetchDirDiskParallel/parallel/files=512/size=16k/zstd/compressible-48         	     342	   3436239 ns/op	 152.58 MB/s	 1776055 B/op	    2004 allocs/op
+BenchmarkCachedReaderPrefetchDirDiskParallel/parallel/files=512/size=16k/zstd/compressible-48         	     346	   3482406 ns/op	 150.55 MB/s	 1797204 B/op	    2011 allocs/op
+BenchmarkCachedReaderPrefetchDirDiskParallel/parallel/files=512/size=16k/zstd/compressible-48         	     354	   3470084 ns/op	 151.09 MB/s	 1759895 B/op	    1998 allocs/op
+BenchmarkCachedReaderPrefetchDirDiskParallel/parallel/files=512/size=16k/zstd/compressible-48         	     344	   3485386 ns/op	 150.42 MB/s	 1749347 B/op	    1994 allocs/op
+BenchmarkCachedReaderPrefetchDirDiskParallel/parallel/files=512/size=16k/zstd/compressible-48         	     351	   3442003 ns/op	 152.32 MB/s	 1751730 B/op	    1997 allocs/op
+BenchmarkCachedReaderPrefetchDirDiskParallel/parallel/files=512/size=16k/zstd/compressible-48         	     342	   3503349 ns/op	 149.65 MB/s	 1754609 B/op	    1997 allocs/op
+BenchmarkCachedReaderPrefetchDirDiskParallel/parallel/files=512/size=16k/zstd/compressible-48         	     343	   3480433 ns/op	 150.64 MB/s	 1735495 B/op	    1992 allocs/op
+BenchmarkCachedReaderPrefetchDirDiskParallel/parallel/files=512/size=16k/zstd/compressible-48         	     345	   3441230 ns/op	 152.35 MB/s	 1761738 B/op	    1999 allocs/op
+BenchmarkCachedReaderPrefetchDirDiskParallel/parallel/files=512/size=16k/zstd/compressible-48         	     343	   3443404 ns/op	 152.26 MB/s	 1776716 B/op	    2004 allocs/op
+BenchmarkCachedReaderPrefetchDirDiskParallel/parallel/files=512/size=16k/zstd/random-48               	     469	   2517139 ns/op	 208.29 MB/s	 1320368 B/op	    1626 allocs/op
+BenchmarkCachedReaderPrefetchDirDiskParallel/parallel/files=512/size=16k/zstd/random-48               	     468	   2464215 ns/op	 212.76 MB/s	 1319260 B/op	    1625 allocs/op
+BenchmarkCachedReaderPrefetchDirDiskParallel/parallel/files=512/size=16k/zstd/random-48               	     501	   2429209 ns/op	 215.83 MB/s	 1317714 B/op	    1625 allocs/op
+BenchmarkCachedReaderPrefetchDirDiskParallel/parallel/files=512/size=16k/zstd/random-48               	     478	   2496192 ns/op	 210.04 MB/s	 1327148 B/op	    1627 allocs/op
+BenchmarkCachedReaderPrefetchDirDiskParallel/parallel/files=512/size=16k/zstd/random-48               	     480	   2479509 ns/op	 211.45 MB/s	 1312111 B/op	    1624 allocs/op
+BenchmarkCachedReaderPrefetchDirDiskParallel/parallel/files=512/size=16k/zstd/random-48               	     489	   2419204 ns/op	 216.72 MB/s	 1317891 B/op	    1624 allocs/op
+BenchmarkCachedReaderPrefetchDirDiskParallel/parallel/files=512/size=16k/zstd/random-48               	     480	   2468735 ns/op	 212.37 MB/s	 1314850 B/op	    1624 allocs/op
+BenchmarkCachedReaderPrefetchDirDiskParallel/parallel/files=512/size=16k/zstd/random-48               	     471	   2447019 ns/op	 214.26 MB/s	 1329077 B/op	    1627 allocs/op
+BenchmarkCachedReaderPrefetchDirDiskParallel/parallel/files=512/size=16k/zstd/random-48               	     492	   2419623 ns/op	 216.68 MB/s	 1319743 B/op	    1625 allocs/op
+BenchmarkCachedReaderPrefetchDirDiskParallel/parallel/files=512/size=16k/zstd/random-48               	     477	   2482029 ns/op	 211.23 MB/s	 1317721 B/op	    1624 allocs/op
+BenchmarkCachedReaderPrefetchDirDiskParallel/parallel/files=512/size=64k/zstd/compressible-48         	     429	   2714010 ns/op	 772.71 MB/s	 1865440 B/op	    1702 allocs/op
+BenchmarkCachedReaderPrefetchDirDiskParallel/parallel/files=512/size=64k/zstd/compressible-48         	     424	   2717788 ns/op	 771.64 MB/s	 1842308 B/op	    1700 allocs/op
+BenchmarkCachedReaderPrefetchDirDiskParallel/parallel/files=512/size=64k/zstd/compressible-48         	     440	   2677780 ns/op	 783.17 MB/s	 1874234 B/op	    1703 allocs/op
+BenchmarkCachedReaderPrefetchDirDiskParallel/parallel/files=512/size=64k/zstd/compressible-48         	     452	   2617216 ns/op	 801.29 MB/s	 1857670 B/op	    1702 allocs/op
+BenchmarkCachedReaderPrefetchDirDiskParallel/parallel/files=512/size=64k/zstd/compressible-48         	     415	   2703011 ns/op	 775.86 MB/s	 1907538 B/op	    1706 allocs/op
+BenchmarkCachedReaderPrefetchDirDiskParallel/parallel/files=512/size=64k/zstd/compressible-48         	     426	   2683934 ns/op	 781.37 MB/s	 1932192 B/op	    1709 allocs/op
+BenchmarkCachedReaderPrefetchDirDiskParallel/parallel/files=512/size=64k/zstd/compressible-48         	     444	   2636812 ns/op	 795.34 MB/s	 1841344 B/op	    1700 allocs/op
+BenchmarkCachedReaderPrefetchDirDiskParallel/parallel/files=512/size=64k/zstd/compressible-48         	     447	   2595123 ns/op	 808.11 MB/s	 1855866 B/op	    1701 allocs/op
+BenchmarkCachedReaderPrefetchDirDiskParallel/parallel/files=512/size=64k/zstd/compressible-48         	     464	   2601407 ns/op	 806.16 MB/s	 1806848 B/op	    1697 allocs/op
+BenchmarkCachedReaderPrefetchDirDiskParallel/parallel/files=512/size=64k/zstd/compressible-48         	     427	   2655842 ns/op	 789.64 MB/s	 1793917 B/op	    1696 allocs/op
+BenchmarkCachedReaderPrefetchDirDiskParallel/parallel/files=2048/size=16k/none/compressible-48        	     170	   6016186 ns/op	 348.58 MB/s	 2467070 B/op	    3067 allocs/op
+BenchmarkCachedReaderPrefetchDirDiskParallel/parallel/files=2048/size=16k/none/compressible-48        	     172	   5920412 ns/op	 354.22 MB/s	 2466673 B/op	    3067 allocs/op
+BenchmarkCachedReaderPrefetchDirDiskParallel/parallel/files=2048/size=16k/none/compressible-48        	     156	   7027296 ns/op	 298.43 MB/s	 2466229 B/op	    3067 allocs/op
+BenchmarkCachedReaderPrefetchDirDiskParallel/parallel/files=2048/size=16k/none/compressible-48        	     139	   8085792 ns/op	 259.36 MB/s	 2465728 B/op	    3067 allocs/op
+BenchmarkCachedReaderPrefetchDirDiskParallel/parallel/files=2048/size=16k/none/compressible-48        	     124	   9081881 ns/op	 230.92 MB/s	 2455425 B/op	    3067 allocs/op
+BenchmarkCachedReaderPrefetchDirDiskParallel/parallel/files=2048/size=16k/none/compressible-48        	     166	   6140378 ns/op	 341.53 MB/s	 2466545 B/op	    3067 allocs/op
+BenchmarkCachedReaderPrefetchDirDiskParallel/parallel/files=2048/size=16k/none/compressible-48        	     144	   7818615 ns/op	 268.23 MB/s	 2465775 B/op	    3067 allocs/op
+BenchmarkCachedReaderPrefetchDirDiskParallel/parallel/files=2048/size=16k/none/compressible-48        	     140	   7881247 ns/op	 266.09 MB/s	 2465622 B/op	    3067 allocs/op
+BenchmarkCachedReaderPrefetchDirDiskParallel/parallel/files=2048/size=16k/none/compressible-48        	     133	   8536818 ns/op	 245.66 MB/s	 2465335 B/op	    3067 allocs/op
+BenchmarkCachedReaderPrefetchDirDiskParallel/parallel/files=2048/size=16k/none/compressible-48        	     134	   8338830 ns/op	 251.49 MB/s	 2465372 B/op	    3067 allocs/op
+BenchmarkCachedReaderPrefetchDirDiskParallel/parallel/files=2048/size=16k/zstd/compressible-48        	     100	  11564714 ns/op	 181.34 MB/s	 6244142 B/op	    7518 allocs/op
+BenchmarkCachedReaderPrefetchDirDiskParallel/parallel/files=2048/size=16k/zstd/compressible-48        	      84	  12221371 ns/op	 171.60 MB/s	 6343360 B/op	    7558 allocs/op
+BenchmarkCachedReaderPrefetchDirDiskParallel/parallel/files=2048/size=16k/zstd/compressible-48        	      98	  12270532 ns/op	 170.91 MB/s	 6339772 B/op	    7557 allocs/op
+BenchmarkCachedReaderPrefetchDirDiskParallel/parallel/files=2048/size=16k/zstd/compressible-48        	      93	  12559186 ns/op	 166.98 MB/s	 6475057 B/op	    7609 allocs/op
+BenchmarkCachedReaderPrefetchDirDiskParallel/parallel/files=2048/size=16k/zstd/compressible-48        	      82	  12460062 ns/op	 168.31 MB/s	 6450977 B/op	    7594 allocs/op
+BenchmarkCachedReaderPrefetchDirDiskParallel/parallel/files=2048/size=16k/zstd/compressible-48        	      94	  12395713 ns/op	 169.18 MB/s	 6294940 B/op	    7541 allocs/op
+BenchmarkCachedReaderPrefetchDirDiskParallel/parallel/files=2048/size=16k/zstd/compressible-48        	      96	  12269256 ns/op	 170.93 MB/s	 6392927 B/op	    7577 allocs/op
+BenchmarkCachedReaderPrefetchDirDiskParallel/parallel/files=2048/size=16k/zstd/compressible-48        	      96	  12570897 ns/op	 166.83 MB/s	 6413242 B/op	    7583 allocs/op
+BenchmarkCachedReaderPrefetchDirDiskParallel/parallel/files=2048/size=16k/zstd/compressible-48        	      97	  12333011 ns/op	 170.04 MB/s	 6299775 B/op	    7543 allocs/op
+BenchmarkCachedReaderPrefetchDirDiskParallel/parallel/files=2048/size=16k/zstd/compressible-48        	      93	  12717875 ns/op	 164.90 MB/s	 6435542 B/op	    7587 allocs/op
+PASS
+ok  	github.com/meigma/blob/cache	350.226s
+?   	github.com/meigma/blob/cmd/profiler	[no test files]
+PASS
+ok  	github.com/meigma/blob/internal/batch	0.006s
+?   	github.com/meigma/blob/internal/blobtype	[no test files]
+?   	github.com/meigma/blob/internal/fb	[no test files]
+PASS
+ok  	github.com/meigma/blob/internal/file	0.005s
+?   	github.com/meigma/blob/internal/ioutil	[no test files]
+?   	github.com/meigma/blob/internal/pathutil	[no test files]
+?   	github.com/meigma/blob/internal/sizing	[no test files]
+?   	github.com/meigma/blob/internal/testutil	[no test files]
+?   	github.com/meigma/blob/internal/writeops	[no test files]

@@ -2,13 +2,13 @@
 set shell := ["bash", "-euo", "pipefail", "-c"]
 
 # Output directory for generated FlatBuffers code
-gen_dir := "internal/flatbuffers"
+gen_dir := "internal"
 
 # Default recipe: validate code
 default: fmt vet lint test
 
 # CI recipe: full validation pipeline
-ci: generate check-clean fmt vet lint test build
+ci: generate fmt vet lint test build
 
 # Format check (fails if code needs formatting)
 fmt:
@@ -38,13 +38,8 @@ build:
 # Generate FlatBuffers code
 generate:
     @echo "Generating FlatBuffers code..."
-    @mkdir -p {{gen_dir}}
-    flatc --go --go-namespace flatbuffers -o {{gen_dir}} schema/index.fbs
-
-# Check that generated files are up to date (for CI)
-check-clean:
-    @echo "Checking for uncommitted changes..."
-    @git diff --exit-code || (echo "Generated files are out of date. Run 'just generate' and commit."; exit 1)
+    @mkdir -p {{gen_dir}}/fb
+    flatc --go --go-namespace fb -o {{gen_dir}} schema/index.fbs
 
 # Install development tools
 tools:
@@ -65,3 +60,46 @@ clean:
 # Show available recipes
 help:
     @just --list
+
+# === Remote Benchmarking ===
+
+# Setup remote bare metal benchmark server
+bench-setup:
+    @echo "Setting up remote benchmark environment..."
+    ./scripts/remote-bench.sh setup
+
+# Run canonical benchmarks on remote server and save results locally
+bench-remote:
+    ./scripts/remote-bench.sh bench-canonical
+
+# Run arbitrary benchmarks on remote server (pass args after --)
+bench-remote-raw *ARGS:
+    ./scripts/remote-bench.sh bench {{ARGS}}
+
+# Run canonical benchmark suite on remote server and store results locally
+bench-remote-canonical:
+    ./scripts/remote-bench.sh bench-canonical
+
+# Show remote benchmark environment status
+bench-status:
+    ./scripts/remote-bench.sh status
+
+# Teardown remote benchmark environment
+bench-teardown:
+    @echo "Tearing down remote benchmark environment..."
+    ./scripts/remote-bench.sh teardown
+
+# Execute arbitrary command on remote server
+bench-exec *CMD:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    state_file=".bench/state.json"
+    if [[ ! -f "${state_file}" ]]; then
+        echo "No active setup. Run 'just bench-setup' first." >&2
+        exit 1
+    fi
+    server_ip=$(jq -r '.server_ip' "${state_file}")
+    ssh_key=$(jq -r '.ssh_key_path' "${state_file}")
+    ssh -i "${ssh_key}" -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
+        "ubuntu@${server_ip}" \
+        "cd /home/ubuntu/blob && export PATH=\$PATH:/usr/local/go/bin:\$HOME/go/bin && {{CMD}}"

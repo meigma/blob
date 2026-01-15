@@ -40,8 +40,8 @@ jobs:
 
       - name: Generate code
         run: |
-          mkdir -p internal/flatbuffers
-          flatc --go --go-namespace flatbuffers -o internal/flatbuffers schema/index.fbs
+          mkdir -p internal/fb
+          flatc --go --go-namespace fb -o internal schema/index.fbs
 
       - name: Check generated files are up to date
         run: |

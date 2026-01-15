@@ -80,13 +80,18 @@ linters:
           - revive
         text: "unexported-return"
       # Profiling harness is an internal dev tool with acceptable complexity/security tradeoffs
-      - path: 'cmd/profile/'
+      - path: 'cmd/profiler/'
         linters:
           - gocognit
           - gocyclo
           - gosec
           - gocritic
           - govet
+      # Batch package has deliberate shadowing for error handling in performance-critical code
+      - path: 'internal/batch/'
+        linters:
+          - govet
+        text: "shadow"
 
   # Linter-specific settings
   settings:

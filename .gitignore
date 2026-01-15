@@ -1,2 +1,9 @@
-.claude
+.bench/
+.claude/
+.env
+bench/
+research/
 CLAUDE.md
+blob.test
+cpu.prof
+mem.prof
