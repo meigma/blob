@@ -83,12 +83,15 @@ func EntryViewFromFlatBuffers(entry fb.Entry) EntryView {
 
 // EntryFromViewWithPath creates an Entry from an EntryView with the given path.
 func EntryFromViewWithPath(ev EntryView, path string) Entry {
+	hashBytes := ev.HashBytes()
+	hash := make([]byte, len(hashBytes))
+	copy(hash, hashBytes)
 	return Entry{
 		Path:         path,
 		DataOffset:   ev.DataOffset(),
 		DataSize:     ev.DataSize(),
 		OriginalSize: ev.OriginalSize(),
-		Hash:         ev.HashBytes(),
+		Hash:         hash,
 		Mode:         ev.Mode(),
 		UID:          ev.UID(),
 		GID:          ev.GID(),

@@ -19,6 +19,26 @@ func WithMaxDecoderMemory(limit uint64) Option {
 	}
 }
 
+// WithDecoderConcurrency sets the zstd decoder concurrency (default: 1).
+// Values < 0 are treated as 0 (use GOMAXPROCS).
+func WithDecoderConcurrency(n int) Option {
+	return func(b *Blob) {
+		if n < 0 {
+			n = 0
+		}
+		b.decoderConcurrency = n
+		b.decoderConcurrencySet = true
+	}
+}
+
+// WithDecoderLowmem sets whether the zstd decoder should use low-memory mode (default: false).
+func WithDecoderLowmem(enabled bool) Option {
+	return func(b *Blob) {
+		b.decoderLowmem = enabled
+		b.decoderLowmemSet = true
+	}
+}
+
 // WithVerifyOnClose controls whether Close drains the file to verify the hash.
 //
 // When false, Close returns without reading the remaining data. Integrity is
@@ -37,6 +57,7 @@ type copyConfig struct {
 	preserveMode  bool
 	preserveTimes bool
 	workers       int
+	cleanDest     bool
 }
 
 // CopyWithOverwrite allows overwriting existing files.
@@ -60,6 +81,14 @@ func CopyWithPreserveMode(preserve bool) CopyOption {
 func CopyWithPreserveTimes(preserve bool) CopyOption {
 	return func(c *copyConfig) {
 		c.preserveTimes = preserve
+	}
+}
+
+// CopyWithCleanDest clears the destination prefix before copying and writes
+// directly to the final path (no temp files). This is only supported by CopyDir.
+func CopyWithCleanDest(enabled bool) CopyOption {
+	return func(c *copyConfig) {
+		c.cleanDest = enabled
 	}
 }
 

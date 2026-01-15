@@ -12,9 +12,12 @@ package blob
 
 import (
 	"errors"
+	"fmt"
 	"io"
 	"io/fs"
 	"iter"
+	"os"
+	"path/filepath"
 
 	"github.com/meigma/blob/internal/batch"
 	"github.com/meigma/blob/internal/blobtype"
@@ -85,12 +88,16 @@ type ByteSource interface {
 // Blob implements fs.FS, fs.StatFS, fs.ReadFileFS, and fs.ReadDirFS
 // for compatibility with the standard library.
 type Blob struct {
-	idx              *index.Index
-	indexData        []byte
-	reader           *file.Reader
-	maxFileSize      uint64
-	maxDecoderMemory uint64
-	verifyOnClose    bool
+	idx                   *index.Index
+	indexData             []byte
+	reader                *file.Reader
+	maxFileSize           uint64
+	maxDecoderMemory      uint64
+	decoderConcurrencySet bool
+	decoderConcurrency    int
+	decoderLowmemSet      bool
+	decoderLowmem         bool
+	verifyOnClose         bool
 }
 
 // New creates a Blob for accessing files in the archive.
@@ -113,11 +120,17 @@ func New(indexData []byte, source ByteSource, opts ...Option) (*Blob, error) {
 	for _, opt := range opts {
 		opt(b)
 	}
-	b.reader = file.NewReader(
-		source,
+	readerOpts := []file.Option{
 		file.WithMaxFileSize(b.maxFileSize),
 		file.WithMaxDecoderMemory(b.maxDecoderMemory),
-	)
+	}
+	if b.decoderConcurrencySet {
+		readerOpts = append(readerOpts, file.WithDecoderConcurrency(b.decoderConcurrency))
+	}
+	if b.decoderLowmemSet {
+		readerOpts = append(readerOpts, file.WithDecoderLowmem(b.decoderLowmem))
+	}
+	b.reader = file.NewReader(source, readerOpts...)
 	return b, nil
 }
 
@@ -267,7 +280,6 @@ func (b *Blob) Len() int {
 
 // CopyTo extracts specific files to a destination directory.
 //
-// Files are written atomically using temp files and renames.
 // Parent directories are created as needed.
 //
 // By default:
@@ -292,6 +304,9 @@ func (b *Blob) CopyToWithOptions(destDir string, paths []string, opts ...CopyOpt
 	for _, opt := range opts {
 		opt(&cfg)
 	}
+	if cfg.cleanDest {
+		return errors.New("CopyWithCleanDest is only supported by CopyDir")
+	}
 	return b.copyEntries(destDir, b.collectPathEntries(paths), &cfg)
 }
 
@@ -299,7 +314,10 @@ func (b *Blob) CopyToWithOptions(destDir string, paths []string, opts ...CopyOpt
 //
 // If prefix is "" or ".", all files in the archive are extracted.
 //
-// Files are written atomically using temp files and renames.
+// Files are written atomically using temp files and renames by default.
+// CopyWithCleanDest clears the destination prefix and writes directly
+// to the final path. This is more performant but less safe.
+//
 // Parent directories are created as needed.
 //
 // By default:
@@ -309,6 +327,16 @@ func (b *Blob) CopyDir(destDir, prefix string, opts ...CopyOption) error {
 	cfg := copyConfig{}
 	for _, opt := range opts {
 		opt(&cfg)
+	}
+	if cfg.cleanDest {
+		target, err := cleanCopyDest(destDir, prefix)
+		if err != nil {
+			return err
+		}
+		if err := os.RemoveAll(target); err != nil {
+			return fmt.Errorf("clean destination %s: %w", target, err)
+		}
+		cfg.overwrite = true
 	}
 	return b.copyEntries(destDir, b.collectPrefixEntries(prefix), &cfg)
 }
@@ -363,6 +391,9 @@ func (b *Blob) copyEntries(destDir string, entries []*batch.Entry, cfg *copyConf
 		batch.WithPreserveMode(cfg.preserveMode),
 		batch.WithPreserveTimes(cfg.preserveTimes),
 	}
+	if cfg.cleanDest {
+		sinkOpts = append(sinkOpts, batch.WithDirectWrites(true))
+	}
 	sink := batch.NewFileSink(destDir, sinkOpts...)
 
 	// Create processor with options
@@ -373,6 +404,33 @@ func (b *Blob) copyEntries(destDir string, entries []*batch.Entry, cfg *copyConf
 	proc := batch.NewProcessor(b.reader.Source(), b.reader.Pool(), b.maxFileSize, procOpts...)
 
 	return proc.Process(entries, sink)
+}
+
+func cleanCopyDest(destDir, prefix string) (string, error) {
+	if destDir == "" {
+		return "", errors.New("clean destination: destDir is empty")
+	}
+	if prefix != "" && prefix != "." && !fs.ValidPath(prefix) {
+		return "", fmt.Errorf("clean destination: invalid prefix %q", prefix)
+	}
+
+	target := destDir
+	if prefix != "" && prefix != "." {
+		target = filepath.Join(destDir, filepath.FromSlash(prefix))
+	}
+	target = filepath.Clean(target)
+	if target == "" || target == "." || target == string(filepath.Separator) {
+		return "", fmt.Errorf("clean destination: refusing to remove %q", target)
+	}
+
+	volume := filepath.VolumeName(target)
+	if volume != "" {
+		if target == volume || target == volume+string(filepath.Separator) {
+			return "", fmt.Errorf("clean destination: refusing to remove %q", target)
+		}
+	}
+
+	return target, nil
 }
 
 // openDir implements fs.File and fs.ReadDirFile for directories.

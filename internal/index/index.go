@@ -3,6 +3,7 @@ package index
 import (
 	"bytes"
 	"errors"
+	"fmt"
 	"iter"
 	"sort"
 
@@ -25,7 +26,13 @@ type Index struct {
 //
 // The provided data is retained by the index; callers must not modify it
 // after calling Load.
-func Load(data []byte) (*Index, error) {
+func Load(data []byte) (idx *Index, err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			idx = nil
+			err = fmt.Errorf("blob: failed to parse index: %v", r)
+		}
+	}()
 	if len(data) == 0 {
 		return nil, errors.New("blob: empty index data")
 	}

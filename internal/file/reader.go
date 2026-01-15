@@ -25,10 +25,14 @@ type ByteSource interface {
 
 // Reader reads and verifies file content from a ByteSource.
 type Reader struct {
-	source           ByteSource
-	maxFileSize      uint64
-	maxDecoderMemory uint64
-	pool             *DecompressPool
+	source                ByteSource
+	maxFileSize           uint64
+	maxDecoderMemory      uint64
+	decoderConcurrencySet bool
+	decoderConcurrency    int
+	decoderLowmemSet      bool
+	decoderLowmem         bool
+	pool                  *DecompressPool
 }
 
 // Option configures a Reader.
@@ -50,6 +54,26 @@ func WithMaxDecoderMemory(limit uint64) Option {
 	}
 }
 
+// WithDecoderConcurrency sets the zstd decoder concurrency (default: 1).
+// Values < 0 are treated as 0 (use GOMAXPROCS).
+func WithDecoderConcurrency(n int) Option {
+	return func(r *Reader) {
+		if n < 0 {
+			n = 0
+		}
+		r.decoderConcurrency = n
+		r.decoderConcurrencySet = true
+	}
+}
+
+// WithDecoderLowmem sets whether the zstd decoder should use low-memory mode (default: false).
+func WithDecoderLowmem(enabled bool) Option {
+	return func(r *Reader) {
+		r.decoderLowmem = enabled
+		r.decoderLowmemSet = true
+	}
+}
+
 // NewReader creates a Reader for reading files from the given source.
 func NewReader(source ByteSource, opts ...Option) *Reader {
 	r := &Reader{
@@ -60,7 +84,14 @@ func NewReader(source ByteSource, opts ...Option) *Reader {
 	for _, opt := range opts {
 		opt(r)
 	}
-	r.pool = NewDecompressPool(r.maxDecoderMemory)
+	poolOpts := make([]decompressOption, 0, 2)
+	if r.decoderConcurrencySet {
+		poolOpts = append(poolOpts, withDecoderConcurrency(r.decoderConcurrency))
+	}
+	if r.decoderLowmemSet {
+		poolOpts = append(poolOpts, withDecoderLowmem(r.decoderLowmem))
+	}
+	r.pool = NewDecompressPool(r.maxDecoderMemory, poolOpts...)
 	return r
 }
 

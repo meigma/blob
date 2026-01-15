@@ -6,16 +6,17 @@ import (
 	"path/filepath"
 )
 
-// FileSink writes entries to the filesystem with atomic writes.
+// FileSink writes entries to the filesystem.
 //
-// Files are written to a temporary file in the same directory,
-// then renamed to the final path on Commit. This ensures that
-// partially written files are never visible at the final path.
+// By default, files are written to a temporary file in the same directory
+// and renamed to the final path on Commit. This ensures that partially
+// written files are never visible at the final path.
 type FileSink struct {
 	destDir       string
 	overwrite     bool
 	preserveMode  bool
 	preserveTimes bool
+	directWrite   bool
 }
 
 // FileSinkOption configures a FileSink.
@@ -42,6 +43,13 @@ func WithPreserveMode(preserve bool) FileSinkOption {
 func WithPreserveTimes(preserve bool) FileSinkOption {
 	return func(s *FileSink) {
 		s.preserveTimes = preserve
+	}
+}
+
+// WithDirectWrites disables temp files and writes directly to the final path.
+func WithDirectWrites(enabled bool) FileSinkOption {
+	return func(s *FileSink) {
+		s.directWrite = enabled
 	}
 }
 
@@ -77,6 +85,19 @@ func (s *FileSink) Writer(entry *Entry) (Committer, error) {
 	dir := filepath.Dir(destPath)
 	if err := os.MkdirAll(dir, 0o750); err != nil {
 		return nil, fmt.Errorf("create directory %s: %w", dir, err)
+	}
+
+	if s.directWrite {
+		file, err := os.OpenFile(destPath, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0o600)
+		if err != nil {
+			return nil, fmt.Errorf("create file %s: %w", destPath, err)
+		}
+		return &directCommitter{
+			entry:    entry,
+			destPath: destPath,
+			file:     file,
+			sink:     s,
+		}, nil
 	}
 
 	// Create temp file in same directory (for atomic rename)
@@ -146,4 +167,47 @@ func (c *fileCommitter) Discard() error {
 	tempPath := c.tempFile.Name()
 	_ = c.tempFile.Close() //nolint:errcheck // we're cleaning up
 	return os.Remove(tempPath)
+}
+
+// directCommitter writes directly to the final path.
+type directCommitter struct {
+	entry    *Entry
+	destPath string
+	file     *os.File
+	sink     *FileSink
+}
+
+// Write implements io.Writer.
+func (c *directCommitter) Write(p []byte) (int, error) {
+	return c.file.Write(p)
+}
+
+// Commit closes the file and applies metadata.
+func (c *directCommitter) Commit() error {
+	if err := c.file.Close(); err != nil {
+		_ = os.Remove(c.destPath) //nolint:errcheck // best-effort cleanup
+		return fmt.Errorf("close file: %w", err)
+	}
+
+	if c.sink.preserveMode {
+		if err := os.Chmod(c.destPath, c.entry.Mode.Perm()); err != nil {
+			_ = os.Remove(c.destPath) //nolint:errcheck // best-effort cleanup
+			return fmt.Errorf("chmod: %w", err)
+		}
+	}
+
+	if c.sink.preserveTimes {
+		if err := os.Chtimes(c.destPath, c.entry.ModTime, c.entry.ModTime); err != nil {
+			_ = os.Remove(c.destPath) //nolint:errcheck // best-effort cleanup
+			return fmt.Errorf("chtimes: %w", err)
+		}
+	}
+
+	return nil
+}
+
+// Discard closes and removes the file.
+func (c *directCommitter) Discard() error {
+	_ = c.file.Close() //nolint:errcheck // best-effort cleanup
+	return os.Remove(c.destPath)
 }

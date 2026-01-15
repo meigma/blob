@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"io/fs"
 	"math/rand"
 	"os"
 	"path/filepath"
@@ -19,6 +20,11 @@ var (
 	benchSinkBytes []byte
 	benchSinkEntry Entry
 	benchSinkInt   int
+	benchSinkFile  fs.File
+	benchSinkErr   error
+	benchSinkInfo  fs.FileInfo
+	benchSinkDirs  []fs.DirEntry
+	benchSinkView  EntryView
 )
 
 type benchPattern string
@@ -269,12 +275,297 @@ func BenchmarkBlobReadFile(b *testing.B) {
 	}
 }
 
-func BenchmarkBlobCopyDir(b *testing.B) {
-	benchmarkBlobCopyDir(b, "serial", -1)
-	benchmarkBlobCopyDir(b, "parallel", runtime.GOMAXPROCS(0))
+func BenchmarkBlobReadFileDecoderOptions(b *testing.B) {
+	configs := []struct {
+		name string
+		opts []Option
+	}{
+		{name: "default"},
+		{name: "lowmem=false", opts: []Option{WithDecoderLowmem(false)}},
+		{name: "concurrency=1", opts: []Option{WithDecoderConcurrency(1)}},
+		{name: "concurrency=1/lowmem=false", opts: []Option{WithDecoderConcurrency(1), WithDecoderLowmem(false)}},
+		{name: "concurrency=0", opts: []Option{WithDecoderConcurrency(0)}},
+	}
+
+	const fileCount = 64
+	sizes := []int{
+		64 << 10,
+		1 << 20,
+	}
+
+	for _, size := range sizes {
+		sizeName := fmt.Sprintf("size=%dk", size>>10)
+		if size == 1<<20 {
+			sizeName = "size=1m"
+		}
+		for _, cfg := range configs {
+			b.Run(fmt.Sprintf("%s/%s", sizeName, cfg.name), func(b *testing.B) {
+				dir := b.TempDir()
+				paths := makeBenchFiles(b, dir, fileCount, size, benchPatternCompressible)
+				blob := createBenchBlob(b, dir, CompressionZstd, cfg.opts...)
+
+				b.SetBytes(int64(size))
+				b.ReportAllocs()
+				b.ResetTimer()
+				for i := 0; b.Loop(); i++ {
+					path := paths[i%len(paths)]
+					content, err := blob.ReadFile(path)
+					if err != nil {
+						b.Fatal(err)
+					}
+					benchSinkBytes = content
+				}
+			})
+		}
+	}
 }
 
-func benchmarkBlobCopyDir(b *testing.B, label string, workers int) {
+func BenchmarkBlobOpen(b *testing.B) {
+	cases := []struct {
+		name      string
+		fileCount int
+	}{
+		{name: "files=64", fileCount: 64},
+		{name: "files=1024", fileCount: 1024},
+	}
+
+	const fileSize = 4 << 10
+
+	for _, bc := range cases {
+		b.Run(bc.name, func(b *testing.B) {
+			dir := b.TempDir()
+			paths := makeBenchFiles(b, dir, bc.fileCount, fileSize, benchPatternCompressible)
+			blob := createBenchBlob(b, dir, CompressionZstd)
+			missingPath := "missing/file.txt"
+			dirPath := "dir00"
+
+			b.Run("file", func(b *testing.B) {
+				b.ReportAllocs()
+				b.ResetTimer()
+				for i := 0; b.Loop(); i++ {
+					path := paths[i%len(paths)]
+					f, err := blob.Open(path)
+					if err != nil {
+						b.Fatal(err)
+					}
+					benchSinkFile = f
+				}
+			})
+
+			b.Run("dir", func(b *testing.B) {
+				b.ReportAllocs()
+				b.ResetTimer()
+				for b.Loop() {
+					f, err := blob.Open(dirPath)
+					if err != nil {
+						b.Fatal(err)
+					}
+					benchSinkFile = f
+				}
+			})
+
+			b.Run("missing", func(b *testing.B) {
+				b.ReportAllocs()
+				b.ResetTimer()
+				for b.Loop() {
+					f, err := blob.Open(missingPath)
+					if err == nil {
+						b.Fatal("expected error")
+					}
+					benchSinkFile = f
+					benchSinkErr = err
+				}
+			})
+		})
+	}
+}
+
+func BenchmarkBlobStat(b *testing.B) {
+	cases := []struct {
+		name      string
+		fileCount int
+	}{
+		{name: "files=64", fileCount: 64},
+		{name: "files=1024", fileCount: 1024},
+	}
+
+	const fileSize = 4 << 10
+
+	for _, bc := range cases {
+		b.Run(bc.name, func(b *testing.B) {
+			dir := b.TempDir()
+			paths := makeBenchFiles(b, dir, bc.fileCount, fileSize, benchPatternCompressible)
+			blob := createBenchBlob(b, dir, CompressionZstd)
+			missingPath := "missing/file.txt"
+			dirPath := "dir00"
+
+			b.Run("file", func(b *testing.B) {
+				b.ReportAllocs()
+				b.ResetTimer()
+				for i := 0; b.Loop(); i++ {
+					path := paths[i%len(paths)]
+					info, err := blob.Stat(path)
+					if err != nil {
+						b.Fatal(err)
+					}
+					benchSinkInfo = info
+				}
+			})
+
+			b.Run("dir", func(b *testing.B) {
+				b.ReportAllocs()
+				b.ResetTimer()
+				for b.Loop() {
+					info, err := blob.Stat(dirPath)
+					if err != nil {
+						b.Fatal(err)
+					}
+					benchSinkInfo = info
+				}
+			})
+
+			b.Run("missing", func(b *testing.B) {
+				b.ReportAllocs()
+				b.ResetTimer()
+				for b.Loop() {
+					info, err := blob.Stat(missingPath)
+					if err == nil {
+						b.Fatal("expected error")
+					}
+					benchSinkInfo = info
+					benchSinkErr = err
+				}
+			})
+		})
+	}
+}
+
+func BenchmarkBlobReadDir(b *testing.B) {
+	cases := []struct {
+		name      string
+		fileCount int
+	}{
+		{name: "files=64", fileCount: 64},
+		{name: "files=1024", fileCount: 1024},
+	}
+
+	const fileSize = 4 << 10
+
+	for _, bc := range cases {
+		b.Run(bc.name, func(b *testing.B) {
+			dir := b.TempDir()
+			makeBenchFiles(b, dir, bc.fileCount, fileSize, benchPatternCompressible)
+			blob := createBenchBlob(b, dir, CompressionNone)
+
+			dirPath := "dir00"
+			rootPath := "."
+			missingPath := "missing"
+
+			dirEntries := countBenchDirEntries(bc.fileCount, benchDirCount)
+			rootEntries := bc.fileCount
+			if rootEntries > benchDirCount {
+				rootEntries = benchDirCount
+			}
+
+			b.Run("dir", func(b *testing.B) {
+				b.ReportAllocs()
+				b.ResetTimer()
+				for b.Loop() {
+					entries, err := blob.ReadDir(dirPath)
+					if err != nil {
+						b.Fatal(err)
+					}
+					if len(entries) != dirEntries {
+						b.Fatalf("unexpected entry count: %d", len(entries))
+					}
+					benchSinkDirs = entries
+				}
+			})
+
+			b.Run("root", func(b *testing.B) {
+				b.ReportAllocs()
+				b.ResetTimer()
+				for b.Loop() {
+					entries, err := blob.ReadDir(rootPath)
+					if err != nil {
+						b.Fatal(err)
+					}
+					if len(entries) != rootEntries {
+						b.Fatalf("unexpected entry count: %d", len(entries))
+					}
+					benchSinkDirs = entries
+				}
+			})
+
+			b.Run("missing", func(b *testing.B) {
+				b.ReportAllocs()
+				b.ResetTimer()
+				for b.Loop() {
+					entries, err := blob.ReadDir(missingPath)
+					if err == nil {
+						b.Fatal("expected error")
+					}
+					benchSinkDirs = entries
+					benchSinkErr = err
+				}
+			})
+		})
+	}
+}
+
+func BenchmarkBlobEntry(b *testing.B) {
+	cases := []struct {
+		name      string
+		fileCount int
+	}{
+		{name: "files=64", fileCount: 64},
+		{name: "files=1024", fileCount: 1024},
+	}
+
+	const fileSize = 4 << 10
+
+	for _, bc := range cases {
+		b.Run(bc.name, func(b *testing.B) {
+			dir := b.TempDir()
+			paths := makeBenchFiles(b, dir, bc.fileCount, fileSize, benchPatternCompressible)
+			blob := createBenchBlob(b, dir, CompressionNone)
+			missingPath := "missing/file.txt"
+
+			b.Run("hit", func(b *testing.B) {
+				b.ReportAllocs()
+				b.ResetTimer()
+				for i := 0; b.Loop(); i++ {
+					path := paths[i%len(paths)]
+					view, ok := blob.Entry(path)
+					if !ok {
+						b.Fatalf("missing entry for %q", path)
+					}
+					benchSinkView = view
+				}
+			})
+
+			b.Run("miss", func(b *testing.B) {
+				b.ReportAllocs()
+				b.ResetTimer()
+				for b.Loop() {
+					view, ok := blob.Entry(missingPath)
+					if ok {
+						b.Fatal("expected miss")
+					}
+					benchSinkView = view
+				}
+			})
+		})
+	}
+}
+
+func BenchmarkBlobCopyDir(b *testing.B) {
+	benchmarkBlobCopyDir(b, "serial", -1, false)
+	benchmarkBlobCopyDir(b, "serial-clean", -1, true)
+	benchmarkBlobCopyDir(b, "parallel", runtime.GOMAXPROCS(0), false)
+}
+
+func benchmarkBlobCopyDir(b *testing.B, label string, workers int, cleanDest bool) {
 	b.Helper()
 
 	cases := []struct {
@@ -342,11 +633,6 @@ func benchmarkBlobCopyDir(b *testing.B, label string, workers int) {
 				b.SetBytes(totalBytes)
 			}
 
-			opts := []CopyOption{}
-			if workers != 0 {
-				opts = append(opts, CopyWithWorkers(workers))
-			}
-
 			destRoot := b.TempDir()
 
 			b.ReportAllocs()
@@ -358,6 +644,14 @@ func benchmarkBlobCopyDir(b *testing.B, label string, workers int) {
 					b.Fatal(err)
 				}
 				b.StartTimer()
+
+				opts := []CopyOption{}
+				if workers != 0 {
+					opts = append(opts, CopyWithWorkers(workers))
+				}
+				if cleanDest {
+					opts = append(opts, CopyWithCleanDest(true))
+				}
 
 				if err := blob.CopyDir(destDir, prefix, opts...); err != nil {
 					b.Fatal(err)
@@ -437,19 +731,19 @@ func createBenchIndex(b *testing.B, dir string) *index.Index {
 }
 
 // createBenchBlob creates a test archive and returns a Blob for benchmarking.
-func createBenchBlob(b *testing.B, dir string, compression Compression) *Blob {
+func createBenchBlob(b *testing.B, dir string, compression Compression, blobOpts ...Option) *Blob {
 	b.Helper()
 
 	var indexBuf, dataBuf bytes.Buffer
-	var opts []CreateOption
+	var createOpts []CreateOption
 	if compression != CompressionNone {
-		opts = append(opts, CreateWithCompression(compression))
+		createOpts = append(createOpts, CreateWithCompression(compression))
 	}
-	if err := Create(context.Background(), dir, &indexBuf, &dataBuf, opts...); err != nil {
+	if err := Create(context.Background(), dir, &indexBuf, &dataBuf, createOpts...); err != nil {
 		b.Fatal(err)
 	}
 
-	blob, err := New(indexBuf.Bytes(), testutil.NewMockByteSource(dataBuf.Bytes()))
+	blob, err := New(indexBuf.Bytes(), testutil.NewMockByteSource(dataBuf.Bytes()), blobOpts...)
 	if err != nil {
 		b.Fatal(err)
 	}
