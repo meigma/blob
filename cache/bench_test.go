@@ -451,6 +451,7 @@ func benchmarkBlobPrefetchDirHTTPDisk(b *testing.B) {
 	}
 }
 
+//nolint:unparam // dirCount kept as parameter for test flexibility
 func makeBenchFiles(b *testing.B, dir string, fileCount, fileSize, dirCount int, pattern benchPattern) []string {
 	b.Helper()
 
@@ -513,7 +514,7 @@ func createBenchBlob(b *testing.B, dir string, compression blob.Compression) *bl
 
 var _ cache.StreamingCache = (*disk.Cache)(nil)
 
-func createBenchArchive(b *testing.B, dir string, compression blob.Compression) ([]byte, []byte) {
+func createBenchArchive(b *testing.B, dir string, compression blob.Compression) (indexData, dataData []byte) {
 	b.Helper()
 
 	var indexBuf, dataBuf bytes.Buffer
@@ -531,7 +532,7 @@ func benchHTTPEnabled() bool {
 	return os.Getenv("BLOB_BENCH_HTTP") != ""
 }
 
-func newBenchHTTPSource(b *testing.B, data []byte) (blob.ByteSource, func()) {
+func newBenchHTTPSource(b *testing.B, data []byte) (source blob.ByteSource, cleanup func()) {
 	b.Helper()
 
 	cfg, err := benchHTTPConfigFromEnv()

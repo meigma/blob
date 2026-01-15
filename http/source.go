@@ -1,8 +1,9 @@
 // Package http provides a ByteSource backed by HTTP range requests.
-package http
+package http //nolint:revive // intentional naming for domain clarity
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -161,7 +162,7 @@ func (s *Source) ReadAt(p []byte, off int64) (int, error) {
 		return 0, err
 	}
 	defer func() {
-		_, _ = io.Copy(io.Discard, resp.Body)
+		_, _ = io.Copy(io.Discard, resp.Body) //nolint:errcheck // best-effort drain for connection reuse
 		_ = resp.Body.Close()
 	}()
 
@@ -186,12 +187,10 @@ func (s *Source) ReadAt(p []byte, off int64) (int, error) {
 	return n, nil
 }
 
-func (s *Source) fetchMetadata() (int64, string, string, error) {
-	size := int64(-1)
-	etag := ""
-	lastModified := ""
+func (s *Source) fetchMetadata() (size int64, etag, lastModified string, err error) {
+	size = -1
 
-	if resp, err := s.doHead(); err == nil {
+	if resp, headErr := s.doHead(); headErr == nil {
 		size = resp.ContentLength
 		etag = resp.Header.Get("ETag")
 		lastModified = resp.Header.Get("Last-Modified")
@@ -214,7 +213,7 @@ func (s *Source) fetchMetadata() (int64, string, string, error) {
 	return rangeSize, etag, lastModified, nil
 }
 
-func (s *Source) rangeProbe() (int64, string, string, error) {
+func (s *Source) rangeProbe() (size int64, etag, lastModified string, err error) {
 	req, err := s.newRequest(nethttp.MethodGet)
 	if err != nil {
 		return 0, "", "", err
@@ -226,7 +225,7 @@ func (s *Source) rangeProbe() (int64, string, string, error) {
 		return 0, "", "", err
 	}
 	defer func() {
-		_, _ = io.Copy(io.Discard, resp.Body)
+		_, _ = io.Copy(io.Discard, resp.Body) //nolint:errcheck // best-effort drain for connection reuse
 		_ = resp.Body.Close()
 	}()
 
@@ -241,7 +240,7 @@ func (s *Source) rangeProbe() (int64, string, string, error) {
 	if crange == "" {
 		return 0, "", "", errors.New("range probe missing Content-Range")
 	}
-	size, err := parseContentRange(crange)
+	size, err = parseContentRange(crange)
 	if err != nil {
 		return 0, "", "", err
 	}
@@ -258,7 +257,7 @@ func (s *Source) doHead() (*nethttp.Response, error) {
 }
 
 func (s *Source) newRequest(method string) (*nethttp.Request, error) {
-	req, err := nethttp.NewRequest(method, s.url, nil)
+	req, err := nethttp.NewRequestWithContext(context.Background(), method, s.url, nethttp.NoBody)
 	if err != nil {
 		return nil, err
 	}
@@ -291,7 +290,7 @@ func (r *rangeReadCloser) Read(p []byte) (int, error) {
 }
 
 func (r *rangeReadCloser) Close() error {
-	_, _ = io.Copy(io.Discard, r.body)
+	_, _ = io.Copy(io.Discard, r.body) //nolint:errcheck // best-effort drain for connection reuse
 	return r.body.Close()
 }
 

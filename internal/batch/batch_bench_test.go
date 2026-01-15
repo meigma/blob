@@ -110,7 +110,7 @@ func BenchmarkProcessorPipelined(b *testing.B) {
 	}
 }
 
-func buildBenchBatchData(b *testing.B, bc benchBatchCase) ([]*Entry, []byte, *file.DecompressPool, int64) {
+func buildBenchBatchData(b *testing.B, bc benchBatchCase) (entries []*Entry, data []byte, pool *file.DecompressPool, totalBytes int64) {
 	b.Helper()
 
 	groupSize := bc.groupSize
@@ -118,10 +118,9 @@ func buildBenchBatchData(b *testing.B, bc benchBatchCase) ([]*Entry, []byte, *fi
 		groupSize = bc.fileCount
 	}
 
-	entries := make([]*Entry, 0, bc.fileCount)
-	data := make([]byte, 0, bc.fileCount*bc.fileSize)
+	entries = make([]*Entry, 0, bc.fileCount)
+	data = make([]byte, 0, bc.fileCount*bc.fileSize)
 	var offset uint64
-	var totalBytes int64
 
 	var enc *zstd.Encoder
 	if bc.compression == CompressionZstd {
@@ -133,7 +132,7 @@ func buildBenchBatchData(b *testing.B, bc benchBatchCase) ([]*Entry, []byte, *fi
 		defer enc.Close()
 	}
 
-	for i := 0; i < bc.fileCount; i++ {
+	for i := range bc.fileCount {
 		content := bytes.Repeat([]byte{byte('a' + (i % 26))}, bc.fileSize)
 		sum := sha256.Sum256(content)
 		entryData := content
@@ -161,7 +160,6 @@ func buildBenchBatchData(b *testing.B, bc benchBatchCase) ([]*Entry, []byte, *fi
 		}
 	}
 
-	var pool *file.DecompressPool
 	if bc.compression == CompressionZstd {
 		pool = file.NewDecompressPool(file.DefaultMaxDecoderMemory)
 	}
@@ -212,7 +210,7 @@ func benchBatchSources() []benchBatchSource {
 	}
 	sources = append(sources, benchBatchSource{
 		name: "source=http",
-		new: func(b *testing.B, data []byte) (file.ByteSource, func(), error) {
+		new: func(b *testing.B, data []byte) (file.ByteSource, func(), error) { //nolint:thelper // not a test helper, factory function
 			cfg, err := benchBatchHTTPConfigFromEnv()
 			if err != nil {
 				return nil, nil, err

@@ -88,7 +88,7 @@ func (s *FileSink) Writer(entry *Entry) (Committer, error) {
 	}
 
 	if s.directWrite {
-		file, err := os.OpenFile(destPath, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0o600)
+		file, err := os.OpenFile(destPath, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0o600) //nolint:gosec // destPath is derived from sink's destDir and entry path
 		if err != nil {
 			return nil, fmt.Errorf("create file %s: %w", destPath, err)
 		}

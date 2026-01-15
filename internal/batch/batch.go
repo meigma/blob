@@ -172,6 +172,7 @@ func (p *Processor) processGroupsSequential(groups []rangeGroup, sink Sink) erro
 	return nil
 }
 
+//nolint:gocognit,gocyclo // complex pipeline logic requires coordination between producers/consumers
 func (p *Processor) processGroupsPipelined(groups []rangeGroup, sink Sink) error {
 	if len(groups) == 0 {
 		return nil
@@ -198,7 +199,7 @@ func (p *Processor) processGroupsPipelined(groups []rangeGroup, sink Sink) error
 	var readWg sync.WaitGroup
 	readWg.Add(readWorkers)
 
-	for i := 0; i < readWorkers; i++ {
+	for range readWorkers {
 		eg.Go(func() error {
 			defer readWg.Done()
 			for task := range readCh {
@@ -268,7 +269,7 @@ func (p *Processor) processGroupsPipelined(groups []rangeGroup, sink Sink) error
 					if err := ctx.Err(); err != nil {
 						return err
 					}
-					return fmt.Errorf("batch: read pipeline ended unexpectedly")
+					return errors.New("batch: read pipeline ended unexpectedly")
 				}
 				pending[res.index] = res
 				for {

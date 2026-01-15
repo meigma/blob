@@ -28,7 +28,7 @@ var (
 	benchSinkEntry Entry
 	benchSinkInt   int
 	benchSinkFile  fs.File
-	benchSinkErr   error
+	errBenchSink   error //nolint:errname // not a sentinel error, just a sink variable
 	benchSinkInfo  fs.FileInfo
 	benchSinkDirs  []fs.DirEntry
 	benchSinkView  EntryView
@@ -263,7 +263,7 @@ func BenchmarkBlobReadFile(b *testing.B) {
 					indexData, dataData := createBenchArchive(b, dir, compression)
 
 					for _, source := range benchSources() {
-						run := func(b *testing.B) {
+						run := func(b *testing.B) { //nolint:thelper // not a test helper, closure for sub-benchmarks
 							byteSource, cleanup, err := source.new(b, dataData)
 							if err != nil {
 								b.Fatal(err)
@@ -525,7 +525,7 @@ func BenchmarkBlobOpen(b *testing.B) {
 						b.Fatal("expected error")
 					}
 					benchSinkFile = f
-					benchSinkErr = err
+					errBenchSink = err
 				}
 			})
 		})
@@ -585,7 +585,7 @@ func BenchmarkBlobStat(b *testing.B) {
 						b.Fatal("expected error")
 					}
 					benchSinkInfo = info
-					benchSinkErr = err
+					errBenchSink = err
 				}
 			})
 		})
@@ -658,7 +658,7 @@ func BenchmarkBlobReadDir(b *testing.B) {
 						b.Fatal("expected error")
 					}
 					benchSinkDirs = entries
-					benchSinkErr = err
+					errBenchSink = err
 				}
 			})
 		})
@@ -783,7 +783,7 @@ func benchmarkBlobCopyDir(b *testing.B, label string, workers int, cleanDest boo
 			totalBytes := int64(dirEntries * bc.fileSize)
 
 			for _, source := range benchSources() {
-				run := func(b *testing.B) {
+				run := func(b *testing.B) { //nolint:thelper // not a test helper, closure for sub-benchmarks
 					byteSource, cleanup, err := source.new(b, dataData)
 					if err != nil {
 						b.Fatal(err)
@@ -916,6 +916,7 @@ func benchHTTPEnabled() bool {
 	return os.Getenv("BLOB_BENCH_HTTP") != ""
 }
 
+//nolint:thelper // factory function, not a test helper
 func newBenchHTTPSource(b *testing.B, data []byte) (ByteSource, func(), error) {
 	cfg, err := benchHTTPConfigFromEnv()
 	if err != nil {
@@ -924,7 +925,8 @@ func newBenchHTTPSource(b *testing.B, data []byte) (ByteSource, func(), error) {
 	return newBenchHTTPSourceWithConfig(b, data, cfg)
 }
 
-func newBenchHTTPSourceWithConfig(b *testing.B, data []byte, cfg benchHTTPConfig) (ByteSource, func(), error) {
+//nolint:thelper,unparam // factory function, not a test helper; b kept for interface consistency
+func newBenchHTTPSourceWithConfig(_ *testing.B, data []byte, cfg benchHTTPConfig) (ByteSource, func(), error) {
 	client := benchHTTPClient(cfg)
 
 	server := httptest.NewServer(nethttp.HandlerFunc(func(w nethttp.ResponseWriter, r *nethttp.Request) {
@@ -1077,7 +1079,7 @@ func (tr *benchThrottleReadCloser) Close() error {
 	return tr.rc.Close()
 }
 
-func createBenchArchive(b *testing.B, dir string, compression Compression) ([]byte, []byte) {
+func createBenchArchive(b *testing.B, dir string, compression Compression) (indexData, dataData []byte) {
 	b.Helper()
 
 	var indexBuf, dataBuf bytes.Buffer

@@ -81,13 +81,13 @@ func (c *Cache) Put(hash, content []byte) error {
 	if err != nil {
 		return err
 	}
-	if _, err := os.Stat(path); err == nil {
+	if _, statErr := os.Stat(path); statErr == nil {
 		return nil
 	}
 
 	dir := filepath.Dir(path)
-	if err := os.MkdirAll(dir, c.dirPerm); err != nil {
-		return err
+	if mkdirErr := os.MkdirAll(dir, c.dirPerm); mkdirErr != nil {
+		return mkdirErr
 	}
 
 	tmp, err := os.CreateTemp(dir, "cache-*")
@@ -122,13 +122,13 @@ func (c *Cache) Writer(hash []byte) (cache.Writer, error) {
 	if err != nil {
 		return nil, err
 	}
-	if _, err := os.Stat(path); err == nil {
+	if _, statErr := os.Stat(path); statErr == nil {
 		return &noopWriter{}, nil
 	}
 
 	dir := filepath.Dir(path)
-	if err := os.MkdirAll(dir, c.dirPerm); err != nil {
-		return nil, err
+	if mkdirErr := os.MkdirAll(dir, c.dirPerm); mkdirErr != nil {
+		return nil, mkdirErr
 	}
 	tmp, err := os.CreateTemp(dir, "cache-*")
 	if err != nil {
