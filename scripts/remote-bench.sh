@@ -26,7 +26,7 @@ readonly SSH_KEY_PATH="${STATE_DIR}/id_ed25519"
 # Server configuration (override via environment)
 # Note: LATITUDE_PROJECT_ID should be the project SLUG (e.g., "default-project"), not the ID
 : "${LATITUDE_PROJECT_ID:=}"
-: "${LATITUDE_PLAN:=c2-small-x86}"
+: "${LATITUDE_PLAN:=m4-metal-large}"
 : "${LATITUDE_SITE:=LAX}"
 : "${LATITUDE_OS:=ubuntu_24_04_x64_lts}"
 
@@ -48,6 +48,12 @@ readonly SSH_KEY_PATH="${STATE_DIR}/id_ed25519"
 
 # Remote paths
 : "${REMOTE_REPO_PATH:=/home/ubuntu/blob}"
+
+# Benchmark output directory (relative to repo root)
+: "${BENCH_OUT_DIR:=benchmarks}"
+
+# Canonical benchmark selection (regex used by go test -bench)
+: "${BENCH_CANONICAL_PATTERN:=^Benchmark(WriterCreate|IndexLookup|IndexLookupCopy|EntriesWithPrefix|EntriesWithPrefixCopy|ReaderReadFile|ReaderCopyDir|CachedReaderReadFileHit|CachedReaderPrefetchDir|CachedReaderPrefetchDirDisk|CachedReaderPrefetchDirDiskParallel)$}"
 
 #=============================================================================
 # Logging
@@ -360,7 +366,16 @@ cmd_setup() {
     fi
     local server_id
     # lsh CLI returns array: [{id: "...", attributes: {...}}]
-    server_id=$(echo "${server_response}" | jq -r '.[0].id // .id // empty' 2>/dev/null)
+    # Note: jq may fail if response is not valid JSON (e.g., error message), so use || true
+    if ! echo "${server_response}" | jq -e . &>/dev/null; then
+        error "Server creation failed:"
+        echo "${server_response}" >&2
+        log "Cleaning up SSH key..."
+        lsh ssh_keys destroy --id="${ssh_key_id}" --project="${LATITUDE_PROJECT_ID}" --no-input || true
+        rm -f "${SSH_KEY_PATH}" "${SSH_KEY_PATH}.pub"
+        die "Setup failed"
+    fi
+    server_id=$(echo "${server_response}" | jq -r '.[0].id // .id // empty')
     if [[ -z "${server_id}" || "${server_id}" == "null" ]]; then
         error "Failed to parse server ID from response:"
         echo "${server_response}" | head -30 >&2
@@ -460,6 +475,40 @@ cmd_bench() {
         "cd ${REMOTE_REPO_PATH} && export PATH=\$PATH:/usr/local/go/bin:\$HOME/go/bin && go test -run='^\$' ${bench_args[*]} ./..."
 }
 
+cmd_bench_canonical() {
+    if ! load_state; then
+        die "No active setup. Run 'setup' first."
+    fi
+
+    local server_ip
+    server_ip=$(get_state "server_ip")
+
+    log "Syncing code..."
+    mutagen sync flush "${BENCH_SESSION_NAME}"
+
+    mkdir -p "${REPO_ROOT}/${BENCH_OUT_DIR}"
+    local run_id ts out_file remote_out git_ref git_dirty
+    ts="$(date -u +%Y%m%dT%H%M%SZ)"
+    run_id="canonical-${ts}"
+    git_ref=$(git -C "${REPO_ROOT}" rev-parse --short HEAD 2>/dev/null || echo unknown)
+    git_dirty=""
+    if [[ -n "$(git -C "${REPO_ROOT}" status --porcelain 2>/dev/null)" ]]; then
+        git_dirty="-dirty"
+    fi
+    out_file="${BENCH_OUT_DIR}/bench_${run_id}_${git_ref}${git_dirty}.txt"
+    remote_out="${REMOTE_REPO_PATH}/${out_file}"
+
+    log "Running canonical benchmarks on ${server_ip}..."
+    ssh -i "${SSH_KEY_PATH}" -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
+        "ubuntu@${server_ip}" \
+        "cd ${REMOTE_REPO_PATH} && export PATH=\$PATH:/usr/local/go/bin:\$HOME/go/bin && mkdir -p ${REMOTE_REPO_PATH}/${BENCH_OUT_DIR} && go test -run='^\$' -bench='${BENCH_CANONICAL_PATTERN}' -benchmem -count=10 ./... > ${remote_out}"
+
+    log "Flushing Mutagen sync..."
+    mutagen sync flush "${BENCH_SESSION_NAME}"
+
+    log "Saved benchmarks to ${out_file}"
+}
+
 cmd_status() {
     if ! load_state; then
         log "No active setup"
@@ -545,6 +594,7 @@ Usage: $0 <command> [options]
 Commands:
   setup      Provision server, sync code, and bootstrap environment
   bench      Run benchmarks on remote server (passes args to go test)
+  bench-canonical  Run canonical benchmark set and save results locally
   sync       Force re-sync code with Mutagen
   status     Show current environment state
   ssh        Open interactive SSH session to server
@@ -556,6 +606,8 @@ Environment Variables:
   LATITUDE_SITE        Datacenter site (default: LAX)
   LATITUDE_OS          Operating system (default: ubuntu_24_04_x64_lts)
   GO_VERSION           Go version to install (default: 1.25.4)
+  BENCH_OUT_DIR        Output directory for canonical runs (default: benchmarks)
+  BENCH_CANONICAL_PATTERN  Regex for canonical benchmark selection
 
 Examples:
   # Initial setup
@@ -564,6 +616,9 @@ Examples:
 
   # Run all benchmarks
   $0 bench
+
+  # Run canonical suite and save locally
+  $0 bench-canonical
 
   # Run specific benchmark
   $0 bench -bench=BenchmarkReaderCopyDir -count=10
@@ -584,6 +639,7 @@ main() {
         setup)    cmd_setup "$@" ;;
         sync)     cmd_sync "$@" ;;
         bench)    cmd_bench "$@" ;;
+        bench-canonical) cmd_bench_canonical "$@" ;;
         status)   cmd_status "$@" ;;
         ssh)      cmd_ssh "$@" ;;
         teardown) cmd_teardown "$@" ;;

@@ -68,9 +68,17 @@ bench-setup:
     @echo "Setting up remote benchmark environment..."
     ./scripts/remote-bench.sh setup
 
-# Run benchmarks on remote server (pass args after --)
-bench-remote *ARGS:
+# Run canonical benchmarks on remote server and save results locally
+bench-remote:
+    ./scripts/remote-bench.sh bench-canonical
+
+# Run arbitrary benchmarks on remote server (pass args after --)
+bench-remote-raw *ARGS:
     ./scripts/remote-bench.sh bench {{ARGS}}
+
+# Run canonical benchmark suite on remote server and store results locally
+bench-remote-canonical:
+    ./scripts/remote-bench.sh bench-canonical
 
 # Show remote benchmark environment status
 bench-status:
@@ -80,3 +88,18 @@ bench-status:
 bench-teardown:
     @echo "Tearing down remote benchmark environment..."
     ./scripts/remote-bench.sh teardown
+
+# Execute arbitrary command on remote server
+bench-exec *CMD:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    state_file=".bench/state.json"
+    if [[ ! -f "${state_file}" ]]; then
+        echo "No active setup. Run 'just bench-setup' first." >&2
+        exit 1
+    fi
+    server_ip=$(jq -r '.server_ip' "${state_file}")
+    ssh_key=$(jq -r '.ssh_key_path' "${state_file}")
+    ssh -i "${ssh_key}" -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
+        "ubuntu@${server_ip}" \
+        "cd /home/ubuntu/blob && export PATH=\$PATH:/usr/local/go/bin:\$HOME/go/bin && {{CMD}}"
