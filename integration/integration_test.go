@@ -259,3 +259,124 @@ func makeRandomBytes(size int) []byte {
 	_, _ = rand.Read(data)
 	return data
 }
+
+func TestE2E_CopyTo(t *testing.T) {
+	t.Parallel()
+
+	files := map[string][]byte{
+		"a.txt":         []byte("content a"),
+		"b.txt":         []byte("content b"),
+		"dir/c.txt":     []byte("content c"),
+		"dir/sub/d.txt": []byte("content d"),
+	}
+
+	idx, source := createArchive(t, files, blob.CompressionZstd)
+	r := blob.NewReader(idx, source)
+
+	t.Run("copy specific files", func(t *testing.T) {
+		destDir := t.TempDir()
+
+		err := r.CopyTo(destDir, "a.txt", "dir/c.txt")
+		require.NoError(t, err)
+
+		// Verify extracted files
+		content, err := os.ReadFile(filepath.Join(destDir, "a.txt"))
+		require.NoError(t, err)
+		assert.Equal(t, []byte("content a"), content)
+
+		content, err = os.ReadFile(filepath.Join(destDir, "dir/c.txt"))
+		require.NoError(t, err)
+		assert.Equal(t, []byte("content c"), content)
+
+		// Files not requested should not exist
+		_, err = os.Stat(filepath.Join(destDir, "b.txt"))
+		assert.True(t, os.IsNotExist(err))
+	})
+
+	t.Run("skip existing files", func(t *testing.T) {
+		destDir := t.TempDir()
+
+		// Pre-create file with different content
+		existing := filepath.Join(destDir, "a.txt")
+		require.NoError(t, os.WriteFile(existing, []byte("original"), 0o644))
+
+		err := r.CopyTo(destDir, "a.txt")
+		require.NoError(t, err)
+
+		// File should not be overwritten
+		content, err := os.ReadFile(existing)
+		require.NoError(t, err)
+		assert.Equal(t, []byte("original"), content)
+	})
+
+	t.Run("overwrite existing files", func(t *testing.T) {
+		destDir := t.TempDir()
+
+		// Pre-create file with different content
+		existing := filepath.Join(destDir, "a.txt")
+		require.NoError(t, os.WriteFile(existing, []byte("original"), 0o644))
+
+		err := r.CopyToWithOptions(destDir, []string{"a.txt"}, blob.CopyWithOverwrite(true))
+		require.NoError(t, err)
+
+		// File should be overwritten
+		content, err := os.ReadFile(existing)
+		require.NoError(t, err)
+		assert.Equal(t, []byte("content a"), content)
+	})
+}
+
+func TestE2E_CopyDir(t *testing.T) {
+	t.Parallel()
+
+	files := map[string][]byte{
+		"root.txt":      []byte("root"),
+		"dir/a.txt":     []byte("a"),
+		"dir/b.txt":     []byte("b"),
+		"dir/sub/c.txt": []byte("c"),
+		"other/x.txt":   []byte("x"),
+	}
+
+	idx, source := createArchive(t, files, blob.CompressionZstd)
+	r := blob.NewReader(idx, source)
+
+	t.Run("copy entire directory", func(t *testing.T) {
+		destDir := t.TempDir()
+
+		err := r.CopyDir(destDir, "dir")
+		require.NoError(t, err)
+
+		// Verify extracted files
+		content, err := os.ReadFile(filepath.Join(destDir, "dir/a.txt"))
+		require.NoError(t, err)
+		assert.Equal(t, []byte("a"), content)
+
+		content, err = os.ReadFile(filepath.Join(destDir, "dir/b.txt"))
+		require.NoError(t, err)
+		assert.Equal(t, []byte("b"), content)
+
+		content, err = os.ReadFile(filepath.Join(destDir, "dir/sub/c.txt"))
+		require.NoError(t, err)
+		assert.Equal(t, []byte("c"), content)
+
+		// Files outside prefix should not exist
+		_, err = os.Stat(filepath.Join(destDir, "root.txt"))
+		assert.True(t, os.IsNotExist(err))
+		_, err = os.Stat(filepath.Join(destDir, "other/x.txt"))
+		assert.True(t, os.IsNotExist(err))
+	})
+
+	t.Run("copy all files with empty prefix", func(t *testing.T) {
+		destDir := t.TempDir()
+
+		err := r.CopyDir(destDir, "")
+		require.NoError(t, err)
+
+		// All files should be extracted
+		for path, expectedContent := range files {
+			content, err := os.ReadFile(filepath.Join(destDir, path))
+			require.NoError(t, err, "reading %s", path)
+			assert.Equal(t, expectedContent, content, "content mismatch for %s", path)
+		}
+	})
+}

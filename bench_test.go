@@ -265,6 +265,111 @@ func BenchmarkReaderReadFile(b *testing.B) {
 	}
 }
 
+func BenchmarkReaderCopyDir(b *testing.B) {
+	benchmarkReaderCopyDir(b, "serial", -1)
+	benchmarkReaderCopyDir(b, "parallel", runtime.GOMAXPROCS(0))
+}
+
+func benchmarkReaderCopyDir(b *testing.B, label string, workers int) {
+	b.Helper()
+
+	cases := []struct {
+		name        string
+		fileCount   int
+		fileSize    int
+		compression Compression
+		pattern     benchPattern
+	}{
+		{
+			name:        "files=512/size=16k/none/compressible",
+			fileCount:   512,
+			fileSize:    16 << 10,
+			compression: CompressionNone,
+			pattern:     benchPatternCompressible,
+		},
+		{
+			name:        "files=512/size=16k/zstd/compressible",
+			fileCount:   512,
+			fileSize:    16 << 10,
+			compression: CompressionZstd,
+			pattern:     benchPatternCompressible,
+		},
+		{
+			name:        "files=512/size=16k/zstd/random",
+			fileCount:   512,
+			fileSize:    16 << 10,
+			compression: CompressionZstd,
+			pattern:     benchPatternRandom,
+		},
+		{
+			name:        "files=512/size=64k/zstd/compressible",
+			fileCount:   512,
+			fileSize:    64 << 10,
+			compression: CompressionZstd,
+			pattern:     benchPatternCompressible,
+		},
+		{
+			name:        "files=512/size=64k/zstd/random",
+			fileCount:   512,
+			fileSize:    64 << 10,
+			compression: CompressionZstd,
+			pattern:     benchPatternRandom,
+		},
+		{
+			name:        "files=2048/size=16k/zstd/compressible",
+			fileCount:   2048,
+			fileSize:    16 << 10,
+			compression: CompressionZstd,
+			pattern:     benchPatternCompressible,
+		},
+	}
+
+	prefix := "dir00"
+
+	for _, bc := range cases {
+		b.Run(fmt.Sprintf("%s/%s", label, bc.name), func(b *testing.B) {
+			dir := b.TempDir()
+			makeBenchFiles(b, dir, bc.fileCount, bc.fileSize, bc.pattern)
+			idx, source := createBenchArchive(b, dir, bc.compression)
+			reader := NewReader(idx, source)
+
+			dirEntries := countBenchDirEntries(bc.fileCount, benchDirCount)
+			totalBytes := int64(dirEntries * bc.fileSize)
+			if totalBytes > 0 {
+				b.SetBytes(totalBytes)
+			}
+
+			opts := []CopyOption{}
+			if workers != 0 {
+				opts = append(opts, CopyWithWorkers(workers))
+			}
+
+			destRoot := b.TempDir()
+
+			b.ReportAllocs()
+			b.ResetTimer()
+			for i := 0; b.Loop(); i++ {
+				b.StopTimer()
+				destDir := filepath.Join(destRoot, fmt.Sprintf("iter-%d", i))
+				if err := os.MkdirAll(destDir, 0o755); err != nil {
+					b.Fatal(err)
+				}
+				b.StartTimer()
+
+				if err := reader.CopyDir(destDir, prefix, opts...); err != nil {
+					b.Fatal(err)
+				}
+
+				b.StopTimer()
+				if err := os.RemoveAll(destDir); err != nil {
+					b.Fatal(err)
+				}
+				b.StartTimer()
+			}
+		})
+	}
+}
+
 func makeBenchFiles(b *testing.B, dir string, fileCount, fileSize int, pattern benchPattern) []string {
 	b.Helper()
 
@@ -300,6 +405,13 @@ func makeBenchFiles(b *testing.B, dir string, fileCount, fileSize int, pattern b
 	}
 
 	return paths
+}
+
+func countBenchDirEntries(fileCount, dirCount int) int {
+	if fileCount <= 0 || dirCount <= 0 {
+		return 0
+	}
+	return (fileCount + dirCount - 1) / dirCount
 }
 
 func createBenchArchive(b *testing.B, dir string, compression Compression) (*Index, *testutil.MockByteSource) {

@@ -317,6 +317,47 @@ func runProfile(cfg config, reader *blob.Reader, paths []string, index *blob.Ind
 			}
 		}
 
+	case "copydir":
+		prefix := cfg.prefetchPrefix
+		if prefix == "." {
+			prefix = ""
+		}
+		copyBytes := prefetchSize(index, scanPrefix(prefix))
+		opts := []blob.CopyOption{}
+		if cfg.prefetchWorkers != 0 {
+			opts = append(opts, blob.CopyWithWorkers(cfg.prefetchWorkers))
+		}
+
+		if cfg.prefetchCold {
+			for shouldContinue() {
+				destDir := filepath.Join(rootDir, "copy", fmt.Sprintf("iter-%d", ops))
+				if err := os.MkdirAll(destDir, 0o755); err != nil {
+					return profileStats{}, err
+				}
+				if err := reader.CopyDir(destDir, prefix, opts...); err != nil {
+					return profileStats{}, err
+				}
+				if err := os.RemoveAll(destDir); err != nil {
+					return profileStats{}, err
+				}
+				byteCount += copyBytes
+				ops++
+			}
+		} else {
+			destDir := filepath.Join(rootDir, "copy")
+			if err := os.MkdirAll(destDir, 0o755); err != nil {
+				return profileStats{}, err
+			}
+			opts = append(opts, blob.CopyWithOverwrite(true))
+			for shouldContinue() {
+				if err := reader.CopyDir(destDir, prefix, opts...); err != nil {
+					return profileStats{}, err
+				}
+				byteCount += copyBytes
+				ops++
+			}
+		}
+
 	case "writer":
 		w := blob.NewWriter(blob.WriteOptions{Compression: parseCompression(cfg.compression)})
 		var indexBuf, dataBuf bytes.Buffer
@@ -343,7 +384,7 @@ func runProfile(cfg config, reader *blob.Reader, paths []string, index *blob.Ind
 
 func parseFlags() config {
 	var cfg config
-	flag.StringVar(&cfg.mode, "mode", "readfile", "mode: readfile, cached-readfile-hit, prefetchdir, writer, index-lookup, index-lookup-copy, entries-with-prefix, entries-with-prefix-copy")
+	flag.StringVar(&cfg.mode, "mode", "readfile", "mode: readfile, cached-readfile-hit, prefetchdir, copydir, writer, index-lookup, index-lookup-copy, entries-with-prefix, entries-with-prefix-copy")
 	flag.IntVar(&cfg.files, "files", 512, "number of files")
 	flag.IntVar(&cfg.fileSize, "file-size", 16<<10, "file size in bytes")
 	flag.IntVar(&cfg.dirCount, "dir-count", 16, "number of directories")
@@ -357,9 +398,9 @@ func parseFlags() config {
 	flag.StringVar(&cfg.traceFile, "trace", "", "write trace to file")
 	flag.StringVar(&cfg.cache, "cache", "memory", "cache: memory, disk, none")
 	flag.StringVar(&cfg.cacheDir, "cache-dir", "", "cache directory (disk cache only)")
-	flag.StringVar(&cfg.prefetchPrefix, "prefix", "dir00", "prefix for prefetchdir and entries-with-prefix modes")
-	flag.BoolVar(&cfg.prefetchCold, "prefetch-cold", true, "recreate cache each prefetchdir iteration")
-	flag.IntVar(&cfg.prefetchWorkers, "prefetch-workers", 0, "prefetch workers: <0 serial, 0 auto, >0 fixed")
+	flag.StringVar(&cfg.prefetchPrefix, "prefix", "dir00", "prefix for prefetchdir, copydir, and entries-with-prefix modes")
+	flag.BoolVar(&cfg.prefetchCold, "prefetch-cold", true, "recreate cache or copy destination each iteration")
+	flag.IntVar(&cfg.prefetchWorkers, "prefetch-workers", 0, "prefetch/copy workers: <0 serial, 0 auto, >0 fixed")
 	flag.BoolVar(&cfg.readRandom, "read-random", true, "randomize readfile path selection")
 	flag.StringVar(&cfg.tempDir, "temp-dir", "", "directory to use for dataset")
 	flag.BoolVar(&cfg.keepTemp, "keep-temp", false, "keep temp dir after run")

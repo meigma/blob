@@ -2,25 +2,16 @@ package cache
 
 import (
 	"bytes"
-	"crypto/sha256"
-	"errors"
-	"fmt"
-	"io"
 	"io/fs"
 	"math"
 	"runtime"
-	"slices"
-	"sync"
-	"sync/atomic"
 
 	"golang.org/x/sync/singleflight"
 
 	"github.com/meigma/blob"
+	"github.com/meigma/blob/internal/batch"
 	"github.com/meigma/blob/internal/fileops"
-	"github.com/meigma/blob/internal/sizing"
 )
-
-const prefetchParallelMinAvgBytes = 64 << 10
 
 // Reader wraps a blob.Reader with content-addressed caching.
 //
@@ -97,7 +88,7 @@ func (r *Reader) Open(name string) (fs.File, error) {
 		// Not a file, delegate to base (handles directories)
 		return r.base.Open(name)
 	}
-	entry := view.Entry()
+	entry := entryFromViewWithPath(view, name)
 
 	// Check cache first
 	if content, cached := r.cache.Get(entry.Hash); cached {
@@ -144,7 +135,7 @@ func (r *Reader) ReadFile(name string) ([]byte, error) {
 	if !ok {
 		return nil, &fs.PathError{Op: "readfile", Path: name, Err: fs.ErrNotExist}
 	}
-	entry := view.Entry()
+	entry := entryFromViewWithPath(view, name)
 
 	// Check cache first (fast path, avoids singleflight overhead)
 	if content, cached := r.cache.Get(entry.Hash); cached {
@@ -192,40 +183,7 @@ func (r *Reader) ReadDir(name string) ([]fs.DirEntry, error) {
 // For adjacent files, Prefetch batches range requests to minimize round trips.
 // This is useful for warming the cache with files that will be accessed soon.
 func (r *Reader) Prefetch(paths ...string) error {
-	// Collect entries for paths that exist and aren't already cached
-	entries := make([]fileops.Entry, 0, len(paths))
-	for _, path := range paths {
-		if !fs.ValidPath(path) {
-			continue
-		}
-		view, ok := r.base.Index().LookupView(path)
-		if !ok {
-			continue
-		}
-		entry := view.Entry()
-		// Skip if already cached
-		if _, cached := r.cache.Get(entry.Hash); cached {
-			continue
-		}
-		entries = append(entries, entryToFileops(entry))
-	}
-
-	if len(entries) == 0 {
-		return nil
-	}
-
-	// Sort by DataOffset for batching
-	slices.SortFunc(entries, func(a, b fileops.Entry) int {
-		if a.DataOffset < b.DataOffset {
-			return -1
-		}
-		if a.DataOffset > b.DataOffset {
-			return 1
-		}
-		return 0
-	})
-
-	return r.prefetchEntries(entries)
+	return r.prefetchEntries(r.collectEntriesForPaths(paths))
 }
 
 // PrefetchDir fetches and caches all files under the given directory prefix.
@@ -238,7 +196,7 @@ func (r *Reader) PrefetchDir(prefix string) error {
 		return nil
 	}
 
-	// Collect all entries under prefix that aren't cached
+	// Collect all entries under prefix
 	var dirPrefix string
 	if prefix == "" || prefix == "." {
 		dirPrefix = ""
@@ -246,294 +204,67 @@ func (r *Reader) PrefetchDir(prefix string) error {
 		dirPrefix = prefix + "/"
 	}
 
-	var entries []fileops.Entry //nolint:prealloc // size unknown until iteration
-	for view := range r.base.Index().EntriesWithPrefixView(dirPrefix) {
-		entry := view.Entry()
-		// Skip if already cached
-		if _, cached := r.cache.Get(entry.Hash); cached {
+	return r.prefetchEntries(r.collectEntriesWithPrefix(dirPrefix))
+}
+
+func (r *Reader) collectEntriesForPaths(paths []string) []*batch.Entry {
+	entries := make([]batch.Entry, 0, len(paths))
+	for _, path := range paths {
+		if !fs.ValidPath(path) {
 			continue
 		}
-		entries = append(entries, entryToFileops(entry))
+		view, ok := r.base.Index().LookupView(path)
+		if !ok {
+			continue
+		}
+		entry := entryFromViewWithPath(view, path)
+		entries = append(entries, entry)
 	}
+	return entryPointers(entries)
+}
 
+func (r *Reader) collectEntriesWithPrefix(prefix string) []*batch.Entry {
+	var entries []batch.Entry //nolint:prealloc // size unknown until iteration
+	for view := range r.base.Index().EntriesWithPrefixView(prefix) {
+		entry := entryFromViewWithPath(view, "")
+		entries = append(entries, entry)
+	}
+	return entryPointers(entries)
+}
+
+func entryPointers(entries []batch.Entry) []*batch.Entry {
 	if len(entries) == 0 {
 		return nil
 	}
-
-	// Entries are already sorted by path (and thus by offset) from the index
-	return r.prefetchEntries(entries)
+	ptrs := make([]*batch.Entry, len(entries))
+	for i := range entries {
+		ptrs[i] = &entries[i]
+	}
+	return ptrs
 }
-
-// prefetchEntries fetches and caches a list of entries, batching adjacent ones.
-func (r *Reader) prefetchEntries(entries []fileops.Entry) error {
+func (r *Reader) prefetchEntries(entries []*batch.Entry) error {
 	if len(entries) == 0 {
 		return nil
-	}
-
-	sourceSize := r.base.Ops().Source().Size()
-	maxFileSize := r.base.Ops().MaxFileSize()
-	for i := range entries {
-		if err := fileops.ValidateAll(&entries[i], sourceSize, maxFileSize); err != nil {
-			return err
-		}
-	}
-
-	groups := groupAdjacentEntries(entries)
-
-	for _, group := range groups {
-		if err := r.prefetchGroup(group); err != nil {
-			return err
-		}
-	}
-
-	return nil
-}
-
-// prefetchGroup fetches a contiguous range and caches each entry.
-func (r *Reader) prefetchGroup(group rangeGroup) error {
-	data, err := r.readGroupData(group)
-	if err != nil {
-		return err
-	}
-	if len(group.entries) == 0 {
-		return nil
-	}
-
-	workers := r.prefetchWorkerCount(group.entries)
-	if workers < 2 {
-		return r.processEntriesSerial(group.entries, data, group.start)
-	}
-	return r.processEntriesParallel(group.entries, data, group.start, workers)
-}
-
-// readGroupData reads the contiguous data for a range group.
-func (r *Reader) readGroupData(group rangeGroup) ([]byte, error) {
-	size := group.end - group.start
-	sizeInt, err := sizing.ToInt(size, blob.ErrSizeOverflow)
-	if err != nil {
-		return nil, fmt.Errorf("prefetch: %w", err)
-	}
-	data := make([]byte, sizeInt)
-	n, err := r.base.Ops().Source().ReadAt(data, int64(group.start)) //nolint:gosec // offset fits in int64
-	if err != nil && err != io.EOF {
-		return nil, fmt.Errorf("prefetch: %w", err)
-	}
-	if uint64(n) != size { //nolint:gosec // n is always non-negative
-		return nil, fmt.Errorf("prefetch: short read (%d of %d bytes)", n, size)
-	}
-	return data, nil
-}
-
-// processEntriesSerial processes entries sequentially.
-func (r *Reader) processEntriesSerial(entries []fileops.Entry, data []byte, groupStart uint64) error {
-	for i := range entries {
-		if err := r.decompressVerifyCache(&entries[i], data, groupStart); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-// processEntriesParallel processes entries concurrently with the given number of workers.
-func (r *Reader) processEntriesParallel(entries []fileops.Entry, data []byte, groupStart uint64, workers int) error {
-	var stop atomic.Bool
-	errCh := make(chan error, 1)
-	var wg sync.WaitGroup
-
-	for w := range workers {
-		wg.Add(1)
-		go func(start int) {
-			defer wg.Done()
-			for i := start; i < len(entries); i += workers {
-				if stop.Load() {
-					return
-				}
-				if err := r.decompressVerifyCache(&entries[i], data, groupStart); err != nil {
-					if stop.CompareAndSwap(false, true) {
-						errCh <- err
-					}
-					return
-				}
-			}
-		}(w)
-	}
-	wg.Wait()
-
-	select {
-	case err := <-errCh:
-		return err
-	default:
-		return nil
-	}
-}
-
-// decompressVerifyCache decompresses entry data, verifies its hash, and caches it.
-func (r *Reader) decompressVerifyCache(entry *fileops.Entry, groupData []byte, groupStart uint64) error {
-	localOffset := entry.DataOffset - groupStart
-	localEnd := localOffset + entry.DataSize
-	if localEnd < localOffset || localEnd > uint64(len(groupData)) {
-		return blob.ErrSizeOverflow
-	}
-	start, err := sizing.ToInt(localOffset, blob.ErrSizeOverflow)
-	if err != nil {
-		return err
-	}
-	end, err := sizing.ToInt(localEnd, blob.ErrSizeOverflow)
-	if err != nil {
-		return err
-	}
-	entryData := groupData[start:end]
-
-	if sc, ok := r.cache.(StreamingCache); ok {
-		return r.streamDecompressVerifyCache(entry, entryData, sc)
-	}
-	return r.bufferDecompressVerifyCache(entry, entryData)
-}
-
-func (r *Reader) bufferDecompressVerifyCache(entry *fileops.Entry, data []byte) error {
-	content, err := r.decompress(data, entry.Compression, entry.OriginalSize)
-	if err != nil {
-		return err
-	}
-
-	hash := sha256.Sum256(content)
-	if !bytes.Equal(hash[:], entry.Hash) {
-		return blob.ErrHashMismatch
-	}
-
-	// Cache errors are non-fatal.
-	_ = r.cache.Put(entry.Hash, content) //nolint:errcheck // caching is opportunistic
-	return nil
-}
-
-func (r *Reader) streamDecompressVerifyCache(entry *fileops.Entry, data []byte, sc StreamingCache) error {
-	w, err := sc.Writer(entry.Hash)
-	if err != nil {
-		return r.bufferDecompressVerifyCache(entry, data)
-	}
-
-	reader, closeFn, err := r.newEntryReader(entry, data)
-	if err != nil {
-		_ = w.Discard() //nolint:errcheck // best-effort cleanup in error path
-		return err
-	}
-	defer closeFn()
-
-	hasher := sha256.New()
-	tee := io.TeeReader(reader, hasher)
-
-	expected, err := sizing.ToInt64(entry.OriginalSize, blob.ErrSizeOverflow)
-	if err != nil {
-		_ = w.Discard() //nolint:errcheck // best-effort cleanup in error path
-		return err
-	}
-	if _, err := io.CopyN(w, tee, expected); err != nil {
-		_ = w.Discard() //nolint:errcheck // best-effort cleanup in error path
-		if errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF) {
-			return fmt.Errorf("%w: unexpected EOF", blob.ErrDecompression)
-		}
-		return err
-	}
-	if err := fileops.EnsureNoExtra(tee); err != nil {
-		_ = w.Discard() //nolint:errcheck // best-effort cleanup in error path
-		return err
-	}
-
-	sum := hasher.Sum(nil)
-	if !bytes.Equal(sum, entry.Hash) {
-		_ = w.Discard() //nolint:errcheck // best-effort cleanup in error path
-		return blob.ErrHashMismatch
-	}
-	return w.Commit()
-}
-
-// decompress decompresses data according to the compression algorithm.
-func (r *Reader) decompress(data []byte, comp fileops.Compression, expectedSize uint64) ([]byte, error) {
-	switch comp {
-	case fileops.CompressionNone:
-		if uint64(len(data)) != expectedSize {
-			return nil, fmt.Errorf("%w: size mismatch", blob.ErrDecompression)
-		}
-		return data, nil
-	case fileops.CompressionZstd:
-		contentSize, err := sizing.ToInt(expectedSize, blob.ErrSizeOverflow)
-		if err != nil {
-			return nil, err
-		}
-		dec, closeFn, err := r.base.Ops().Pool().Get(bytes.NewReader(data))
-		if err != nil {
-			return nil, fmt.Errorf("%w: %v", blob.ErrDecompression, err)
-		}
-		defer closeFn()
-
-		content := make([]byte, contentSize)
-		if _, err := io.ReadFull(dec, content); err != nil {
-			if errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF) {
-				return nil, fmt.Errorf("%w: unexpected EOF", blob.ErrDecompression)
-			}
-			return nil, fmt.Errorf("%w: %v", blob.ErrDecompression, err)
-		}
-		if err := fileops.EnsureNoExtra(dec); err != nil {
-			return nil, err
-		}
-		return content, nil
-	default:
-		return nil, fmt.Errorf("unknown compression algorithm: %d", comp)
-	}
-}
-
-func (r *Reader) newEntryReader(entry *fileops.Entry, data []byte) (io.Reader, func(), error) {
-	switch entry.Compression {
-	case fileops.CompressionNone:
-		return bytes.NewReader(data), func() {}, nil
-	case fileops.CompressionZstd:
-		dec, closeFn, err := r.base.Ops().Pool().Get(bytes.NewReader(data))
-		if err != nil {
-			return nil, func() {}, fmt.Errorf("%w: %v", blob.ErrDecompression, err)
-		}
-		return dec, closeFn, nil
-	default:
-		return nil, func() {}, fmt.Errorf("unknown compression algorithm: %d", entry.Compression)
-	}
-}
-
-func (r *Reader) prefetchWorkerCount(entries []fileops.Entry) int {
-	if len(entries) < 2 {
-		return 1
-	}
-	if r.prefetchWorkers < 0 {
-		return 1
 	}
 
 	workers := r.prefetchWorkers
 	if workers == 0 {
-		workers = runtime.GOMAXPROCS(0)
-		if workers < 2 {
-			return 1
-		}
-		if _, ok := r.cache.(StreamingCache); ok {
-			var total uint64
-			for i := range entries {
-				next, ok := sizing.AddUint64(total, entries[i].OriginalSize)
-				if !ok {
-					total = ^uint64(0)
-					break
-				}
-				total = next
-			}
-			if total/uint64(len(entries)) < prefetchParallelMinAvgBytes {
-				return 1
-			}
+		if _, ok := r.cache.(StreamingCache); !ok {
+			workers = runtime.GOMAXPROCS(0)
 		}
 	}
 
-	if workers > len(entries) {
-		workers = len(entries)
+	var procOpts []batch.ProcessorOption
+	if workers != 0 {
+		procOpts = append(procOpts, batch.WithWorkers(workers))
 	}
-	if workers < 2 {
-		return 1
+	proc := batch.NewProcessor(r.base.Ops().Source(), r.base.Ops().Pool(), r.base.Ops().MaxFileSize(), procOpts...)
+
+	var sink batch.Sink = &cacheSink{cache: r.cache}
+	if _, ok := r.cache.(StreamingCache); !ok {
+		sink = &nonStreamingCacheSink{cacheSink: &cacheSink{cache: r.cache}}
 	}
-	return workers
+	return proc.Process(entries, sink)
 }
 
 // wrapFileForCaching wraps a base file with caching support.
@@ -583,4 +314,19 @@ func (r *Reader) wrapFileBuffered(f *fileops.File, entry fileops.Entry) (fs.File
 //nolint:gocritic // hugeParam acceptable for Entry value semantics
 func entryToFileops(e blob.Entry) fileops.Entry {
 	return e
+}
+
+func entryFromViewWithPath(view blob.EntryView, path string) blob.Entry {
+	return blob.Entry{
+		Path:         path,
+		DataOffset:   view.DataOffset(),
+		DataSize:     view.DataSize(),
+		OriginalSize: view.OriginalSize(),
+		Hash:         view.HashBytes(),
+		Mode:         view.Mode(),
+		UID:          view.UID(),
+		GID:          view.GID(),
+		ModTime:      view.ModTime(),
+		Compression:  view.Compression(),
+	}
 }

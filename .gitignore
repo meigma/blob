@@ -1,4 +1,6 @@
-.claude
+.bench/
+.claude/
+.env
 bench/
 research/
 CLAUDE.md

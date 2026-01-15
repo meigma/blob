@@ -60,3 +60,23 @@ clean:
 # Show available recipes
 help:
     @just --list
+
+# === Remote Benchmarking ===
+
+# Setup remote bare metal benchmark server
+bench-setup:
+    @echo "Setting up remote benchmark environment..."
+    ./scripts/remote-bench.sh setup
+
+# Run benchmarks on remote server (pass args after --)
+bench-remote *ARGS:
+    ./scripts/remote-bench.sh bench {{ARGS}}
+
+# Show remote benchmark environment status
+bench-status:
+    ./scripts/remote-bench.sh status
+
+# Teardown remote benchmark environment
+bench-teardown:
+    @echo "Tearing down remote benchmark environment..."
+    ./scripts/remote-bench.sh teardown

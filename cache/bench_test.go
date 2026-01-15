@@ -25,7 +25,7 @@ const (
 	benchDirCount = 16
 )
 
-func BenchmarkReaderReadFileHit(b *testing.B) {
+func BenchmarkCachedReaderReadFileHit(b *testing.B) {
 	dir := b.TempDir()
 	paths := makeBenchFiles(b, dir, 128, 32<<10, benchDirCount, benchPatternCompressible)
 	idx, source := createBenchArchive(b, dir, blob.CompressionZstd)
@@ -54,7 +54,7 @@ func BenchmarkReaderReadFileHit(b *testing.B) {
 	}
 }
 
-func BenchmarkReaderPrefetchDir(b *testing.B) {
+func BenchmarkCachedReaderPrefetchDir(b *testing.B) {
 	cases := []struct {
 		name        string
 		fileCount   int
@@ -91,11 +91,11 @@ func BenchmarkReaderPrefetchDir(b *testing.B) {
 			pattern:     benchPatternCompressible,
 		},
 		{
-			name:        "files=512/size=64k/zstd/random",
-			fileCount:   512,
-			fileSize:    64 << 10,
-			compression: blob.CompressionZstd,
-			pattern:     benchPatternRandom,
+			name:        "files=2048/size=16k/none/compressible",
+			fileCount:   2048,
+			fileSize:    16 << 10,
+			compression: blob.CompressionNone,
+			pattern:     benchPatternCompressible,
 		},
 		{
 			name:        "files=2048/size=16k/zstd/compressible",
@@ -137,11 +137,11 @@ func BenchmarkReaderPrefetchDir(b *testing.B) {
 	}
 }
 
-func BenchmarkReaderPrefetchDirDisk(b *testing.B) {
+func BenchmarkCachedReaderPrefetchDirDisk(b *testing.B) {
 	benchmarkReaderPrefetchDirDisk(b, "serial", 1)
 }
 
-func BenchmarkReaderPrefetchDirDiskParallel(b *testing.B) {
+func BenchmarkCachedReaderPrefetchDirDiskParallel(b *testing.B) {
 	benchmarkReaderPrefetchDirDisk(b, "parallel", runtime.GOMAXPROCS(0))
 }
 
@@ -183,11 +183,11 @@ func benchmarkReaderPrefetchDirDisk(b *testing.B, label string, workers int) {
 			pattern:     benchPatternCompressible,
 		},
 		{
-			name:        "files=512/size=64k/zstd/random",
-			fileCount:   512,
-			fileSize:    64 << 10,
-			compression: blob.CompressionZstd,
-			pattern:     benchPatternRandom,
+			name:        "files=2048/size=16k/none/compressible",
+			fileCount:   2048,
+			fileSize:    16 << 10,
+			compression: blob.CompressionNone,
+			pattern:     benchPatternCompressible,
 		},
 		{
 			name:        "files=2048/size=16k/zstd/compressible",
