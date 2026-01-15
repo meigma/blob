@@ -197,14 +197,13 @@ func (c *benchDiscardCommitter) Discard() error {
 }
 
 func benchBatchSources() []benchBatchSource {
-	sources := []benchBatchSource{
-		{
-			name: "source=memory",
-			new: func(_ *testing.B, data []byte) (file.ByteSource, func(), error) {
-				return testutil.NewMockByteSource(data), nil, nil
-			},
+	sources := make([]benchBatchSource, 0, 2)
+	sources = append(sources, benchBatchSource{
+		name: "source=memory",
+		new: func(_ *testing.B, data []byte) (file.ByteSource, func(), error) {
+			return testutil.NewMockByteSource(data), nil, nil
 		},
-	}
+	})
 	if os.Getenv("BLOB_BENCH_HTTP") == "" {
 		return sources
 	}

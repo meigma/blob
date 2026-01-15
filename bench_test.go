@@ -893,13 +893,12 @@ type benchSource struct {
 }
 
 func benchSources() []benchSource {
-	sources := []benchSource{
-		{
-			new: func(_ *testing.B, data []byte) (ByteSource, func(), error) {
-				return testutil.NewMockByteSource(data), nil, nil
-			},
+	sources := make([]benchSource, 0, 2)
+	sources = append(sources, benchSource{
+		new: func(_ *testing.B, data []byte) (ByteSource, func(), error) {
+			return testutil.NewMockByteSource(data), nil, nil
 		},
-	}
+	})
 
 	if !benchHTTPEnabled() {
 		return sources
