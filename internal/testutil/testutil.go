@@ -1,10 +1,7 @@
 package testutil
 
 import (
-	"encoding/hex"
 	"io"
-	"os"
-	"path/filepath"
 	"sync"
 )
 
@@ -40,13 +37,6 @@ func (m *MockByteSource) Bytes() []byte {
 	return m.data
 }
 
-// CacheWriter is the streaming writer interface used by DiskCache.
-type CacheWriter interface {
-	Write(p []byte) (int, error)
-	Commit() error
-	Discard() error
-}
-
 // MockCache implements a basic concurrency-safe cache for tests.
 type MockCache struct {
 	mu   sync.RWMutex
@@ -73,108 +63,3 @@ func (c *MockCache) Put(hash, content []byte) error {
 	c.data[string(hash)] = content
 	return nil
 }
-
-// DiskCache implements a simple disk-backed cache with streaming support.
-type DiskCache struct {
-	dir string
-}
-
-// NewDiskCache creates a disk-backed cache rooted at dir.
-func NewDiskCache(dir string) *DiskCache {
-	return &DiskCache{dir: dir}
-}
-
-// Get retrieves cached content by hash.
-func (c *DiskCache) Get(hash []byte) ([]byte, bool) {
-	path := c.path(hash)
-	data, err := os.ReadFile(path) //nolint:gosec // path is derived from hash, not user input
-	if err != nil {
-		return nil, false
-	}
-	return data, true
-}
-
-// Put stores cached content by hash.
-func (c *DiskCache) Put(hash, content []byte) error {
-	finalPath := c.path(hash)
-	if _, err := os.Stat(finalPath); err == nil {
-		return nil
-	}
-
-	tmp, err := os.CreateTemp(c.dir, "cache-*")
-	if err != nil {
-		return err
-	}
-	tmpPath := tmp.Name()
-	if _, err := tmp.Write(content); err != nil {
-		tmp.Close()
-		_ = os.Remove(tmpPath)
-		return err
-	}
-	if err := tmp.Close(); err != nil {
-		_ = os.Remove(tmpPath)
-		return err
-	}
-	if err := os.Rename(tmpPath, finalPath); err != nil {
-		_ = os.Remove(tmpPath)
-		return err
-	}
-	return nil
-}
-
-// Writer opens a streaming cache writer for the given hash.
-func (c *DiskCache) Writer(hash []byte) (CacheWriter, error) {
-	finalPath := c.path(hash)
-	if _, err := os.Stat(finalPath); err == nil {
-		return &noopWriter{}, nil
-	}
-
-	tmp, err := os.CreateTemp(c.dir, "cache-*")
-	if err != nil {
-		return nil, err
-	}
-	return &diskCacheWriter{
-		file:      tmp,
-		tmpPath:   tmp.Name(),
-		finalPath: finalPath,
-	}, nil
-}
-
-func (c *DiskCache) path(hash []byte) string {
-	return filepath.Join(c.dir, hex.EncodeToString(hash))
-}
-
-type diskCacheWriter struct {
-	file      *os.File
-	tmpPath   string
-	finalPath string
-}
-
-func (w *diskCacheWriter) Write(p []byte) (int, error) {
-	return w.file.Write(p)
-}
-
-func (w *diskCacheWriter) Commit() error {
-	if err := w.file.Close(); err != nil {
-		_ = os.Remove(w.tmpPath)
-		return err
-	}
-	if err := os.Rename(w.tmpPath, w.finalPath); err != nil {
-		_ = os.Remove(w.tmpPath)
-		return err
-	}
-	return nil
-}
-
-func (w *diskCacheWriter) Discard() error {
-	if w.file != nil {
-		_ = w.file.Close()
-	}
-	return os.Remove(w.tmpPath)
-}
-
-type noopWriter struct{}
-
-func (w *noopWriter) Write(p []byte) (int, error) { return len(p), nil }
-func (w *noopWriter) Commit() error               { return nil }
-func (w *noopWriter) Discard() error              { return nil }

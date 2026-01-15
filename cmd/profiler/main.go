@@ -21,6 +21,7 @@ import (
 	"github.com/felixge/fgprof"
 	"github.com/meigma/blob"
 	"github.com/meigma/blob/cache"
+	"github.com/meigma/blob/cache/disk"
 	"github.com/meigma/blob/internal/testutil"
 )
 
@@ -600,7 +601,10 @@ func newCache(cfg config, rootDir string) (cache.Cache, func() error, error) {
 			return nil, nil, err
 		}
 
-		c := &streamingDiskCache{DiskCache: testutil.NewDiskCache(cacheDir)}
+		c, err := disk.New(cacheDir)
+		if err != nil {
+			return nil, nil, err
+		}
 		cleanup := func() error {
 			if autoDir {
 				return os.RemoveAll(cacheDir)
@@ -611,20 +615,4 @@ func newCache(cfg config, rootDir string) (cache.Cache, func() error, error) {
 	default:
 		return nil, nil, fmt.Errorf("unknown cache: %s", cfg.cache)
 	}
-}
-
-type streamingDiskCache struct {
-	*testutil.DiskCache
-}
-
-func (c *streamingDiskCache) Writer(hash []byte) (cache.Writer, error) {
-	writer, err := c.DiskCache.Writer(hash)
-	if err != nil {
-		return nil, err
-	}
-	adapted, ok := writer.(cache.Writer)
-	if !ok {
-		return nil, fmt.Errorf("unexpected cache writer type %T", writer)
-	}
-	return adapted, nil
 }

@@ -18,6 +18,7 @@ import "io"
 // are implicitly verified—no additional integrity check is needed.
 //
 // Implementations should handle their own size limits and eviction policies.
+// Implementations must be safe for concurrent use.
 type Cache interface {
 	// Get retrieves content by its SHA256 hash.
 	// Returns nil, false if the content is not cached.
@@ -25,8 +26,6 @@ type Cache interface {
 
 	// Put stores content indexed by its SHA256 hash.
 	Put(hash []byte, content []byte) error
-
-	// Implementations must be safe for concurrent use.
 }
 
 // StreamingCache extends Cache with streaming write support for large files.

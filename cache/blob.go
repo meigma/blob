@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"io/fs"
 	"math"
-	"runtime"
 
 	"golang.org/x/sync/singleflight"
 
@@ -19,8 +18,8 @@ import (
 // the cache before fetching from the underlying source and caches content
 // after successful reads.
 //
-// Prefetch/PrefetchDir use a size-based heuristic for parallelism when unset;
-// override with WithPrefetchConcurrency to force serial or parallel behavior.
+// Prefetch/PrefetchDir run serially by default; override with
+// WithPrefetchConcurrency to force serial or parallel behavior.
 //
 // For streaming reads via Open(), caching behavior depends on the cache type:
 //   - StreamingCache: content streams to cache without full buffering
@@ -48,7 +47,7 @@ var (
 type Option func(*Blob)
 
 // WithPrefetchConcurrency sets the number of workers used for Prefetch/PrefetchDir.
-// Values < 0 force serial execution. Zero uses a size-based heuristic.
+// Values < 0 force serial execution. Zero uses the default (serial).
 // Values > 0 force a fixed worker count.
 func WithPrefetchConcurrency(workers int) Option {
 	return func(b *Blob) {
@@ -249,9 +248,7 @@ func (b *Blob) prefetchEntries(entries []*batch.Entry) error {
 
 	workers := b.prefetchWorkers
 	if workers == 0 {
-		if _, ok := b.cache.(StreamingCache); !ok {
-			workers = runtime.GOMAXPROCS(0)
-		}
+		workers = 1
 	}
 
 	var procOpts []batch.ProcessorOption
