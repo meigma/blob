@@ -16,6 +16,7 @@ import (
 	"io/fs"
 	"iter"
 
+	"github.com/meigma/blob/internal/batch"
 	"github.com/meigma/blob/internal/blobtype"
 	"github.com/meigma/blob/internal/fileops"
 	"github.com/meigma/blob/internal/index"
@@ -78,35 +79,6 @@ var (
 type ByteSource interface {
 	io.ReaderAt
 	Size() int64
-}
-
-// Option configures a Blob.
-type Option func(*Blob)
-
-// WithMaxFileSize limits the maximum per-file size (compressed and uncompressed).
-// Set limit to 0 to disable the limit.
-func WithMaxFileSize(limit uint64) Option {
-	return func(b *Blob) {
-		b.maxFileSize = limit
-	}
-}
-
-// WithMaxDecoderMemory limits the maximum memory used by the zstd decoder.
-// Set limit to 0 to disable the limit.
-func WithMaxDecoderMemory(limit uint64) Option {
-	return func(b *Blob) {
-		b.maxDecoderMemory = limit
-	}
-}
-
-// WithVerifyOnClose controls whether Close drains the file to verify the hash.
-//
-// When false, Close returns without reading the remaining data. Integrity is
-// only guaranteed when callers read to EOF.
-func WithVerifyOnClose(enabled bool) Option {
-	return func(b *Blob) {
-		b.verifyOnClose = enabled
-	}
 }
 
 // Blob provides random access to archive files.
@@ -292,6 +264,116 @@ func (b *Blob) EntriesWithPrefix(prefix string) iter.Seq[EntryView] {
 // Len returns the number of entries in the archive.
 func (b *Blob) Len() int {
 	return b.idx.Len()
+}
+
+// CopyTo extracts specific files to a destination directory.
+//
+// Files are written atomically using temp files and renames.
+// Parent directories are created as needed.
+//
+// By default:
+//   - Existing files are skipped (use CopyWithOverwrite to overwrite)
+//   - File modes and times are not preserved (use CopyWithPreserveMode/Times)
+func (b *Blob) CopyTo(destDir string, paths ...string) error {
+	if len(paths) == 0 {
+		return nil
+	}
+
+	cfg := copyConfig{}
+	return b.copyEntries(destDir, b.collectPathEntries(paths), &cfg)
+}
+
+// CopyToWithOptions extracts specific files with options.
+func (b *Blob) CopyToWithOptions(destDir string, paths []string, opts ...CopyOption) error {
+	if len(paths) == 0 {
+		return nil
+	}
+
+	cfg := copyConfig{}
+	for _, opt := range opts {
+		opt(&cfg)
+	}
+	return b.copyEntries(destDir, b.collectPathEntries(paths), &cfg)
+}
+
+// CopyDir extracts all files under a directory prefix to a destination.
+//
+// If prefix is "" or ".", all files in the archive are extracted.
+//
+// Files are written atomically using temp files and renames.
+// Parent directories are created as needed.
+//
+// By default:
+//   - Existing files are skipped (use CopyWithOverwrite to overwrite)
+//   - File modes and times are not preserved (use CopyWithPreserveMode/Times)
+func (b *Blob) CopyDir(destDir, prefix string, opts ...CopyOption) error {
+	cfg := copyConfig{}
+	for _, opt := range opts {
+		opt(&cfg)
+	}
+	return b.copyEntries(destDir, b.collectPrefixEntries(prefix), &cfg)
+}
+
+// collectPathEntries collects entries for specific paths.
+func (b *Blob) collectPathEntries(paths []string) []*batch.Entry {
+	entries := make([]*batch.Entry, 0, len(paths))
+	for _, path := range paths {
+		if !fs.ValidPath(path) {
+			continue
+		}
+		view, ok := b.idx.LookupView(path)
+		if !ok {
+			continue
+		}
+		entry := blobtype.EntryFromViewWithPath(view, path)
+		entries = append(entries, &entry)
+	}
+	return entries
+}
+
+// collectPrefixEntries collects all entries under a prefix.
+func (b *Blob) collectPrefixEntries(prefix string) []*batch.Entry {
+	if prefix != "" && prefix != "." && !fs.ValidPath(prefix) {
+		return nil
+	}
+
+	var dirPrefix string
+	if prefix == "" || prefix == "." {
+		dirPrefix = ""
+	} else {
+		dirPrefix = pathutil.DirPrefix(prefix)
+	}
+
+	var entries []*batch.Entry //nolint:prealloc // size unknown until iteration
+	for view := range b.idx.EntriesWithPrefixView(dirPrefix) {
+		entry := blobtype.EntryFromViewWithPath(view, view.Path())
+		entries = append(entries, &entry)
+	}
+	return entries
+}
+
+// copyEntries uses the batch processor to copy entries to destDir.
+func (b *Blob) copyEntries(destDir string, entries []*batch.Entry, cfg *copyConfig) error {
+	if len(entries) == 0 {
+		return nil
+	}
+
+	// Create file sink with options
+	sinkOpts := []batch.FileSinkOption{
+		batch.WithOverwrite(cfg.overwrite),
+		batch.WithPreserveMode(cfg.preserveMode),
+		batch.WithPreserveTimes(cfg.preserveTimes),
+	}
+	sink := batch.NewFileSink(destDir, sinkOpts...)
+
+	// Create processor with options
+	var procOpts []batch.ProcessorOption
+	if cfg.workers != 0 {
+		procOpts = append(procOpts, batch.WithWorkers(cfg.workers))
+	}
+	proc := batch.NewProcessor(b.ops.Source(), b.ops.Pool(), b.maxFileSize, procOpts...)
+
+	return proc.Process(entries, sink)
 }
 
 // openDir implements fs.File and fs.ReadDirFile for directories.

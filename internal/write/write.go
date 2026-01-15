@@ -1,4 +1,4 @@
-package writeops
+package write
 
 import (
 	"context"
@@ -14,27 +14,12 @@ import (
 	"github.com/meigma/blob/internal/ioutil"
 )
 
-// Ops handles writing file content with hashing and optional compression.
-type Ops struct {
-	encoder *zstd.Encoder
-	buf     []byte
-}
-
-// Option configures an Ops instance.
-type Option func(*Ops)
-
-// New creates a new Ops instance for writing files.
-// If compression is enabled, pass a non-nil encoder.
-func New(enc *zstd.Encoder) *Ops {
-	return &Ops{
-		encoder: enc,
-		buf:     make([]byte, 32*1024),
-	}
-}
-
-// WriteFile streams a file through the hash and optional compression pipeline.
+// File streams a file through the hash and optional compression pipeline.
 // Returns (dataSize, originalSize, hash, error).
-func (o *Ops) WriteFile(ctx context.Context, f *os.File, w io.Writer, compression blobtype.Compression, expectedSize int64) (dataSize, originalSize uint64, hash []byte, err error) {
+//
+// The encoder and buf are reused across calls for performance. Pass nil encoder
+// for uncompressed writes. The buf should be at least 32KB for efficient copying.
+func File(ctx context.Context, f *os.File, w io.Writer, enc *zstd.Encoder, buf []byte, compression blobtype.Compression, expectedSize int64) (dataSize, originalSize uint64, hash []byte, err error) {
 	if expectedSize < 0 {
 		return 0, 0, nil, errors.New("negative file size")
 	}
@@ -45,17 +30,17 @@ func (o *Ops) WriteFile(ctx context.Context, f *os.File, w io.Writer, compressio
 
 	if compression == blobtype.CompressionNone {
 		// Stream: file → TeeReader(hasher) → countingWriter(data)
-		if _, err := ioutil.CopyWithContext(ctx, cw, io.TeeReader(cr, hasher), o.buf); err != nil {
+		if _, err := ioutil.CopyWithContext(ctx, cw, io.TeeReader(cr, hasher), buf); err != nil {
 			return 0, 0, nil, wrapOverflowErr(err)
 		}
 	} else {
 		// Stream: file → TeeReader(hasher) → zstd encoder → countingWriter(data)
-		o.encoder.Reset(cw)
-		if _, err := ioutil.CopyWithContext(ctx, o.encoder, io.TeeReader(cr, hasher), o.buf); err != nil {
-			o.encoder.Close()
+		enc.Reset(cw)
+		if _, err := ioutil.CopyWithContext(ctx, enc, io.TeeReader(cr, hasher), buf); err != nil {
+			enc.Close()
 			return 0, 0, nil, wrapOverflowErr(err)
 		}
-		if err := o.encoder.Close(); err != nil {
+		if err := enc.Close(); err != nil {
 			return 0, 0, nil, fmt.Errorf("close zstd encoder: %w", err)
 		}
 	}

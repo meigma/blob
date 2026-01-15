@@ -1,4 +1,4 @@
-package writeops
+package write
 
 import (
 	"fmt"

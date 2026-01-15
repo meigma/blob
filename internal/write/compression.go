@@ -1,5 +1,5 @@
-// Package writeops provides internal file writing operations for the blob package.
-package writeops
+// Package write provides internal file writing operations for the blob package.
+package write
 
 import (
 	"io/fs"

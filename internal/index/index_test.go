@@ -1,115 +1,38 @@
-package blob
+package index
 
 import (
 	"io/fs"
-	"slices"
-	"strings"
 	"testing"
 	"time"
 
-	flatbuffers "github.com/google/flatbuffers/go"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/meigma/blob/internal/fb"
-	"github.com/meigma/blob/internal/index"
+	"github.com/meigma/blob/internal/blobtype"
+	"github.com/meigma/blob/internal/testutil"
 )
-
-// testEntry holds data for building test index entries.
-type testEntry struct {
-	Path         string
-	DataOffset   uint64
-	DataSize     uint64
-	OriginalSize uint64
-	Hash         []byte
-	Mode         fs.FileMode
-	UID          uint32
-	GID          uint32
-	ModTime      time.Time
-	Compression  Compression
-}
-
-// buildTestIndex creates a FlatBuffers-encoded index from test entries.
-// Entries are automatically sorted by path (required for binary search).
-func buildTestIndex(tb testing.TB, entries []testEntry) []byte {
-	tb.Helper()
-
-	// Sort entries by path (required for EntriesByKey to work)
-	slices.SortFunc(entries, func(a, b testEntry) int {
-		return strings.Compare(a.Path, b.Path)
-	})
-
-	builder := flatbuffers.NewBuilder(1024)
-
-	// Build entries in reverse order (FlatBuffers requirement)
-	entryOffsets := make([]flatbuffers.UOffsetT, len(entries))
-	for i := len(entries) - 1; i >= 0; i-- {
-		e := entries[i]
-
-		// Create path string
-		pathOffset := builder.CreateString(e.Path)
-
-		// Create hash vector
-		fb.EntryStartHashVector(builder, len(e.Hash))
-		for j := len(e.Hash) - 1; j >= 0; j-- {
-			builder.PrependByte(e.Hash[j])
-		}
-		hashOffset := builder.EndVector(len(e.Hash))
-
-		// Build entry
-		fb.EntryStart(builder)
-		fb.EntryAddPath(builder, pathOffset)
-		fb.EntryAddDataOffset(builder, e.DataOffset)
-		fb.EntryAddDataSize(builder, e.DataSize)
-		fb.EntryAddOriginalSize(builder, e.OriginalSize)
-		fb.EntryAddHash(builder, hashOffset)
-		fb.EntryAddMode(builder, uint32(e.Mode))
-		fb.EntryAddUid(builder, e.UID)
-		fb.EntryAddGid(builder, e.GID)
-		fb.EntryAddMtimeNs(builder, e.ModTime.UnixNano())
-		fb.EntryAddCompression(builder, fb.Compression(e.Compression))
-		entryOffsets[i] = fb.EntryEnd(builder)
-	}
-
-	// Create entries vector (must be in sorted order for binary search)
-	fb.IndexStartEntriesVector(builder, len(entries))
-	for i := len(entryOffsets) - 1; i >= 0; i-- {
-		builder.PrependUOffsetT(entryOffsets[i])
-	}
-	entriesOffset := builder.EndVector(len(entries))
-
-	// Build index
-	fb.IndexStart(builder)
-	fb.IndexAddVersion(builder, 1)
-	fb.IndexAddHashAlgorithm(builder, fb.HashAlgorithmSHA256)
-	fb.IndexAddEntries(builder, entriesOffset)
-	indexOffset := fb.IndexEnd(builder)
-
-	builder.Finish(indexOffset)
-	return builder.FinishedBytes()
-}
 
 // mustLoadIndex loads an index or fails the test.
 // Returns the internal index for testing index-specific behavior.
-func mustLoadIndex(tb testing.TB, data []byte) *index.Index {
+func mustLoadIndex(tb testing.TB, data []byte) *Index {
 	tb.Helper()
-	idx, err := index.Load(data)
-	require.NoError(tb, err, "index.Load failed")
+	idx, err := Load(data)
+	require.NoError(tb, err, "Load failed")
 	return idx
 }
 
-func TestLoadIndex(t *testing.T) {
+func TestLoad(t *testing.T) {
 	t.Parallel()
 
 	t.Run("empty data", func(t *testing.T) {
 		t.Parallel()
-		_, err := index.Load(nil)
+		_, err := Load(nil)
 		assert.Error(t, err, "expected error for empty data")
 	})
 
 	t.Run("valid index", func(t *testing.T) {
 		t.Parallel()
-		data := buildTestIndex(t, []testEntry{
+		data := testutil.BuildTestIndex(t, []testutil.TestEntry{
 			{Path: "test.txt", DataOffset: 0, DataSize: 100},
 		})
 		idx := mustLoadIndex(t, data)
@@ -120,12 +43,12 @@ func TestLoadIndex(t *testing.T) {
 func TestIndexLookup(t *testing.T) {
 	t.Parallel()
 
-	entries := []testEntry{
+	entries := []testutil.TestEntry{
 		{Path: "a/file1.txt", DataOffset: 0, DataSize: 100, OriginalSize: 100},
 		{Path: "a/file2.txt", DataOffset: 100, DataSize: 200, OriginalSize: 200},
 		{Path: "b/file3.txt", DataOffset: 300, DataSize: 150, OriginalSize: 150},
 	}
-	data := buildTestIndex(t, entries)
+	data := testutil.BuildTestIndex(t, entries)
 	idx := mustLoadIndex(t, data)
 
 	t.Run("existing path", func(t *testing.T) {
@@ -155,12 +78,12 @@ func TestIndexLookup(t *testing.T) {
 func TestIndexEntries(t *testing.T) {
 	t.Parallel()
 
-	entries := []testEntry{
+	entries := []testutil.TestEntry{
 		{Path: "c.txt", DataOffset: 200},
 		{Path: "a.txt", DataOffset: 0},
 		{Path: "b.txt", DataOffset: 100},
 	}
-	data := buildTestIndex(t, entries) // buildTestIndex sorts them
+	data := testutil.BuildTestIndex(t, entries) // BuildTestIndex sorts them
 	idx := mustLoadIndex(t, data)
 
 	expected := []string{"a.txt", "b.txt", "c.txt"}
@@ -175,7 +98,7 @@ func TestIndexEntries(t *testing.T) {
 func TestIndexEntriesWithPrefix(t *testing.T) {
 	t.Parallel()
 
-	entries := []testEntry{
+	entries := []testutil.TestEntry{
 		{Path: "assets/css/main.css"},
 		{Path: "assets/css/reset.css"},
 		{Path: "assets/images/logo.png"},
@@ -183,7 +106,7 @@ func TestIndexEntriesWithPrefix(t *testing.T) {
 		{Path: "src/main.go"},
 		{Path: "src/util/helper.go"},
 	}
-	data := buildTestIndex(t, entries)
+	data := testutil.BuildTestIndex(t, entries)
 	idx := mustLoadIndex(t, data)
 
 	tests := []struct {
@@ -246,7 +169,7 @@ func TestIndexEntryMetadata(t *testing.T) {
 		0x19, 0x1a, 0x1b, 0x1c, 0x1d, 0x1e, 0x1f, 0x20,
 	}
 
-	entries := []testEntry{
+	entries := []testutil.TestEntry{
 		{
 			Path:         "test.txt",
 			DataOffset:   1000,
@@ -257,10 +180,10 @@ func TestIndexEntryMetadata(t *testing.T) {
 			UID:          1000,
 			GID:          1000,
 			ModTime:      modTime,
-			Compression:  CompressionZstd,
+			Compression:  blobtype.CompressionZstd,
 		},
 	}
-	data := buildTestIndex(t, entries)
+	data := testutil.BuildTestIndex(t, entries)
 	idx := mustLoadIndex(t, data)
 
 	view, ok := idx.LookupView("test.txt")
@@ -275,13 +198,13 @@ func TestIndexEntryMetadata(t *testing.T) {
 	assert.Equal(t, uint32(1000), view.UID())
 	assert.Equal(t, uint32(1000), view.GID())
 	assert.True(t, view.ModTime().Equal(modTime), "ModTime mismatch: expected %v, got %v", modTime, view.ModTime())
-	assert.Equal(t, CompressionZstd, view.Compression())
+	assert.Equal(t, blobtype.CompressionZstd, view.Compression())
 }
 
 func TestIndexVersion(t *testing.T) {
 	t.Parallel()
 
-	data := buildTestIndex(t, []testEntry{{Path: "test.txt"}})
+	data := testutil.BuildTestIndex(t, []testutil.TestEntry{{Path: "test.txt"}})
 	idx := mustLoadIndex(t, data)
 
 	assert.Equal(t, uint32(1), idx.Version())

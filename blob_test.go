@@ -11,9 +11,10 @@ import (
 	"testing"
 
 	"github.com/klauspost/compress/zstd"
-	"github.com/meigma/blob/internal/testutil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/meigma/blob/internal/testutil"
 )
 
 // createTestArchive creates a Blob for testing.
@@ -415,7 +416,7 @@ func TestBlobCompressedDecompression(t *testing.T) {
 	enc.Close()
 
 	// Build test index manually with compressed entry
-	entries := []testEntry{
+	entries := []testutil.TestEntry{
 		{
 			Path:         "test.txt",
 			DataOffset:   0,
@@ -426,7 +427,7 @@ func TestBlobCompressedDecompression(t *testing.T) {
 			Compression:  CompressionZstd,
 		},
 	}
-	indexData := buildTestIndex(t, entries)
+	indexData := testutil.BuildTestIndex(t, entries)
 
 	source := testutil.NewMockByteSource(compressed)
 	b, err := New(indexData, source)

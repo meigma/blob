@@ -13,72 +13,12 @@ import (
 	"github.com/klauspost/compress/zstd"
 
 	"github.com/meigma/blob/internal/fb"
-	"github.com/meigma/blob/internal/writeops"
+	"github.com/meigma/blob/internal/platform"
+	"github.com/meigma/blob/internal/write"
 )
 
 // DefaultMaxFiles is the default limit used when no MaxFiles option is set.
 const DefaultMaxFiles = 200_000
-
-// ChangeDetection controls how strictly file changes are detected during creation.
-type ChangeDetection uint8
-
-const (
-	ChangeDetectionNone ChangeDetection = iota
-	ChangeDetectionStrict
-)
-
-// SkipCompressionFunc returns true when a file should be stored uncompressed.
-// It is called once per file and should be inexpensive.
-type SkipCompressionFunc = writeops.SkipCompressionFunc
-
-// DefaultSkipCompression returns a SkipCompressionFunc that skips small files
-// and known already-compressed extensions.
-var DefaultSkipCompression = writeops.DefaultSkipCompression
-
-// createConfig holds configuration for archive creation.
-type createConfig struct {
-	compression     Compression
-	changeDetection ChangeDetection
-	skipCompression []SkipCompressionFunc
-	maxFiles        int
-}
-
-// CreateOption configures archive creation.
-type CreateOption func(*createConfig)
-
-// CreateWithCompression sets the compression algorithm to use.
-// Use CompressionNone to store files uncompressed, CompressionZstd for zstd.
-func CreateWithCompression(c Compression) CreateOption {
-	return func(cfg *createConfig) {
-		cfg.compression = c
-	}
-}
-
-// CreateWithChangeDetection controls whether the writer verifies files did not change
-// during archive creation. The zero value disables change detection to reduce
-// syscalls; enable ChangeDetectionStrict for stronger guarantees.
-func CreateWithChangeDetection(cd ChangeDetection) CreateOption {
-	return func(cfg *createConfig) {
-		cfg.changeDetection = cd
-	}
-}
-
-// CreateWithSkipCompression adds predicates that decide to store a file uncompressed.
-// If any predicate returns true, compression is skipped for that file.
-// These checks are on the hot path, so keep them cheap.
-func CreateWithSkipCompression(fns ...SkipCompressionFunc) CreateOption {
-	return func(cfg *createConfig) {
-		cfg.skipCompression = append(cfg.skipCompression, fns...)
-	}
-}
-
-// CreateWithMaxFiles limits the number of files included in the archive.
-// Zero uses DefaultMaxFiles. Negative means no limit.
-func CreateWithMaxFiles(n int) CreateOption {
-	return func(cfg *createConfig) {
-		cfg.maxFiles = n
-	}
-}
 
 // Create builds an archive from the contents of dir.
 //
@@ -132,19 +72,18 @@ func (w *writer) writeData(ctx context.Context, root *os.Root, data io.Writer) (
 		maxFiles = DefaultMaxFiles
 	}
 
-	var ops *writeops.Ops
+	var enc *zstd.Encoder
 	if w.cfg.compression != CompressionNone {
-		enc, err := zstd.NewWriter(io.Discard, zstd.WithEncoderConcurrency(1), zstd.WithLowerEncoderMem(true))
+		var err error
+		enc, err = zstd.NewWriter(io.Discard, zstd.WithEncoderConcurrency(1), zstd.WithLowerEncoderMem(true))
 		if err != nil {
 			return nil, fmt.Errorf("create zstd encoder: %w", err)
 		}
-		ops = writeops.New(enc)
-	} else {
-		ops = writeops.New(nil)
 	}
+	buf := make([]byte, 32*1024)
 
 	err := fs.WalkDir(root.FS(), ".", func(path string, d fs.DirEntry, walkErr error) error {
-		entry, skip, err := w.processEntry(ctx, root, data, ops, path, d, walkErr, strict, maxFiles, len(entries))
+		entry, skip, err := w.processEntry(ctx, root, data, enc, buf, path, d, walkErr, strict, maxFiles, len(entries))
 		if err != nil || skip {
 			return err
 		}
@@ -166,7 +105,7 @@ func (w *writer) writeData(ctx context.Context, root *os.Root, data io.Writer) (
 // processEntry handles a single directory entry during archive creation.
 //
 //nolint:gocritic // unnamedResult is acceptable for this internal helper
-func (w *writer) processEntry(ctx context.Context, root *os.Root, data io.Writer, ops *writeops.Ops, path string, d fs.DirEntry, walkErr error, strict bool, maxFiles, count int) (Entry, bool, error) {
+func (w *writer) processEntry(ctx context.Context, root *os.Root, data io.Writer, enc *zstd.Encoder, buf []byte, path string, d fs.DirEntry, walkErr error, strict bool, maxFiles, count int) (Entry, bool, error) {
 	if walkErr != nil {
 		return Entry{}, false, walkErr
 	}
@@ -178,7 +117,7 @@ func (w *writer) processEntry(ctx context.Context, root *os.Root, data io.Writer
 	}
 
 	fsPath := filepath.FromSlash(path)
-	info, ok, err := writeops.ResolveEntryInfo(root, fsPath, d, strict)
+	info, ok, err := write.ResolveEntryInfo(root, fsPath, d, strict)
 	if err != nil {
 		return Entry{}, false, err
 	}
@@ -190,9 +129,9 @@ func (w *writer) processEntry(ctx context.Context, root *os.Root, data io.Writer
 		return Entry{}, false, ErrTooManyFiles
 	}
 
-	entry, err := w.writeEntry(ctx, root, data, ops, path, fsPath, info, strict)
+	entry, err := w.writeEntry(ctx, root, data, enc, buf, path, fsPath, info, strict)
 	if err != nil {
-		if errors.Is(err, ErrSymlink) {
+		if errors.Is(err, platform.ErrSymlink) {
 			return Entry{}, true, nil
 		}
 		return Entry{}, false, err
@@ -201,8 +140,8 @@ func (w *writer) processEntry(ctx context.Context, root *os.Root, data io.Writer
 	return entry, false, nil
 }
 
-func (w *writer) writeEntry(ctx context.Context, root *os.Root, data io.Writer, ops *writeops.Ops, path, fsPath string, info fs.FileInfo, strict bool) (Entry, error) {
-	f, err := openFileNoFollow(root, fsPath)
+func (w *writer) writeEntry(ctx context.Context, root *os.Root, data io.Writer, enc *zstd.Encoder, buf []byte, path, fsPath string, info fs.FileInfo, strict bool) (Entry, error) {
+	f, err := platform.OpenFileNoFollow(root, fsPath)
 	if err != nil {
 		return Entry{}, err
 	}
@@ -215,12 +154,12 @@ func (w *writer) writeEntry(ctx context.Context, root *os.Root, data io.Writer, 
 	if !finfo.Mode().IsRegular() {
 		return Entry{}, fmt.Errorf("not a regular file: %s", path)
 	}
-	if validateErr := writeops.ValidateFileInfo(path, info, finfo, strict); validateErr != nil {
+	if validateErr := write.ValidateFileInfo(path, info, finfo, strict); validateErr != nil {
 		return Entry{}, validateErr
 	}
 
 	compression := w.cfg.compression
-	if compression != CompressionNone && writeops.ShouldSkip(path, finfo, w.cfg.skipCompression) {
+	if compression != CompressionNone && write.ShouldSkip(path, finfo, w.cfg.skipCompression) {
 		compression = CompressionNone
 	}
 
@@ -228,16 +167,16 @@ func (w *writer) writeEntry(ctx context.Context, root *os.Root, data io.Writer, 
 		return Entry{}, fmt.Errorf("negative file size: %s", path)
 	}
 
-	dataSize, originalSize, hash, err := ops.WriteFile(ctx, f, data, compression, finfo.Size())
+	dataSize, originalSize, hash, err := write.File(ctx, f, data, enc, buf, compression, finfo.Size())
 	if err != nil {
 		return Entry{}, fmt.Errorf("write %s: %w", path, err)
 	}
 
-	if err := writeops.CheckFileUnchanged(f, path, finfo, strict); err != nil {
+	if err := write.CheckFileUnchanged(f, path, finfo, strict); err != nil {
 		return Entry{}, err
 	}
 
-	uid, gid := fileOwner(finfo)
+	uid, gid := platform.FileOwner(finfo)
 	return Entry{
 		Path:         path,
 		DataSize:     dataSize,
