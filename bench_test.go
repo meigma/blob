@@ -4,13 +4,20 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"io"
 	"io/fs"
 	"math/rand"
+	nethttp "net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"runtime"
+	"strconv"
+	"strings"
 	"testing"
+	"time"
 
+	blobhttp "github.com/meigma/blob/http"
 	"github.com/meigma/blob/internal/blobtype"
 	"github.com/meigma/blob/internal/index"
 	"github.com/meigma/blob/internal/testutil"
@@ -253,25 +260,99 @@ func BenchmarkBlobReadFile(b *testing.B) {
 				b.Run(name, func(b *testing.B) {
 					dir := b.TempDir()
 					paths := makeBenchFiles(b, dir, bc.fileCount, bc.fileSize, pattern)
-					blob := createBenchBlob(b, dir, compression)
+					indexData, dataData := createBenchArchive(b, dir, compression)
 
-					if bc.fileSize > 0 {
-						b.SetBytes(int64(bc.fileSize))
-					}
+					for _, source := range benchSources() {
+						run := func(b *testing.B) {
+							byteSource, cleanup, err := source.new(b, dataData)
+							if err != nil {
+								b.Fatal(err)
+							}
+							if cleanup != nil {
+								defer cleanup()
+							}
 
-					b.ReportAllocs()
-					b.ResetTimer()
-					for i := 0; b.Loop(); i++ {
-						path := paths[i%len(paths)]
-						content, err := blob.ReadFile(path)
-						if err != nil {
-							b.Fatal(err)
+							blob, err := New(indexData, byteSource)
+							if err != nil {
+								b.Fatal(err)
+							}
+
+							if bc.fileSize > 0 {
+								b.SetBytes(int64(bc.fileSize))
+							}
+
+							b.ReportAllocs()
+							b.ResetTimer()
+							for i := 0; b.Loop(); i++ {
+								path := paths[i%len(paths)]
+								content, err := blob.ReadFile(path)
+								if err != nil {
+									b.Fatal(err)
+								}
+								benchSinkBytes = content
+							}
 						}
-						benchSinkBytes = content
+
+						if source.name == "" {
+							run(b)
+						} else {
+							b.Run(source.name, run)
+						}
 					}
 				})
 			}
 		}
+	}
+}
+
+func BenchmarkBlobReadFileHTTPMatrix(b *testing.B) {
+	if !benchHTTPEnabled() {
+		b.Skip("BLOB_BENCH_HTTP not set")
+	}
+
+	cases := []struct {
+		name string
+		cfg  benchHTTPConfig
+	}{
+		{name: "latency=0/bps=unlimited", cfg: benchHTTPConfig{}},
+		{name: "latency=5ms/bps=10MBps", cfg: benchHTTPConfig{latency: 5 * time.Millisecond, bytesPerSecond: 10 * 1024 * 1024}},
+		{name: "latency=20ms/bps=2MBps", cfg: benchHTTPConfig{latency: 20 * time.Millisecond, bytesPerSecond: 2 * 1024 * 1024}},
+	}
+
+	const fileCount = 64
+	const fileSize = 64 << 10
+
+	dir := b.TempDir()
+	paths := makeBenchFiles(b, dir, fileCount, fileSize, benchPatternCompressible)
+	indexData, dataData := createBenchArchive(b, dir, CompressionZstd)
+
+	for _, bc := range cases {
+		b.Run(bc.name, func(b *testing.B) {
+			source, cleanup, err := newBenchHTTPSourceWithConfig(b, dataData, bc.cfg)
+			if err != nil {
+				b.Fatal(err)
+			}
+			if cleanup != nil {
+				defer cleanup()
+			}
+
+			blob, err := New(indexData, source)
+			if err != nil {
+				b.Fatal(err)
+			}
+
+			b.SetBytes(fileSize)
+			b.ReportAllocs()
+			b.ResetTimer()
+			for i := 0; b.Loop(); i++ {
+				path := paths[i%len(paths)]
+				content, err := blob.ReadFile(path)
+				if err != nil {
+					b.Fatal(err)
+				}
+				benchSinkBytes = content
+			}
+		})
 	}
 }
 
@@ -317,6 +398,77 @@ func BenchmarkBlobReadFileDecoderOptions(b *testing.B) {
 				}
 			})
 		}
+	}
+}
+
+func BenchmarkBlobCopyDirHTTPMatrix(b *testing.B) {
+	if !benchHTTPEnabled() {
+		b.Skip("BLOB_BENCH_HTTP not set")
+	}
+
+	cases := []struct {
+		name string
+		cfg  benchHTTPConfig
+	}{
+		{name: "latency=0/bps=unlimited", cfg: benchHTTPConfig{}},
+		{name: "latency=5ms/bps=10MBps", cfg: benchHTTPConfig{latency: 5 * time.Millisecond, bytesPerSecond: 10 * 1024 * 1024}},
+		{name: "latency=20ms/bps=2MBps", cfg: benchHTTPConfig{latency: 20 * time.Millisecond, bytesPerSecond: 2 * 1024 * 1024}},
+	}
+
+	const fileCount = 512
+	const fileSize = 16 << 10
+	const prefix = "dir00"
+
+	dir := b.TempDir()
+	makeBenchFiles(b, dir, fileCount, fileSize, benchPatternCompressible)
+	indexData, dataData := createBenchArchive(b, dir, CompressionZstd)
+
+	dirEntries := countBenchDirEntries(fileCount, benchDirCount)
+	totalBytes := int64(dirEntries * fileSize)
+
+	for _, bc := range cases {
+		b.Run(bc.name, func(b *testing.B) {
+			source, cleanup, err := newBenchHTTPSourceWithConfig(b, dataData, bc.cfg)
+			if err != nil {
+				b.Fatal(err)
+			}
+			if cleanup != nil {
+				defer cleanup()
+			}
+
+			blob, err := New(indexData, source)
+			if err != nil {
+				b.Fatal(err)
+			}
+
+			if totalBytes > 0 {
+				b.SetBytes(totalBytes)
+			}
+
+			destRoot := b.TempDir()
+			opts := []CopyOption{CopyWithCleanDest(true)}
+
+			b.ReportAllocs()
+			b.ResetTimer()
+			for i := 0; b.Loop(); i++ {
+				b.StopTimer()
+				destDir := filepath.Join(destRoot, fmt.Sprintf("iter-%d", i))
+				if err := os.MkdirAll(destDir, 0o755); err != nil {
+					b.Fatal(err)
+				}
+				b.StartTimer()
+
+				if err := blob.CopyDir(destDir, prefix, opts...); err != nil {
+					b.Fatal(err)
+				}
+
+				b.StopTimer()
+				if err := os.RemoveAll(destDir); err != nil {
+					b.Fatal(err)
+				}
+				b.StartTimer()
+			}
+		})
 	}
 }
 
@@ -625,43 +777,67 @@ func benchmarkBlobCopyDir(b *testing.B, label string, workers int, cleanDest boo
 		b.Run(fmt.Sprintf("%s/%s", label, bc.name), func(b *testing.B) {
 			dir := b.TempDir()
 			makeBenchFiles(b, dir, bc.fileCount, bc.fileSize, bc.pattern)
-			blob := createBenchBlob(b, dir, bc.compression)
+			indexData, dataData := createBenchArchive(b, dir, bc.compression)
 
 			dirEntries := countBenchDirEntries(bc.fileCount, benchDirCount)
 			totalBytes := int64(dirEntries * bc.fileSize)
-			if totalBytes > 0 {
-				b.SetBytes(totalBytes)
-			}
 
-			destRoot := b.TempDir()
+			for _, source := range benchSources() {
+				run := func(b *testing.B) {
+					byteSource, cleanup, err := source.new(b, dataData)
+					if err != nil {
+						b.Fatal(err)
+					}
+					if cleanup != nil {
+						defer cleanup()
+					}
 
-			b.ReportAllocs()
-			b.ResetTimer()
-			for i := 0; b.Loop(); i++ {
-				b.StopTimer()
-				destDir := filepath.Join(destRoot, fmt.Sprintf("iter-%d", i))
-				if err := os.MkdirAll(destDir, 0o755); err != nil {
-					b.Fatal(err)
-				}
-				b.StartTimer()
+					blob, err := New(indexData, byteSource)
+					if err != nil {
+						b.Fatal(err)
+					}
 
-				opts := []CopyOption{}
-				if workers != 0 {
-					opts = append(opts, CopyWithWorkers(workers))
-				}
-				if cleanDest {
-					opts = append(opts, CopyWithCleanDest(true))
+					if totalBytes > 0 {
+						b.SetBytes(totalBytes)
+					}
+
+					destRoot := b.TempDir()
+
+					b.ReportAllocs()
+					b.ResetTimer()
+					for i := 0; b.Loop(); i++ {
+						b.StopTimer()
+						destDir := filepath.Join(destRoot, fmt.Sprintf("iter-%d", i))
+						if err := os.MkdirAll(destDir, 0o755); err != nil {
+							b.Fatal(err)
+						}
+						b.StartTimer()
+
+						opts := []CopyOption{}
+						if workers != 0 {
+							opts = append(opts, CopyWithWorkers(workers))
+						}
+						if cleanDest {
+							opts = append(opts, CopyWithCleanDest(true))
+						}
+
+						if err := blob.CopyDir(destDir, prefix, opts...); err != nil {
+							b.Fatal(err)
+						}
+
+						b.StopTimer()
+						if err := os.RemoveAll(destDir); err != nil {
+							b.Fatal(err)
+						}
+						b.StartTimer()
+					}
 				}
 
-				if err := blob.CopyDir(destDir, prefix, opts...); err != nil {
-					b.Fatal(err)
+				if source.name == "" {
+					run(b)
+				} else {
+					b.Run(source.name, run)
 				}
-
-				b.StopTimer()
-				if err := os.RemoveAll(destDir); err != nil {
-					b.Fatal(err)
-				}
-				b.StartTimer()
 			}
 		})
 	}
@@ -711,6 +887,210 @@ func countBenchDirEntries(fileCount, dirCount int) int {
 	return (fileCount + dirCount - 1) / dirCount
 }
 
+type benchSource struct {
+	name string
+	new  func(b *testing.B, data []byte) (ByteSource, func(), error)
+}
+
+func benchSources() []benchSource {
+	sources := []benchSource{
+		{
+			new: func(_ *testing.B, data []byte) (ByteSource, func(), error) {
+				return testutil.NewMockByteSource(data), nil, nil
+			},
+		},
+	}
+
+	if !benchHTTPEnabled() {
+		return sources
+	}
+
+	sources = append(sources, benchSource{
+		name: "source=http",
+		new:  newBenchHTTPSource,
+	})
+	return sources
+}
+
+func benchHTTPEnabled() bool {
+	return os.Getenv("BLOB_BENCH_HTTP") != ""
+}
+
+func newBenchHTTPSource(b *testing.B, data []byte) (ByteSource, func(), error) {
+	cfg, err := benchHTTPConfigFromEnv()
+	if err != nil {
+		return nil, nil, err
+	}
+	return newBenchHTTPSourceWithConfig(b, data, cfg)
+}
+
+func newBenchHTTPSourceWithConfig(b *testing.B, data []byte, cfg benchHTTPConfig) (ByteSource, func(), error) {
+	client := benchHTTPClient(cfg)
+
+	server := httptest.NewServer(nethttp.HandlerFunc(func(w nethttp.ResponseWriter, r *nethttp.Request) {
+		nethttp.ServeContent(w, r, "data", time.Time{}, bytes.NewReader(data))
+	}))
+
+	src, err := blobhttp.NewSource(server.URL, blobhttp.WithClient(client))
+	if err != nil {
+		server.Close()
+		return nil, nil, err
+	}
+
+	cleanup := func() {
+		server.Close()
+	}
+	return src, cleanup, nil
+}
+
+type benchHTTPConfig struct {
+	latency        time.Duration
+	bytesPerSecond int64
+}
+
+func benchHTTPClient(cfg benchHTTPConfig) *nethttp.Client {
+	transport := nethttp.DefaultTransport
+	if base, ok := transport.(*nethttp.Transport); ok {
+		transport = base.Clone()
+	}
+	if cfg.latency > 0 || cfg.bytesPerSecond > 0 {
+		transport = &benchHTTPRoundTripper{
+			base:           transport,
+			latency:        cfg.latency,
+			bytesPerSecond: cfg.bytesPerSecond,
+		}
+	}
+	return &nethttp.Client{Transport: transport}
+}
+
+func benchHTTPConfigFromEnv() (benchHTTPConfig, error) {
+	var cfg benchHTTPConfig
+	if value := strings.TrimSpace(os.Getenv("BLOB_HTTP_LATENCY")); value != "" {
+		latency, err := time.ParseDuration(value)
+		if err != nil {
+			return cfg, fmt.Errorf("BLOB_HTTP_LATENCY: %w", err)
+		}
+		cfg.latency = latency
+	}
+	if value := strings.TrimSpace(os.Getenv("BLOB_HTTP_BPS")); value != "" {
+		bps, err := parseBenchBytesPerSecond(value)
+		if err != nil {
+			return cfg, fmt.Errorf("BLOB_HTTP_BPS: %w", err)
+		}
+		cfg.bytesPerSecond = bps
+	}
+	return cfg, nil
+}
+
+func parseBenchBytesPerSecond(value string) (int64, error) {
+	text := strings.TrimSpace(value)
+	text = strings.TrimSuffix(text, "Bps")
+	text = strings.TrimSuffix(text, "bps")
+	text = strings.TrimSuffix(text, "/s")
+	text = strings.TrimSpace(text)
+	if text == "" {
+		return 0, fmt.Errorf("invalid bytes-per-second %q", value)
+	}
+
+	lower := strings.ToLower(text)
+	multiplier := int64(1)
+	switch {
+	case strings.HasSuffix(lower, "kb"):
+		multiplier = 1024
+		text = text[:len(text)-2]
+	case strings.HasSuffix(lower, "k"):
+		multiplier = 1024
+		text = text[:len(text)-1]
+	case strings.HasSuffix(lower, "mb"):
+		multiplier = 1024 * 1024
+		text = text[:len(text)-2]
+	case strings.HasSuffix(lower, "m"):
+		multiplier = 1024 * 1024
+		text = text[:len(text)-1]
+	case strings.HasSuffix(lower, "gb"):
+		multiplier = 1024 * 1024 * 1024
+		text = text[:len(text)-2]
+	case strings.HasSuffix(lower, "g"):
+		multiplier = 1024 * 1024 * 1024
+		text = text[:len(text)-1]
+	}
+
+	text = strings.TrimSpace(text)
+	if text == "" {
+		return 0, fmt.Errorf("invalid bytes-per-second %q", value)
+	}
+	raw, err := strconv.ParseInt(text, 10, 64)
+	if err != nil {
+		return 0, fmt.Errorf("invalid bytes-per-second %q", value)
+	}
+	if raw <= 0 {
+		return 0, fmt.Errorf("invalid bytes-per-second %q", value)
+	}
+	return raw * multiplier, nil
+}
+
+type benchHTTPRoundTripper struct {
+	base           nethttp.RoundTripper
+	latency        time.Duration
+	bytesPerSecond int64
+}
+
+func (rt *benchHTTPRoundTripper) RoundTrip(req *nethttp.Request) (*nethttp.Response, error) {
+	if rt.latency > 0 {
+		time.Sleep(rt.latency)
+	}
+	resp, err := rt.base.RoundTrip(req)
+	if err != nil {
+		return nil, err
+	}
+	if rt.bytesPerSecond > 0 && resp.Body != nil {
+		resp.Body = &benchThrottleReadCloser{
+			rc:             resp.Body,
+			bytesPerSecond: rt.bytesPerSecond,
+			start:          time.Now(),
+		}
+	}
+	return resp, nil
+}
+
+type benchThrottleReadCloser struct {
+	rc             io.ReadCloser
+	bytesPerSecond int64
+	start          time.Time
+	readBytes      int64
+}
+
+func (tr *benchThrottleReadCloser) Read(p []byte) (int, error) {
+	n, err := tr.rc.Read(p)
+	if n > 0 {
+		tr.readBytes += int64(n)
+		expected := time.Duration(float64(tr.readBytes) / float64(tr.bytesPerSecond) * float64(time.Second))
+		elapsed := time.Since(tr.start)
+		if expected > elapsed {
+			time.Sleep(expected - elapsed)
+		}
+	}
+	return n, err
+}
+
+func (tr *benchThrottleReadCloser) Close() error {
+	return tr.rc.Close()
+}
+
+func createBenchArchive(b *testing.B, dir string, compression Compression) ([]byte, []byte) {
+	b.Helper()
+
+	var indexBuf, dataBuf bytes.Buffer
+	var createOpts []CreateOption
+	if compression != CompressionNone {
+		createOpts = append(createOpts, CreateWithCompression(compression))
+	}
+	if err := Create(context.Background(), dir, &indexBuf, &dataBuf, createOpts...); err != nil {
+		b.Fatal(err)
+	}
+	return indexBuf.Bytes(), dataBuf.Bytes()
+}
+
 // createBenchIndex creates a test archive and returns the internal index for benchmarking.
 // Index benchmarks always use CompressionNone since the index structure is identical regardless
 // of data compression.
@@ -734,16 +1114,9 @@ func createBenchIndex(b *testing.B, dir string) *index.Index {
 func createBenchBlob(b *testing.B, dir string, compression Compression, blobOpts ...Option) *Blob {
 	b.Helper()
 
-	var indexBuf, dataBuf bytes.Buffer
-	var createOpts []CreateOption
-	if compression != CompressionNone {
-		createOpts = append(createOpts, CreateWithCompression(compression))
-	}
-	if err := Create(context.Background(), dir, &indexBuf, &dataBuf, createOpts...); err != nil {
-		b.Fatal(err)
-	}
+	indexData, dataData := createBenchArchive(b, dir, compression)
 
-	blob, err := New(indexBuf.Bytes(), testutil.NewMockByteSource(dataBuf.Bytes()), blobOpts...)
+	blob, err := New(indexData, testutil.NewMockByteSource(dataData), blobOpts...)
 	if err != nil {
 		b.Fatal(err)
 	}

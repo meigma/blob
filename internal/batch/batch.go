@@ -2,6 +2,7 @@ package batch
 
 import (
 	"bytes"
+	"context"
 	"crypto/sha256"
 	"errors"
 	"fmt"
@@ -10,6 +11,9 @@ import (
 	"slices"
 	"sync"
 	"sync/atomic"
+
+	"golang.org/x/sync/errgroup"
+	"golang.org/x/sync/semaphore"
 
 	"github.com/meigma/blob/internal/blobtype"
 	"github.com/meigma/blob/internal/file"
@@ -36,10 +40,13 @@ const (
 // It provides efficient reading by grouping adjacent entries and processing them
 // together, minimizing the number of read operations on the underlying source.
 type Processor struct {
-	source      file.ByteSource
-	pool        *file.DecompressPool
-	maxFileSize uint64
-	workers     int // 0 = auto, <0 = serial, >0 = fixed count
+	source           file.ByteSource
+	pool             *file.DecompressPool
+	maxFileSize      uint64
+	workers          int // 0 = auto, <0 = serial, >0 = fixed count
+	readConcurrency  int
+	readAheadBytes   uint64
+	readAheadEnabled bool
 }
 
 // ProcessorOption configures a Processor.
@@ -54,6 +61,26 @@ func WithWorkers(n int) ProcessorOption {
 	}
 }
 
+// WithReadConcurrency sets the number of concurrent range reads.
+// Values < 1 force serial reads.
+func WithReadConcurrency(n int) ProcessorOption {
+	return func(p *Processor) {
+		if n < 1 {
+			n = 1
+		}
+		p.readConcurrency = n
+	}
+}
+
+// WithReadAheadBytes caps the total size of buffered group data.
+// A value of 0 disables the byte budget.
+func WithReadAheadBytes(limit uint64) ProcessorOption {
+	return func(p *Processor) {
+		p.readAheadBytes = limit
+		p.readAheadEnabled = limit > 0
+	}
+}
+
 // NewProcessor creates a new batch processor.
 //
 // The source provides random access to the data blob.
@@ -61,9 +88,10 @@ func WithWorkers(n int) ProcessorOption {
 // maxFileSize limits the size of individual entries (0 for no limit).
 func NewProcessor(source file.ByteSource, pool *file.DecompressPool, maxFileSize uint64, opts ...ProcessorOption) *Processor {
 	p := &Processor{
-		source:      source,
-		pool:        pool,
-		maxFileSize: maxFileSize,
+		source:          source,
+		pool:            pool,
+		maxFileSize:     maxFileSize,
+		readConcurrency: 1,
 	}
 	for _, opt := range opts {
 		opt(p)
@@ -116,6 +144,26 @@ func (p *Processor) Process(entries []*Entry, sink Sink) error {
 
 	// Group adjacent entries and process each group
 	groups := groupAdjacentEntries(toProcess)
+	if len(groups) > 1 && (p.readConcurrency > 1 || p.readAheadEnabled) {
+		return p.processGroupsPipelined(groups, sink)
+	}
+	return p.processGroupsSequential(groups, sink)
+}
+
+type groupTask struct {
+	index int
+	group rangeGroup
+	size  int64
+}
+
+type groupResult struct {
+	index int
+	group rangeGroup
+	data  []byte
+	size  int64
+}
+
+func (p *Processor) processGroupsSequential(groups []rangeGroup, sink Sink) error {
 	for _, group := range groups {
 		if err := p.processGroup(group, sink); err != nil {
 			return err
@@ -124,16 +172,145 @@ func (p *Processor) Process(entries []*Entry, sink Sink) error {
 	return nil
 }
 
+func (p *Processor) processGroupsPipelined(groups []rangeGroup, sink Sink) error {
+	if len(groups) == 0 {
+		return nil
+	}
+
+	readWorkers := p.readConcurrency
+	if readWorkers < 1 {
+		readWorkers = 1
+	}
+
+	var budget *semaphore.Weighted
+	if p.readAheadEnabled {
+		limit, err := sizing.ToInt64(p.readAheadBytes, blobtype.ErrSizeOverflow)
+		if err != nil {
+			return fmt.Errorf("batch: %w", err)
+		}
+		budget = semaphore.NewWeighted(limit)
+	}
+
+	readCh := make(chan groupTask)
+	readyCh := make(chan groupResult, readWorkers)
+	eg, ctx := errgroup.WithContext(context.Background())
+
+	var readWg sync.WaitGroup
+	readWg.Add(readWorkers)
+
+	for i := 0; i < readWorkers; i++ {
+		eg.Go(func() error {
+			defer readWg.Done()
+			for task := range readCh {
+				if err := ctx.Err(); err != nil {
+					return err
+				}
+				if budget != nil {
+					if err := budget.Acquire(ctx, task.size); err != nil {
+						return err
+					}
+				}
+				data, err := p.readGroupData(task.group)
+				if err != nil {
+					if budget != nil {
+						budget.Release(task.size)
+					}
+					return err
+				}
+				result := groupResult{
+					index: task.index,
+					group: task.group,
+					data:  data,
+					size:  task.size,
+				}
+				select {
+				case readyCh <- result:
+				case <-ctx.Done():
+					if budget != nil {
+						budget.Release(task.size)
+					}
+					return ctx.Err()
+				}
+			}
+			return nil
+		})
+	}
+
+	eg.Go(func() error {
+		defer close(readCh)
+		for i, group := range groups {
+			size, err := groupSize(group)
+			if err != nil {
+				return err
+			}
+			task := groupTask{index: i, group: group, size: size}
+			select {
+			case readCh <- task:
+			case <-ctx.Done():
+				return ctx.Err()
+			}
+		}
+		return nil
+	})
+
+	go func() {
+		readWg.Wait()
+		close(readyCh)
+	}()
+
+	eg.Go(func() error {
+		next := 0
+		pending := make(map[int]groupResult, readWorkers)
+		for next < len(groups) {
+			select {
+			case res, ok := <-readyCh:
+				if !ok {
+					if err := ctx.Err(); err != nil {
+						return err
+					}
+					return fmt.Errorf("batch: read pipeline ended unexpectedly")
+				}
+				pending[res.index] = res
+				for {
+					res, ok := pending[next]
+					if !ok {
+						break
+					}
+					delete(pending, next)
+					if err := p.processGroupWithData(res.group, res.data, sink); err != nil {
+						if budget != nil {
+							budget.Release(res.size)
+						}
+						return err
+					}
+					if budget != nil {
+						budget.Release(res.size)
+					}
+					next++
+				}
+			case <-ctx.Done():
+				return ctx.Err()
+			}
+		}
+		return nil
+	})
+
+	return eg.Wait()
+}
+
 // processGroup reads a contiguous range and processes each entry.
 func (p *Processor) processGroup(group rangeGroup, sink Sink) error {
 	data, err := p.readGroupData(group)
 	if err != nil {
 		return err
 	}
+	return p.processGroupWithData(group, data, sink)
+}
+
+func (p *Processor) processGroupWithData(group rangeGroup, data []byte, sink Sink) error {
 	if len(group.entries) == 0 {
 		return nil
 	}
-
 	workers := p.workerCount(group.entries)
 	if workers < 2 {
 		return p.processEntriesSerial(group.entries, data, group.start, sink)
@@ -157,6 +334,11 @@ func (p *Processor) readGroupData(group rangeGroup) ([]byte, error) {
 		return nil, fmt.Errorf("batch: short read (%d of %d bytes)", n, size)
 	}
 	return data, nil
+}
+
+func groupSize(group rangeGroup) (int64, error) {
+	size := group.end - group.start
+	return sizing.ToInt64(size, blobtype.ErrSizeOverflow)
 }
 
 // processEntriesSerial processes entries one at a time.

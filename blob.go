@@ -285,6 +285,7 @@ func (b *Blob) Len() int {
 // By default:
 //   - Existing files are skipped (use CopyWithOverwrite to overwrite)
 //   - File modes and times are not preserved (use CopyWithPreserveMode/Times)
+//   - Range reads are pipelined (when beneficial) with concurrency 4 (use CopyWithReadConcurrency to change)
 func (b *Blob) CopyTo(destDir string, paths ...string) error {
 	if len(paths) == 0 {
 		return nil
@@ -323,6 +324,7 @@ func (b *Blob) CopyToWithOptions(destDir string, paths []string, opts ...CopyOpt
 // By default:
 //   - Existing files are skipped (use CopyWithOverwrite to overwrite)
 //   - File modes and times are not preserved (use CopyWithPreserveMode/Times)
+//   - Range reads are pipelined (when beneficial) with concurrency 4 (use CopyWithReadConcurrency to change)
 func (b *Blob) CopyDir(destDir, prefix string, opts ...CopyOption) error {
 	cfg := copyConfig{}
 	for _, opt := range opts {
@@ -400,6 +402,16 @@ func (b *Blob) copyEntries(destDir string, entries []*batch.Entry, cfg *copyConf
 	var procOpts []batch.ProcessorOption
 	if cfg.workers != 0 {
 		procOpts = append(procOpts, batch.WithWorkers(cfg.workers))
+	}
+	readConcurrency := cfg.readConcurrency
+	if !cfg.readConcurrencySet {
+		readConcurrency = defaultCopyReadConcurrency
+	}
+	if readConcurrency != 0 {
+		procOpts = append(procOpts, batch.WithReadConcurrency(readConcurrency))
+	}
+	if cfg.readAheadBytesSet {
+		procOpts = append(procOpts, batch.WithReadAheadBytes(cfg.readAheadBytes))
 	}
 	proc := batch.NewProcessor(b.reader.Source(), b.reader.Pool(), b.maxFileSize, procOpts...)
 

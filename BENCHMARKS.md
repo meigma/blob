@@ -23,6 +23,30 @@ go test -run='^$' -bench=Benchmark -benchmem -count=10 > bench.txt
 benchstat bench.txt
 ```
 
+## HTTP source benchmarks
+
+Benchmarks default to an in-memory byte source. To include an HTTP range source,
+set `BLOB_BENCH_HTTP=1` which adds `source=http` sub-benchmarks.
+
+Optional knobs for simulating network conditions:
+
+```bash
+BLOB_BENCH_HTTP=1 BLOB_HTTP_LATENCY=5ms BLOB_HTTP_BPS=10MBps go test -run='^$' -bench=BenchmarkBlobReadFile -benchmem
+```
+
+- `BLOB_HTTP_LATENCY`: per-request latency (Go duration format).
+- `BLOB_HTTP_BPS`: bytes/sec throttle; supports `k`, `m`, `g` suffixes (binary, e.g. `10MBps`).
+
+### HTTP matrix (fixed cases)
+
+```bash
+BLOB_BENCH_HTTP=1 go test -run='^$' -bench=BenchmarkBlobReadFileHTTPMatrix -benchmem
+```
+
+```bash
+BLOB_BENCH_HTTP=1 go test -run='^$' -bench=BenchmarkBlobCopyDirHTTPMatrix -benchmem
+```
+
 ## Benchmark -> regression -> profiler flow
 
 1) Capture a baseline and a change run, then compare with benchstat:
@@ -44,6 +68,12 @@ profiles plus long-running duration-based runs.
 ```bash
 go run ./cmd/profiler -mode=readfile -files=64 -file-size=65536 -compression=zstd -pattern=random -duration=30s -cpuprofile=cpu.prof
 go tool pprof -http=:8080 cpu.prof
+```
+
+HTTP data source (serves the generated data over HTTP with simulated latency/bandwidth):
+
+```bash
+go run ./cmd/profiler -mode=readfile -data-url=local -data-http-latency=5ms -data-http-bps=10MBps -duration=30s -cpuprofile=cpu.prof
 ```
 
 ## Benchmark -> profiler mapping

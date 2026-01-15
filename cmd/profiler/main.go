@@ -18,6 +18,7 @@ import (
 	"runtime/trace"
 	"time"
 
+	"github.com/felixge/fgprof"
 	"github.com/meigma/blob"
 	"github.com/meigma/blob/cache"
 	"github.com/meigma/blob/internal/testutil"
@@ -32,6 +33,10 @@ type config struct {
 	dirCount        int
 	compression     string
 	pattern         string
+	dataURL         string
+	dataHTTPLatency time.Duration
+	dataHTTPBPS     int64
+	fgProfile       string
 	duration        time.Duration
 	iterations      int
 	pprofAddr       string
@@ -83,9 +88,27 @@ func main() {
 		log.Fatal(err) //nolint:gocritic // exitAfterDefer is intentional - cleanup is best-effort
 	}
 
-	b, err := buildArchive(dir, cfg.compression)
+	b, cleanupArchive, err := buildArchive(dir, cfg)
 	if err != nil {
 		log.Fatal(err)
+	}
+	if cleanupArchive != nil {
+		defer cleanupArchive()
+	}
+
+	var stopFG func() error
+	if cfg.fgProfile != "" {
+		fgFile, fgErr := os.Create(cfg.fgProfile)
+		if fgErr != nil {
+			log.Fatal(fgErr)
+		}
+		stopFG = fgprof.Start(fgFile, fgprof.FormatPprof)
+		defer func() {
+			if err := stopFG(); err != nil {
+				log.Printf("fgprof stop error: %v", err)
+			}
+			_ = fgFile.Close()
+		}()
 	}
 
 	if cfg.cpuProfile != "" {
@@ -384,12 +407,17 @@ func runProfile(cfg config, b *blob.Blob, paths []string, rootDir string) (profi
 
 func parseFlags() config {
 	var cfg config
+	var dataHTTPBPS string
 	flag.StringVar(&cfg.mode, "mode", "readfile", "mode: readfile, cached-readfile-hit, prefetchdir, copydir, writer, index-lookup, index-lookup-copy, entries-with-prefix, entries-with-prefix-copy")
 	flag.IntVar(&cfg.files, "files", 512, "number of files")
 	flag.IntVar(&cfg.fileSize, "file-size", 16<<10, "file size in bytes")
 	flag.IntVar(&cfg.dirCount, "dir-count", 16, "number of directories")
 	flag.StringVar(&cfg.compression, "compression", "zstd", "compression: none or zstd")
 	flag.StringVar(&cfg.pattern, "pattern", "compressible", "pattern: compressible or random")
+	flag.StringVar(&cfg.dataURL, "data-url", "", "HTTP data source URL (use \"local\" to serve generated data)")
+	flag.DurationVar(&cfg.dataHTTPLatency, "data-http-latency", 0, "per-request latency for HTTP data source")
+	flag.StringVar(&dataHTTPBPS, "data-http-bps", "", "bytes/sec throttle for HTTP data source (e.g. 10MBps)")
+	flag.StringVar(&cfg.fgProfile, "fgprofile", "", "write fgprof (wall clock) profile to file")
 	flag.DurationVar(&cfg.duration, "duration", 10*time.Second, "duration to run (ignored if iterations > 0)")
 	flag.IntVar(&cfg.iterations, "iterations", 0, "number of iterations to run")
 	flag.StringVar(&cfg.pprofAddr, "pprof-addr", "", "pprof listen address (e.g. :6060)")
@@ -406,6 +434,13 @@ func parseFlags() config {
 	flag.BoolVar(&cfg.keepTemp, "keep-temp", false, "keep temp dir after run")
 	flag.Int64Var(&cfg.randomSeed, "seed", 1, "random seed")
 	flag.Parse()
+	if dataHTTPBPS != "" {
+		bps, err := parseBytesPerSecond(dataHTTPBPS)
+		if err != nil {
+			log.Fatalf("data-http-bps: %v", err)
+		}
+		cfg.dataHTTPBPS = bps
+	}
 	return cfg
 }
 
@@ -484,20 +519,35 @@ func makeFiles(dir string, fileCount, fileSize, dirCount int, pattern string, se
 	return paths, nil
 }
 
-func buildArchive(root, compression string) (*blob.Blob, error) {
+func buildArchive(root string, cfg config) (*blob.Blob, func(), error) {
 	var indexBuf, dataBuf bytes.Buffer
 	var opts []blob.CreateOption
-	if parseCompression(compression) != blob.CompressionNone {
-		opts = append(opts, blob.CreateWithCompression(parseCompression(compression)))
+	if parseCompression(cfg.compression) != blob.CompressionNone {
+		opts = append(opts, blob.CreateWithCompression(parseCompression(cfg.compression)))
 	}
 	if err := blob.Create(context.Background(), root, &indexBuf, &dataBuf, opts...); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	b, err := blob.New(indexBuf.Bytes(), testutil.NewMockByteSource(dataBuf.Bytes()))
+	if cfg.dataURL == "" {
+		b, err := blob.New(indexBuf.Bytes(), testutil.NewMockByteSource(dataBuf.Bytes()))
+		if err != nil {
+			return nil, nil, err
+		}
+		return b, nil, nil
+	}
+
+	source, cleanup, err := newHTTPSource(cfg, dataBuf.Bytes())
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	return b, nil
+	b, err := blob.New(indexBuf.Bytes(), source)
+	if err != nil {
+		if cleanup != nil {
+			cleanup()
+		}
+		return nil, nil, err
+	}
+	return b, cleanup, nil
 }
 
 func parseCompression(name string) blob.Compression {

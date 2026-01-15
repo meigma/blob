@@ -23,6 +23,10 @@ type ByteSource interface {
 	Size() int64
 }
 
+type rangeReader interface {
+	ReadRange(off, length int64) (io.ReadCloser, error)
+}
+
 // Reader reads and verifies file content from a ByteSource.
 type Reader struct {
 	source                ByteSource
@@ -159,6 +163,21 @@ func (r *Reader) entryReader(entry *Entry, section *io.SectionReader) (io.Reader
 	case CompressionNone:
 		return section, func() {}, nil
 	case CompressionZstd:
+		if rr, ok := r.source.(rangeReader); ok {
+			reader, err := r.rangeReader(entry, rr)
+			if err != nil {
+				return nil, func() {}, fmt.Errorf("%w: %v", ErrDecompression, err)
+			}
+			dec, release, err := r.pool.Get(reader)
+			if err != nil {
+				_ = reader.Close()
+				return nil, func() {}, fmt.Errorf("%w: %v", ErrDecompression, err)
+			}
+			return dec, func() {
+				release()
+				_ = reader.Close()
+			}, nil
+		}
 		dec, release, err := r.pool.Get(section)
 		if err != nil {
 			return nil, func() {}, fmt.Errorf("%w: %v", ErrDecompression, err)
@@ -167,6 +186,21 @@ func (r *Reader) entryReader(entry *Entry, section *io.SectionReader) (io.Reader
 	default:
 		return nil, func() {}, fmt.Errorf("unknown compression algorithm: %d", entry.Compression)
 	}
+}
+
+func (r *Reader) rangeReader(entry *Entry, rr rangeReader) (io.ReadCloser, error) {
+	offset, err := sizing.ToInt64(entry.DataOffset, ErrSizeOverflow)
+	if err != nil {
+		return nil, err
+	}
+	length, err := sizing.ToInt64(entry.DataSize, ErrSizeOverflow)
+	if err != nil {
+		return nil, err
+	}
+	if length == 0 {
+		return io.NopCloser(bytes.NewReader(nil)), nil
+	}
+	return rr.ReadRange(offset, length)
 }
 
 // readContentAndHash reads content and computes its hash.

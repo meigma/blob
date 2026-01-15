@@ -52,12 +52,19 @@ func WithVerifyOnClose(enabled bool) Option {
 // CopyOption configures CopyTo and CopyDir operations.
 type CopyOption func(*copyConfig)
 
+// defaultCopyReadConcurrency is used when no CopyWithReadConcurrency option is set.
+const defaultCopyReadConcurrency = 4
+
 type copyConfig struct {
-	overwrite     bool
-	preserveMode  bool
-	preserveTimes bool
-	workers       int
-	cleanDest     bool
+	overwrite          bool
+	preserveMode       bool
+	preserveTimes      bool
+	workers            int
+	readConcurrency    int
+	readConcurrencySet bool
+	readAheadBytes     uint64
+	readAheadBytesSet  bool
+	cleanDest          bool
 }
 
 // CopyWithOverwrite allows overwriting existing files.
@@ -98,5 +105,26 @@ func CopyWithCleanDest(enabled bool) CopyOption {
 func CopyWithWorkers(n int) CopyOption {
 	return func(c *copyConfig) {
 		c.workers = n
+	}
+}
+
+// CopyWithReadConcurrency sets the number of concurrent range reads.
+// Use 1 to force serial reads. Zero uses the default concurrency (4).
+func CopyWithReadConcurrency(n int) CopyOption {
+	return func(c *copyConfig) {
+		if n <= 0 {
+			n = defaultCopyReadConcurrency
+		}
+		c.readConcurrency = n
+		c.readConcurrencySet = true
+	}
+}
+
+// CopyWithReadAheadBytes caps the total size of buffered group data.
+// A value of 0 disables the byte budget.
+func CopyWithReadAheadBytes(limit uint64) CopyOption {
+	return func(c *copyConfig) {
+		c.readAheadBytes = limit
+		c.readAheadBytesSet = true
 	}
 }
