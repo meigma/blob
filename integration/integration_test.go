@@ -46,22 +46,25 @@ func createFiles(t *testing.T, dir string, files map[string][]byte) {
 	}
 }
 
-// createArchive builds an archive from the given files and returns the index and data source.
-func createArchive(t *testing.T, files map[string][]byte, compression blob.Compression) (*blob.Index, *memByteSource) {
+// createArchive builds an archive from the given files and returns the Blob.
+func createArchive(t *testing.T, files map[string][]byte, compression blob.Compression) *blob.Blob {
 	t.Helper()
 
 	dir := t.TempDir()
 	createFiles(t, dir, files)
 
 	var indexBuf, dataBuf bytes.Buffer
-	w := blob.NewWriter(blob.WriteOptions{Compression: compression})
-	err := w.Create(context.Background(), dir, &indexBuf, &dataBuf)
+	var opts []blob.CreateOption
+	if compression != blob.CompressionNone {
+		opts = append(opts, blob.CreateWithCompression(compression))
+	}
+	err := blob.Create(context.Background(), dir, &indexBuf, &dataBuf, opts...)
 	require.NoError(t, err)
 
-	idx, err := blob.LoadIndex(indexBuf.Bytes())
+	b, err := blob.New(indexBuf.Bytes(), &memByteSource{data: dataBuf.Bytes()})
 	require.NoError(t, err)
 
-	return idx, &memByteSource{data: dataBuf.Bytes()}
+	return b
 }
 
 func TestE2E_WriteAndRead(t *testing.T) {
@@ -128,20 +131,19 @@ func TestE2E_WriteAndRead(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			idx, source := createArchive(t, tc.files, tc.compression)
-			r := blob.NewReader(idx, source)
+			b := createArchive(t, tc.files, tc.compression)
 
 			// Verify each file can be read back correctly
 			for path, expectedContent := range tc.files {
 				path := filepath.ToSlash(path)
 
 				// ReadFile
-				gotContent, err := r.ReadFile(path)
+				gotContent, err := b.ReadFile(path)
 				require.NoError(t, err, "ReadFile(%q)", path)
 				assert.Equal(t, expectedContent, gotContent, "content mismatch for %q", path)
 
 				// Stat
-				info, err := r.Stat(path)
+				info, err := b.Stat(path)
 				require.NoError(t, err, "Stat(%q)", path)
 				assert.Equal(t, int64(len(expectedContent)), info.Size(), "size mismatch for %q", path)
 				assert.False(t, info.IsDir(), "expected file, not directory for %q", path)
@@ -161,11 +163,10 @@ func TestE2E_DirectoryListing(t *testing.T) {
 		"dir2/x.txt":     []byte("x"),
 	}
 
-	idx, source := createArchive(t, files, blob.CompressionNone)
-	r := blob.NewReader(idx, source)
+	b := createArchive(t, files, blob.CompressionNone)
 
 	t.Run("root directory", func(t *testing.T) {
-		entries, err := r.ReadDir(".")
+		entries, err := b.ReadDir(".")
 		require.NoError(t, err)
 
 		names := extractNames(entries)
@@ -173,7 +174,7 @@ func TestE2E_DirectoryListing(t *testing.T) {
 	})
 
 	t.Run("nested directory", func(t *testing.T) {
-		entries, err := r.ReadDir("dir1")
+		entries, err := b.ReadDir("dir1")
 		require.NoError(t, err)
 
 		names := extractNames(entries)
@@ -181,7 +182,7 @@ func TestE2E_DirectoryListing(t *testing.T) {
 	})
 
 	t.Run("deeply nested directory", func(t *testing.T) {
-		entries, err := r.ReadDir("dir1/sub")
+		entries, err := b.ReadDir("dir1/sub")
 		require.NoError(t, err)
 
 		names := extractNames(entries)
@@ -189,7 +190,7 @@ func TestE2E_DirectoryListing(t *testing.T) {
 	})
 
 	t.Run("directory entry types", func(t *testing.T) {
-		entries, err := r.ReadDir(".")
+		entries, err := b.ReadDir(".")
 		require.NoError(t, err)
 
 		for _, e := range entries {
@@ -210,10 +211,9 @@ func TestE2E_OpenAndStream(t *testing.T) {
 		"stream.txt": content,
 	}
 
-	idx, source := createArchive(t, files, blob.CompressionZstd)
-	r := blob.NewReader(idx, source)
+	b := createArchive(t, files, blob.CompressionZstd)
 
-	f, err := r.Open("stream.txt")
+	f, err := b.Open("stream.txt")
 	require.NoError(t, err)
 	defer f.Close()
 
@@ -270,13 +270,12 @@ func TestE2E_CopyTo(t *testing.T) {
 		"dir/sub/d.txt": []byte("content d"),
 	}
 
-	idx, source := createArchive(t, files, blob.CompressionZstd)
-	r := blob.NewReader(idx, source)
+	b := createArchive(t, files, blob.CompressionZstd)
 
 	t.Run("copy specific files", func(t *testing.T) {
 		destDir := t.TempDir()
 
-		err := r.CopyTo(destDir, "a.txt", "dir/c.txt")
+		err := b.CopyTo(destDir, "a.txt", "dir/c.txt")
 		require.NoError(t, err)
 
 		// Verify extracted files
@@ -300,7 +299,7 @@ func TestE2E_CopyTo(t *testing.T) {
 		existing := filepath.Join(destDir, "a.txt")
 		require.NoError(t, os.WriteFile(existing, []byte("original"), 0o644))
 
-		err := r.CopyTo(destDir, "a.txt")
+		err := b.CopyTo(destDir, "a.txt")
 		require.NoError(t, err)
 
 		// File should not be overwritten
@@ -316,7 +315,7 @@ func TestE2E_CopyTo(t *testing.T) {
 		existing := filepath.Join(destDir, "a.txt")
 		require.NoError(t, os.WriteFile(existing, []byte("original"), 0o644))
 
-		err := r.CopyToWithOptions(destDir, []string{"a.txt"}, blob.CopyWithOverwrite(true))
+		err := b.CopyToWithOptions(destDir, []string{"a.txt"}, blob.CopyWithOverwrite(true))
 		require.NoError(t, err)
 
 		// File should be overwritten
@@ -337,13 +336,12 @@ func TestE2E_CopyDir(t *testing.T) {
 		"other/x.txt":   []byte("x"),
 	}
 
-	idx, source := createArchive(t, files, blob.CompressionZstd)
-	r := blob.NewReader(idx, source)
+	b := createArchive(t, files, blob.CompressionZstd)
 
 	t.Run("copy entire directory", func(t *testing.T) {
 		destDir := t.TempDir()
 
-		err := r.CopyDir(destDir, "dir")
+		err := b.CopyDir(destDir, "dir")
 		require.NoError(t, err)
 
 		// Verify extracted files
@@ -369,7 +367,7 @@ func TestE2E_CopyDir(t *testing.T) {
 	t.Run("copy all files with empty prefix", func(t *testing.T) {
 		destDir := t.TempDir()
 
-		err := r.CopyDir(destDir, "")
+		err := b.CopyDir(destDir, "")
 		require.NoError(t, err)
 
 		// All files should be extracted

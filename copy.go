@@ -58,17 +58,17 @@ func CopyWithWorkers(n int) CopyOption {
 // By default:
 //   - Existing files are skipped (use CopyWithOverwrite to overwrite)
 //   - File modes and times are not preserved (use CopyWithPreserveMode/Times)
-func (r *Reader) CopyTo(destDir string, paths ...string) error {
+func (b *Blob) CopyTo(destDir string, paths ...string) error {
 	if len(paths) == 0 {
 		return nil
 	}
 
 	cfg := copyConfig{}
-	return r.copyEntries(destDir, r.collectPathEntries(paths), &cfg)
+	return b.copyEntries(destDir, b.collectPathEntries(paths), &cfg)
 }
 
 // CopyToWithOptions extracts specific files with options.
-func (r *Reader) CopyToWithOptions(destDir string, paths []string, opts ...CopyOption) error {
+func (b *Blob) CopyToWithOptions(destDir string, paths []string, opts ...CopyOption) error {
 	if len(paths) == 0 {
 		return nil
 	}
@@ -77,7 +77,7 @@ func (r *Reader) CopyToWithOptions(destDir string, paths []string, opts ...CopyO
 	for _, opt := range opts {
 		opt(&cfg)
 	}
-	return r.copyEntries(destDir, r.collectPathEntries(paths), &cfg)
+	return b.copyEntries(destDir, b.collectPathEntries(paths), &cfg)
 }
 
 // CopyDir extracts all files under a directory prefix to a destination.
@@ -90,22 +90,22 @@ func (r *Reader) CopyToWithOptions(destDir string, paths []string, opts ...CopyO
 // By default:
 //   - Existing files are skipped (use CopyWithOverwrite to overwrite)
 //   - File modes and times are not preserved (use CopyWithPreserveMode/Times)
-func (r *Reader) CopyDir(destDir, prefix string, opts ...CopyOption) error {
+func (b *Blob) CopyDir(destDir, prefix string, opts ...CopyOption) error {
 	cfg := copyConfig{}
 	for _, opt := range opts {
 		opt(&cfg)
 	}
-	return r.copyEntries(destDir, r.collectPrefixEntries(prefix), &cfg)
+	return b.copyEntries(destDir, b.collectPrefixEntries(prefix), &cfg)
 }
 
 // collectPathEntries collects entries for specific paths.
-func (r *Reader) collectPathEntries(paths []string) []*batch.Entry {
+func (b *Blob) collectPathEntries(paths []string) []*batch.Entry {
 	entries := make([]*batch.Entry, 0, len(paths))
 	for _, path := range paths {
 		if !fs.ValidPath(path) {
 			continue
 		}
-		view, ok := r.index.LookupView(path)
+		view, ok := b.idx.lookupView(path)
 		if !ok {
 			continue
 		}
@@ -116,7 +116,7 @@ func (r *Reader) collectPathEntries(paths []string) []*batch.Entry {
 }
 
 // collectPrefixEntries collects all entries under a prefix.
-func (r *Reader) collectPrefixEntries(prefix string) []*batch.Entry {
+func (b *Blob) collectPrefixEntries(prefix string) []*batch.Entry {
 	if prefix != "" && prefix != "." && !fs.ValidPath(prefix) {
 		return nil
 	}
@@ -129,7 +129,7 @@ func (r *Reader) collectPrefixEntries(prefix string) []*batch.Entry {
 	}
 
 	var entries []*batch.Entry //nolint:prealloc // size unknown until iteration
-	for view := range r.index.EntriesWithPrefixView(dirPrefix) {
+	for view := range b.idx.entriesWithPrefixView(dirPrefix) {
 		entry := entryFromViewWithPath(view, view.Path())
 		entries = append(entries, &entry)
 	}
@@ -137,7 +137,7 @@ func (r *Reader) collectPrefixEntries(prefix string) []*batch.Entry {
 }
 
 // copyEntries uses the batch processor to copy entries to destDir.
-func (r *Reader) copyEntries(destDir string, entries []*batch.Entry, cfg *copyConfig) error {
+func (b *Blob) copyEntries(destDir string, entries []*batch.Entry, cfg *copyConfig) error {
 	if len(entries) == 0 {
 		return nil
 	}
@@ -155,7 +155,7 @@ func (r *Reader) copyEntries(destDir string, entries []*batch.Entry, cfg *copyCo
 	if cfg.workers != 0 {
 		procOpts = append(procOpts, batch.WithWorkers(cfg.workers))
 	}
-	proc := batch.NewProcessor(r.ops.Source(), r.ops.Pool(), r.maxFileSize, procOpts...)
+	proc := batch.NewProcessor(b.ops.Source(), b.ops.Pool(), b.maxFileSize, procOpts...)
 
 	return proc.Process(entries, sink)
 }

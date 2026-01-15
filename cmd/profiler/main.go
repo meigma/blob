@@ -83,13 +83,10 @@ func main() {
 		log.Fatal(err) //nolint:gocritic // exitAfterDefer is intentional - cleanup is best-effort
 	}
 
-	index, data, err := buildArchive(dir, cfg.compression)
+	b, err := buildArchive(dir, cfg.compression)
 	if err != nil {
 		log.Fatal(err)
 	}
-
-	source := testutil.NewMockByteSource(data)
-	reader := blob.NewReader(index, source)
 
 	if cfg.cpuProfile != "" {
 		cpuFile, cpuErr := os.Create(cfg.cpuProfile)
@@ -119,7 +116,7 @@ func main() {
 		}()
 	}
 
-	stats, err := runProfile(cfg, reader, paths, index, dir)
+	stats, err := runProfile(cfg, b, paths, dir)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -152,7 +149,7 @@ type profileStats struct {
 }
 
 //nolint:gocognit,gocyclo,gocritic // complexity is inherent to multi-mode profiler dispatch; hugeParam acceptable for profiler
-func runProfile(cfg config, reader *blob.Reader, paths []string, index *blob.Index, rootDir string) (profileStats, error) {
+func runProfile(cfg config, b *blob.Blob, paths []string, rootDir string) (profileStats, error) {
 	start := time.Now()
 	ops := 0
 	var byteCount int64
@@ -166,14 +163,14 @@ func runProfile(cfg config, reader *blob.Reader, paths []string, index *blob.Ind
 
 	switch cfg.mode {
 	case "readfile":
-		readFS := fs.ReadFileFS(reader)
+		readFS := fs.ReadFileFS(b)
 		if cfg.cache != cacheNone {
 			c, cleanup, err := newCache(cfg, rootDir)
 			if err != nil {
 				return profileStats{}, err
 			}
 			defer cleanup() //nolint:errcheck // cleanup errors are non-fatal in profiler
-			readFS = cache.NewReader(reader, c, cache.WithPrefetchConcurrency(cfg.prefetchWorkers))
+			readFS = cache.New(b, c, cache.WithPrefetchConcurrency(cfg.prefetchWorkers))
 		}
 
 		rng := rand.New(rand.NewSource(cfg.randomSeed)) //nolint:gosec // intentional for reproducible benchmarks
@@ -198,7 +195,7 @@ func runProfile(cfg config, reader *blob.Reader, paths []string, index *blob.Ind
 		}
 		defer cleanup() //nolint:errcheck // cleanup errors are non-fatal in profiler
 
-		cached := cache.NewReader(reader, c, cache.WithPrefetchConcurrency(cfg.prefetchWorkers))
+		cached := cache.New(b, c, cache.WithPrefetchConcurrency(cfg.prefetchWorkers))
 		for _, path := range paths {
 			content, err := cached.ReadFile(path)
 			if err != nil {
@@ -226,7 +223,7 @@ func runProfile(cfg config, reader *blob.Reader, paths []string, index *blob.Ind
 		rng := rand.New(rand.NewSource(cfg.randomSeed)) //nolint:gosec // intentional for reproducible benchmarks
 		for shouldContinue() {
 			path := pickPath(paths, ops, rng, cfg.readRandom)
-			view, ok := index.LookupView(path)
+			view, ok := b.Entry(path)
 			if !ok {
 				return profileStats{}, fmt.Errorf("missing entry for %q", path)
 			}
@@ -238,7 +235,7 @@ func runProfile(cfg config, reader *blob.Reader, paths []string, index *blob.Ind
 		rng := rand.New(rand.NewSource(cfg.randomSeed)) //nolint:gosec // intentional for reproducible benchmarks
 		for shouldContinue() {
 			path := pickPath(paths, ops, rng, cfg.readRandom)
-			view, ok := index.LookupView(path)
+			view, ok := b.Entry(path)
 			if !ok {
 				return profileStats{}, fmt.Errorf("missing entry for %q", path)
 			}
@@ -250,7 +247,7 @@ func runProfile(cfg config, reader *blob.Reader, paths []string, index *blob.Ind
 		prefix := scanPrefix(cfg.prefetchPrefix)
 		for shouldContinue() {
 			count := 0
-			for range index.EntriesWithPrefixView(prefix) {
+			for range b.EntriesWithPrefix(prefix) {
 				count++
 			}
 			if count == 0 {
@@ -264,7 +261,7 @@ func runProfile(cfg config, reader *blob.Reader, paths []string, index *blob.Ind
 		prefix := scanPrefix(cfg.prefetchPrefix)
 		for shouldContinue() {
 			count := 0
-			for view := range index.EntriesWithPrefixView(prefix) {
+			for view := range b.EntriesWithPrefix(prefix) {
 				sinkEntry = view.Entry()
 				count++
 			}
@@ -283,14 +280,14 @@ func runProfile(cfg config, reader *blob.Reader, paths []string, index *blob.Ind
 		if prefix == "." {
 			prefix = ""
 		}
-		prefetchBytes := prefetchSize(index, prefix)
+		prefetchBytes := prefetchSize(b, prefix)
 		if cfg.prefetchCold {
 			for shouldContinue() {
 				c, cleanup, err := newCache(cfg, rootDir)
 				if err != nil {
 					return profileStats{}, err
 				}
-				cached := cache.NewReader(reader, c, cache.WithPrefetchConcurrency(cfg.prefetchWorkers))
+				cached := cache.New(b, c, cache.WithPrefetchConcurrency(cfg.prefetchWorkers))
 				if err := cached.PrefetchDir(prefix); err != nil {
 					_ = cleanup() //nolint:errcheck // cleanup errors are non-fatal in profiler
 					return profileStats{}, err
@@ -307,7 +304,7 @@ func runProfile(cfg config, reader *blob.Reader, paths []string, index *blob.Ind
 				return profileStats{}, err
 			}
 			defer cleanup() //nolint:errcheck // cleanup errors are non-fatal in profiler
-			cached := cache.NewReader(reader, c, cache.WithPrefetchConcurrency(cfg.prefetchWorkers))
+			cached := cache.New(b, c, cache.WithPrefetchConcurrency(cfg.prefetchWorkers))
 			for shouldContinue() {
 				if err := cached.PrefetchDir(prefix); err != nil {
 					return profileStats{}, err
@@ -322,7 +319,7 @@ func runProfile(cfg config, reader *blob.Reader, paths []string, index *blob.Ind
 		if prefix == "." {
 			prefix = ""
 		}
-		copyBytes := prefetchSize(index, scanPrefix(prefix))
+		copyBytes := prefetchSize(b, scanPrefix(prefix))
 		opts := []blob.CopyOption{}
 		if cfg.prefetchWorkers != 0 {
 			opts = append(opts, blob.CopyWithWorkers(cfg.prefetchWorkers))
@@ -331,10 +328,10 @@ func runProfile(cfg config, reader *blob.Reader, paths []string, index *blob.Ind
 		if cfg.prefetchCold {
 			for shouldContinue() {
 				destDir := filepath.Join(rootDir, "copy", fmt.Sprintf("iter-%d", ops))
-				if err := os.MkdirAll(destDir, 0o755); err != nil {
+				if err := os.MkdirAll(destDir, 0o750); err != nil {
 					return profileStats{}, err
 				}
-				if err := reader.CopyDir(destDir, prefix, opts...); err != nil {
+				if err := b.CopyDir(destDir, prefix, opts...); err != nil {
 					return profileStats{}, err
 				}
 				if err := os.RemoveAll(destDir); err != nil {
@@ -345,12 +342,12 @@ func runProfile(cfg config, reader *blob.Reader, paths []string, index *blob.Ind
 			}
 		} else {
 			destDir := filepath.Join(rootDir, "copy")
-			if err := os.MkdirAll(destDir, 0o755); err != nil {
+			if err := os.MkdirAll(destDir, 0o750); err != nil {
 				return profileStats{}, err
 			}
 			opts = append(opts, blob.CopyWithOverwrite(true))
 			for shouldContinue() {
-				if err := reader.CopyDir(destDir, prefix, opts...); err != nil {
+				if err := b.CopyDir(destDir, prefix, opts...); err != nil {
 					return profileStats{}, err
 				}
 				byteCount += copyBytes
@@ -359,12 +356,15 @@ func runProfile(cfg config, reader *blob.Reader, paths []string, index *blob.Ind
 		}
 
 	case "writer":
-		w := blob.NewWriter(blob.WriteOptions{Compression: parseCompression(cfg.compression)})
 		var indexBuf, dataBuf bytes.Buffer
+		var opts []blob.CreateOption
+		if parseCompression(cfg.compression) != blob.CompressionNone {
+			opts = append(opts, blob.CreateWithCompression(parseCompression(cfg.compression)))
+		}
 		for shouldContinue() {
 			indexBuf.Reset()
 			dataBuf.Reset()
-			if err := w.Create(context.Background(), rootDir, &indexBuf, &dataBuf); err != nil {
+			if err := blob.Create(context.Background(), rootDir, &indexBuf, &dataBuf, opts...); err != nil {
 				return profileStats{}, err
 			}
 			byteCount += int64(dataBuf.Len())
@@ -499,17 +499,20 @@ func makeFiles(dir string, fileCount, fileSize, dirCount int, pattern string, se
 	return paths, nil
 }
 
-func buildArchive(root, compression string) (*blob.Index, []byte, error) {
+func buildArchive(root, compression string) (*blob.Blob, error) {
 	var indexBuf, dataBuf bytes.Buffer
-	w := blob.NewWriter(blob.WriteOptions{Compression: parseCompression(compression)})
-	if err := w.Create(context.Background(), root, &indexBuf, &dataBuf); err != nil {
-		return nil, nil, err
+	var opts []blob.CreateOption
+	if parseCompression(compression) != blob.CompressionNone {
+		opts = append(opts, blob.CreateWithCompression(parseCompression(compression)))
 	}
-	idx, err := blob.LoadIndex(indexBuf.Bytes())
+	if err := blob.Create(context.Background(), root, &indexBuf, &dataBuf, opts...); err != nil {
+		return nil, err
+	}
+	b, err := blob.New(indexBuf.Bytes(), testutil.NewMockByteSource(dataBuf.Bytes()))
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
-	return idx, dataBuf.Bytes(), nil
+	return b, nil
 }
 
 func parseCompression(name string) blob.Compression {
@@ -524,9 +527,9 @@ func parseCompression(name string) blob.Compression {
 	}
 }
 
-func prefetchSize(index *blob.Index, prefix string) int64 {
+func prefetchSize(b *blob.Blob, prefix string) int64 {
 	var total uint64
-	for view := range index.EntriesWithPrefixView(prefix) {
+	for view := range b.EntriesWithPrefix(prefix) {
 		size := view.OriginalSize()
 		next := total + size
 		if next < total {

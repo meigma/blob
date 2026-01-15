@@ -11,22 +11,22 @@ import (
 	"github.com/meigma/blob/internal/fb"
 )
 
-// Index provides access to archive entries.
+// index provides access to archive entries.
 //
-// Index is backed by FlatBuffers and provides O(log n) lookups by path.
+// index is backed by FlatBuffers and provides O(log n) lookups by path.
 // Entries are sorted by path, enabling efficient prefix scans for directory operations.
 //
 // Accessors return read-only EntryView values that alias index data.
-type Index struct {
+type index struct {
 	data []byte
 	root *fb.Index
 }
 
-// LoadIndex parses a FlatBuffers-encoded index blob.
+// loadIndex parses a FlatBuffers-encoded index blob.
 //
-// The provided data is retained by the Index; callers must not modify it
-// after calling LoadIndex.
-func LoadIndex(data []byte) (*Index, error) {
+// The provided data is retained by the index; callers must not modify it
+// after calling loadIndex.
+func loadIndex(data []byte) (*index, error) {
 	if len(data) == 0 {
 		return nil, errors.New("blob: empty index data")
 	}
@@ -36,21 +36,21 @@ func LoadIndex(data []byte) (*Index, error) {
 		return nil, errors.New("blob: failed to parse index")
 	}
 
-	return &Index{
+	return &index{
 		data: data,
 		root: root,
 	}, nil
 }
 
-// Version returns the protocol version of the index.
-func (idx *Index) Version() uint32 {
+// version returns the protocol version of the index.
+func (idx *index) version() uint32 {
 	return idx.root.Version()
 }
 
-// LookupView returns a read-only view of the entry for the given path.
+// lookupView returns a read-only view of the entry for the given path.
 //
-// The returned view is only valid while the Index remains alive.
-func (idx *Index) LookupView(path string) (EntryView, bool) {
+// The returned view is only valid while the index remains alive.
+func (idx *index) lookupView(path string) (EntryView, bool) {
 	var fbEntry fb.Entry
 	if !idx.root.EntriesByKey(&fbEntry, path) {
 		return EntryView{}, false
@@ -58,15 +58,15 @@ func (idx *Index) LookupView(path string) (EntryView, bool) {
 	return entryViewFromFlatBuffers(fbEntry), true
 }
 
-// Len returns the number of entries in the index.
-func (idx *Index) Len() int {
+// len returns the number of entries in the index.
+func (idx *index) len() int {
 	return idx.root.EntriesLength()
 }
 
-// EntriesView returns an iterator over all entries as read-only views.
+// entriesView returns an iterator over all entries as read-only views.
 //
-// The returned views are only valid while the Index remains alive.
-func (idx *Index) EntriesView() iter.Seq[EntryView] {
+// The returned views are only valid while the index remains alive.
+func (idx *index) entriesView() iter.Seq[EntryView] {
 	return func(yield func(EntryView) bool) {
 		var fbEntry fb.Entry
 		for i := range idx.root.EntriesLength() {
@@ -80,11 +80,11 @@ func (idx *Index) EntriesView() iter.Seq[EntryView] {
 	}
 }
 
-// EntriesWithPrefixView returns an iterator over entries with the given prefix
+// entriesWithPrefixView returns an iterator over entries with the given prefix
 // as read-only views.
 //
-// The returned views are only valid while the Index remains alive.
-func (idx *Index) EntriesWithPrefixView(prefix string) iter.Seq[EntryView] {
+// The returned views are only valid while the index remains alive.
+func (idx *index) entriesWithPrefixView(prefix string) iter.Seq[EntryView] {
 	return func(yield func(EntryView) bool) {
 		n := idx.root.EntriesLength()
 		if n == 0 {

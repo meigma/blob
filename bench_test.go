@@ -78,15 +78,18 @@ func BenchmarkWriterCreate(b *testing.B) {
 				b.SetBytes(totalBytes)
 			}
 
-			w := NewWriter(WriteOptions{Compression: bc.compression})
 			var indexBuf, dataBuf bytes.Buffer
+			var opts []CreateOption
+			if bc.compression != CompressionNone {
+				opts = append(opts, CreateWithCompression(bc.compression))
+			}
 
 			b.ReportAllocs()
 			b.ResetTimer()
 			for b.Loop() {
 				indexBuf.Reset()
 				dataBuf.Reset()
-				if err := w.Create(context.Background(), dir, &indexBuf, &dataBuf); err != nil {
+				if err := Create(context.Background(), dir, &indexBuf, &dataBuf, opts...); err != nil {
 					b.Fatal(err)
 				}
 			}
@@ -108,13 +111,13 @@ func BenchmarkIndexLookup(b *testing.B) {
 		b.Run(bc.name, func(b *testing.B) {
 			dir := b.TempDir()
 			paths := makeBenchFiles(b, dir, bc.fileCount, bc.fileSize, benchPatternCompressible)
-			idx, _ := createBenchArchive(b, dir, CompressionNone)
+			idx := createBenchIndex(b, dir)
 
 			b.ReportAllocs()
 			b.ResetTimer()
 			for i := 0; b.Loop(); i++ {
 				path := paths[i%len(paths)]
-				entry, ok := idx.LookupView(path)
+				entry, ok := idx.lookupView(path)
 				if !ok {
 					b.Fatalf("missing entry for %q", path)
 				}
@@ -138,13 +141,13 @@ func BenchmarkIndexLookupCopy(b *testing.B) {
 		b.Run(bc.name, func(b *testing.B) {
 			dir := b.TempDir()
 			paths := makeBenchFiles(b, dir, bc.fileCount, bc.fileSize, benchPatternCompressible)
-			idx, _ := createBenchArchive(b, dir, CompressionNone)
+			idx := createBenchIndex(b, dir)
 
 			b.ReportAllocs()
 			b.ResetTimer()
 			for i := 0; b.Loop(); i++ {
 				path := paths[i%len(paths)]
-				view, ok := idx.LookupView(path)
+				view, ok := idx.lookupView(path)
 				if !ok {
 					b.Fatalf("missing entry for %q", path)
 				}
@@ -168,14 +171,14 @@ func BenchmarkEntriesWithPrefix(b *testing.B) {
 		b.Run(bc.name, func(b *testing.B) {
 			dir := b.TempDir()
 			makeBenchFiles(b, dir, bc.fileCount, bc.fileSize, benchPatternCompressible)
-			idx, _ := createBenchArchive(b, dir, CompressionNone)
+			idx := createBenchIndex(b, dir)
 			prefix := "dir00/"
 
 			b.ReportAllocs()
 			b.ResetTimer()
 			for b.Loop() {
 				count := 0
-				for range idx.EntriesWithPrefixView(prefix) {
+				for range idx.entriesWithPrefixView(prefix) {
 					count++
 				}
 				if count == 0 {
@@ -201,14 +204,14 @@ func BenchmarkEntriesWithPrefixCopy(b *testing.B) {
 		b.Run(bc.name, func(b *testing.B) {
 			dir := b.TempDir()
 			makeBenchFiles(b, dir, bc.fileCount, bc.fileSize, benchPatternCompressible)
-			idx, _ := createBenchArchive(b, dir, CompressionNone)
+			idx := createBenchIndex(b, dir)
 			prefix := "dir00/"
 
 			b.ReportAllocs()
 			b.ResetTimer()
 			for b.Loop() {
 				count := 0
-				for view := range idx.EntriesWithPrefixView(prefix) {
+				for view := range idx.entriesWithPrefixView(prefix) {
 					benchSinkEntry = view.Entry()
 					count++
 				}
@@ -221,7 +224,7 @@ func BenchmarkEntriesWithPrefixCopy(b *testing.B) {
 	}
 }
 
-func BenchmarkReaderReadFile(b *testing.B) {
+func BenchmarkBlobReadFile(b *testing.B) {
 	cases := []struct {
 		name      string
 		fileCount int
@@ -242,8 +245,7 @@ func BenchmarkReaderReadFile(b *testing.B) {
 				b.Run(name, func(b *testing.B) {
 					dir := b.TempDir()
 					paths := makeBenchFiles(b, dir, bc.fileCount, bc.fileSize, pattern)
-					idx, source := createBenchArchive(b, dir, compression)
-					reader := NewReader(idx, source)
+					blob := createBenchBlob(b, dir, compression)
 
 					if bc.fileSize > 0 {
 						b.SetBytes(int64(bc.fileSize))
@@ -253,7 +255,7 @@ func BenchmarkReaderReadFile(b *testing.B) {
 					b.ResetTimer()
 					for i := 0; b.Loop(); i++ {
 						path := paths[i%len(paths)]
-						content, err := reader.ReadFile(path)
+						content, err := blob.ReadFile(path)
 						if err != nil {
 							b.Fatal(err)
 						}
@@ -265,12 +267,12 @@ func BenchmarkReaderReadFile(b *testing.B) {
 	}
 }
 
-func BenchmarkReaderCopyDir(b *testing.B) {
-	benchmarkReaderCopyDir(b, "serial", -1)
-	benchmarkReaderCopyDir(b, "parallel", runtime.GOMAXPROCS(0))
+func BenchmarkBlobCopyDir(b *testing.B) {
+	benchmarkBlobCopyDir(b, "serial", -1)
+	benchmarkBlobCopyDir(b, "parallel", runtime.GOMAXPROCS(0))
 }
 
-func benchmarkReaderCopyDir(b *testing.B, label string, workers int) {
+func benchmarkBlobCopyDir(b *testing.B, label string, workers int) {
 	b.Helper()
 
 	cases := []struct {
@@ -330,8 +332,7 @@ func benchmarkReaderCopyDir(b *testing.B, label string, workers int) {
 		b.Run(fmt.Sprintf("%s/%s", label, bc.name), func(b *testing.B) {
 			dir := b.TempDir()
 			makeBenchFiles(b, dir, bc.fileCount, bc.fileSize, bc.pattern)
-			idx, source := createBenchArchive(b, dir, bc.compression)
-			reader := NewReader(idx, source)
+			blob := createBenchBlob(b, dir, bc.compression)
 
 			dirEntries := countBenchDirEntries(bc.fileCount, benchDirCount)
 			totalBytes := int64(dirEntries * bc.fileSize)
@@ -356,7 +357,7 @@ func benchmarkReaderCopyDir(b *testing.B, label string, workers int) {
 				}
 				b.StartTimer()
 
-				if err := reader.CopyDir(destDir, prefix, opts...); err != nil {
+				if err := blob.CopyDir(destDir, prefix, opts...); err != nil {
 					b.Fatal(err)
 				}
 
@@ -414,19 +415,42 @@ func countBenchDirEntries(fileCount, dirCount int) int {
 	return (fileCount + dirCount - 1) / dirCount
 }
 
-func createBenchArchive(b *testing.B, dir string, compression Compression) (*Index, *testutil.MockByteSource) {
+// createBenchIndex creates a test archive and returns the internal index for benchmarking.
+// Index benchmarks always use CompressionNone since the index structure is identical regardless
+// of data compression.
+func createBenchIndex(b *testing.B, dir string) *index {
 	b.Helper()
 
 	var indexBuf, dataBuf bytes.Buffer
-	w := NewWriter(WriteOptions{Compression: compression})
-	if err := w.Create(context.Background(), dir, &indexBuf, &dataBuf); err != nil {
+	if err := Create(context.Background(), dir, &indexBuf, &dataBuf); err != nil {
 		b.Fatal(err)
 	}
 
-	idx, err := LoadIndex(indexBuf.Bytes())
+	idx, err := loadIndex(indexBuf.Bytes())
 	if err != nil {
 		b.Fatal(err)
 	}
 
-	return idx, testutil.NewMockByteSource(dataBuf.Bytes())
+	return idx
+}
+
+// createBenchBlob creates a test archive and returns a Blob for benchmarking.
+func createBenchBlob(b *testing.B, dir string, compression Compression) *Blob {
+	b.Helper()
+
+	var indexBuf, dataBuf bytes.Buffer
+	var opts []CreateOption
+	if compression != CompressionNone {
+		opts = append(opts, CreateWithCompression(compression))
+	}
+	if err := Create(context.Background(), dir, &indexBuf, &dataBuf, opts...); err != nil {
+		b.Fatal(err)
+	}
+
+	blob, err := New(indexBuf.Bytes(), testutil.NewMockByteSource(dataBuf.Bytes()))
+	if err != nil {
+		b.Fatal(err)
+	}
+
+	return blob
 }

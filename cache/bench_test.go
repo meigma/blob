@@ -25,13 +25,12 @@ const (
 	benchDirCount = 16
 )
 
-func BenchmarkCachedReaderReadFileHit(b *testing.B) {
+func BenchmarkCachedBlobReadFileHit(b *testing.B) {
 	dir := b.TempDir()
 	paths := makeBenchFiles(b, dir, 128, 32<<10, benchDirCount, benchPatternCompressible)
-	idx, source := createBenchArchive(b, dir, blob.CompressionZstd)
-	reader := blob.NewReader(idx, source)
+	base := createBenchBlob(b, dir, blob.CompressionZstd)
 	mockCache := testutil.NewMockCache()
-	cached := NewReader(reader, mockCache)
+	cached := New(base, mockCache)
 
 	for _, path := range paths {
 		content, err := cached.ReadFile(path)
@@ -54,7 +53,7 @@ func BenchmarkCachedReaderReadFileHit(b *testing.B) {
 	}
 }
 
-func BenchmarkCachedReaderPrefetchDir(b *testing.B) {
+func BenchmarkCachedBlobPrefetchDir(b *testing.B) {
 	cases := []struct {
 		name        string
 		fileCount   int
@@ -112,8 +111,7 @@ func BenchmarkCachedReaderPrefetchDir(b *testing.B) {
 		b.Run(bc.name, func(b *testing.B) {
 			dir := b.TempDir()
 			makeBenchFiles(b, dir, bc.fileCount, bc.fileSize, benchDirCount, bc.pattern)
-			idx, source := createBenchArchive(b, dir, bc.compression)
-			reader := blob.NewReader(idx, source)
+			base := createBenchBlob(b, dir, bc.compression)
 
 			dirEntries := countBenchDirEntries(bc.fileCount, benchDirCount)
 			totalBytes := int64(dirEntries * bc.fileSize)
@@ -126,7 +124,7 @@ func BenchmarkCachedReaderPrefetchDir(b *testing.B) {
 			for b.Loop() {
 				b.StopTimer()
 				mockCache := testutil.NewMockCache()
-				cached := NewReader(reader, mockCache)
+				cached := New(base, mockCache)
 				b.StartTimer()
 
 				if err := cached.PrefetchDir(prefix); err != nil {
@@ -137,15 +135,15 @@ func BenchmarkCachedReaderPrefetchDir(b *testing.B) {
 	}
 }
 
-func BenchmarkCachedReaderPrefetchDirDisk(b *testing.B) {
-	benchmarkReaderPrefetchDirDisk(b, "serial", 1)
+func BenchmarkCachedBlobPrefetchDirDisk(b *testing.B) {
+	benchmarkBlobPrefetchDirDisk(b, "serial", 1)
 }
 
-func BenchmarkCachedReaderPrefetchDirDiskParallel(b *testing.B) {
-	benchmarkReaderPrefetchDirDisk(b, "parallel", runtime.GOMAXPROCS(0))
+func BenchmarkCachedBlobPrefetchDirDiskParallel(b *testing.B) {
+	benchmarkBlobPrefetchDirDisk(b, "parallel", runtime.GOMAXPROCS(0))
 }
 
-func benchmarkReaderPrefetchDirDisk(b *testing.B, label string, workers int) {
+func benchmarkBlobPrefetchDirDisk(b *testing.B, label string, workers int) {
 	b.Helper()
 	cases := []struct {
 		name        string
@@ -204,9 +202,8 @@ func benchmarkReaderPrefetchDirDisk(b *testing.B, label string, workers int) {
 		b.Run(fmt.Sprintf("%s/%s", label, bc.name), func(b *testing.B) {
 			dir := b.TempDir()
 			makeBenchFiles(b, dir, bc.fileCount, bc.fileSize, benchDirCount, bc.pattern)
-			idx, source := createBenchArchive(b, dir, bc.compression)
-			reader := blob.NewReader(idx, source)
-			cachedOpts := []ReaderOption{WithPrefetchConcurrency(workers)}
+			base := createBenchBlob(b, dir, bc.compression)
+			cachedOpts := []Option{WithPrefetchConcurrency(workers)}
 
 			dirEntries := countBenchDirEntries(bc.fileCount, benchDirCount)
 			totalBytes := int64(dirEntries * bc.fileSize)
@@ -228,7 +225,7 @@ func benchmarkReaderPrefetchDirDisk(b *testing.B, label string, workers int) {
 					b.Fatal(err)
 				}
 				diskCache := newBenchDiskCache(cacheDir)
-				cached := NewReader(reader, diskCache, cachedOpts...)
+				cached := New(base, diskCache, cachedOpts...)
 				b.StartTimer()
 
 				if err := cached.PrefetchDir(prefix); err != nil {
@@ -293,21 +290,24 @@ func countBenchDirEntries(fileCount, dirCount int) int {
 	return (fileCount + dirCount - 1) / dirCount
 }
 
-func createBenchArchive(b *testing.B, dir string, compression blob.Compression) (*blob.Index, *testutil.MockByteSource) {
+func createBenchBlob(b *testing.B, dir string, compression blob.Compression) *blob.Blob {
 	b.Helper()
 
 	var indexBuf, dataBuf bytes.Buffer
-	w := blob.NewWriter(blob.WriteOptions{Compression: compression})
-	if err := w.Create(context.Background(), dir, &indexBuf, &dataBuf); err != nil {
+	var opts []blob.CreateOption
+	if compression != blob.CompressionNone {
+		opts = append(opts, blob.CreateWithCompression(compression))
+	}
+	if err := blob.Create(context.Background(), dir, &indexBuf, &dataBuf, opts...); err != nil {
 		b.Fatal(err)
 	}
 
-	idx, err := blob.LoadIndex(indexBuf.Bytes())
+	base, err := blob.New(indexBuf.Bytes(), testutil.NewMockByteSource(dataBuf.Bytes()))
 	if err != nil {
 		b.Fatal(err)
 	}
 
-	return idx, testutil.NewMockByteSource(dataBuf.Bytes())
+	return base
 }
 
 type benchDiskCache struct {

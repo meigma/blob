@@ -15,7 +15,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestWriterCreate(t *testing.T) {
+func TestCreate(t *testing.T) {
 	t.Parallel()
 
 	// Create test directory with files
@@ -30,19 +30,18 @@ func TestWriterCreate(t *testing.T) {
 
 	// Create archive
 	var indexBuf, dataBuf bytes.Buffer
-	w := NewWriter(WriteOptions{Compression: CompressionNone})
-	err := w.Create(context.Background(), dir, &indexBuf, &dataBuf)
+	err := Create(context.Background(), dir, &indexBuf, &dataBuf)
 	require.NoError(t, err)
 
-	// Load index and verify
-	idx, err := LoadIndex(indexBuf.Bytes())
+	// Load index and verify (using internal loadIndex for testing)
+	idx, err := loadIndex(indexBuf.Bytes())
 	require.NoError(t, err)
 
-	assert.Equal(t, 4, idx.Len())
+	assert.Equal(t, 4, idx.len())
 
 	// Verify entries are sorted by path
-	paths := make([]string, 0, idx.Len())
-	for view := range idx.EntriesView() {
+	paths := make([]string, 0, idx.len())
+	for view := range idx.entriesView() {
 		paths = append(paths, view.Path())
 	}
 	assert.Equal(t, []string{"a.txt", "b.txt", "sub/c.txt", "sub/deep/d.go"}, paths)
@@ -50,7 +49,7 @@ func TestWriterCreate(t *testing.T) {
 	// Verify we can look up each file and data is correct
 	for path, content := range files {
 		path = filepath.ToSlash(path)
-		view, ok := idx.LookupView(path)
+		view, ok := idx.lookupView(path)
 		require.True(t, ok, "entry %q not found", path)
 
 		// Verify data content
@@ -63,24 +62,23 @@ func TestWriterCreate(t *testing.T) {
 	}
 }
 
-func TestWriterCreateEmpty(t *testing.T) {
+func TestCreateEmpty(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
 
 	var indexBuf, dataBuf bytes.Buffer
-	w := NewWriter(WriteOptions{})
-	err := w.Create(context.Background(), dir, &indexBuf, &dataBuf)
+	err := Create(context.Background(), dir, &indexBuf, &dataBuf)
 	require.NoError(t, err)
 
-	idx, err := LoadIndex(indexBuf.Bytes())
+	idx, err := loadIndex(indexBuf.Bytes())
 	require.NoError(t, err)
 
-	assert.Equal(t, 0, idx.Len())
+	assert.Equal(t, 0, idx.len())
 	assert.Equal(t, 0, dataBuf.Len())
 }
 
-func TestWriterCreateCompression(t *testing.T) {
+func TestCreateCompression(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
@@ -89,14 +87,13 @@ func TestWriterCreateCompression(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "test.txt"), content, 0o644))
 
 	var indexBuf, dataBuf bytes.Buffer
-	w := NewWriter(WriteOptions{Compression: CompressionZstd})
-	err := w.Create(context.Background(), dir, &indexBuf, &dataBuf)
+	err := Create(context.Background(), dir, &indexBuf, &dataBuf, CreateWithCompression(CompressionZstd))
 	require.NoError(t, err)
 
-	idx, err := LoadIndex(indexBuf.Bytes())
+	idx, err := loadIndex(indexBuf.Bytes())
 	require.NoError(t, err)
 
-	view, ok := idx.LookupView("test.txt")
+	view, ok := idx.lookupView("test.txt")
 	require.True(t, ok)
 
 	// Compressed should be smaller than original
@@ -117,7 +114,7 @@ func TestWriterCreateCompression(t *testing.T) {
 	assert.Equal(t, expectedHash[:], view.HashBytes())
 }
 
-func TestWriterCreateMetadata(t *testing.T) {
+func TestCreateMetadata(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
@@ -129,21 +126,20 @@ func TestWriterCreateMetadata(t *testing.T) {
 	require.NoError(t, os.Chtimes(filePath, modTime, modTime))
 
 	var indexBuf, dataBuf bytes.Buffer
-	w := NewWriter(WriteOptions{})
-	err := w.Create(context.Background(), dir, &indexBuf, &dataBuf)
+	err := Create(context.Background(), dir, &indexBuf, &dataBuf)
 	require.NoError(t, err)
 
-	idx, err := LoadIndex(indexBuf.Bytes())
+	idx, err := loadIndex(indexBuf.Bytes())
 	require.NoError(t, err)
 
-	view, ok := idx.LookupView("test.txt")
+	view, ok := idx.lookupView("test.txt")
 	require.True(t, ok)
 
 	assert.Equal(t, fs.FileMode(0o755), view.Mode())
 	assert.True(t, view.ModTime().Equal(modTime), "ModTime mismatch: expected %v, got %v", modTime, view.ModTime())
 }
 
-func TestWriterCreateSkipsSymlinks(t *testing.T) {
+func TestCreateSkipsSymlinks(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
@@ -151,22 +147,21 @@ func TestWriterCreateSkipsSymlinks(t *testing.T) {
 	require.NoError(t, os.Symlink("real.txt", filepath.Join(dir, "link.txt")))
 
 	var indexBuf, dataBuf bytes.Buffer
-	w := NewWriter(WriteOptions{})
-	err := w.Create(context.Background(), dir, &indexBuf, &dataBuf)
+	err := Create(context.Background(), dir, &indexBuf, &dataBuf)
 	require.NoError(t, err)
 
-	idx, err := LoadIndex(indexBuf.Bytes())
+	idx, err := loadIndex(indexBuf.Bytes())
 	require.NoError(t, err)
 
 	// Only real file should be present
-	assert.Equal(t, 1, idx.Len())
-	_, ok := idx.LookupView("real.txt")
+	assert.Equal(t, 1, idx.len())
+	_, ok := idx.lookupView("real.txt")
 	assert.True(t, ok)
-	_, ok = idx.LookupView("link.txt")
+	_, ok = idx.lookupView("link.txt")
 	assert.False(t, ok)
 }
 
-func TestWriterCreateCancellation(t *testing.T) {
+func TestCreateCancellation(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
@@ -180,13 +175,12 @@ func TestWriterCreateCancellation(t *testing.T) {
 	cancel() // Cancel immediately
 
 	var indexBuf, dataBuf bytes.Buffer
-	w := NewWriter(WriteOptions{})
-	err := w.Create(ctx, dir, &indexBuf, &dataBuf)
+	err := Create(ctx, dir, &indexBuf, &dataBuf)
 
 	assert.ErrorIs(t, err, context.Canceled)
 }
 
-func TestWriterCreatePrefixScans(t *testing.T) {
+func TestCreatePrefixScans(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
@@ -199,16 +193,15 @@ func TestWriterCreatePrefixScans(t *testing.T) {
 	createTestFiles(t, dir, files)
 
 	var indexBuf, dataBuf bytes.Buffer
-	w := NewWriter(WriteOptions{})
-	err := w.Create(context.Background(), dir, &indexBuf, &dataBuf)
+	err := Create(context.Background(), dir, &indexBuf, &dataBuf)
 	require.NoError(t, err)
 
-	idx, err := LoadIndex(indexBuf.Bytes())
+	idx, err := loadIndex(indexBuf.Bytes())
 	require.NoError(t, err)
 
 	// Verify prefix scan works correctly
 	cssPaths := make([]string, 0, 2)
-	for view := range idx.EntriesWithPrefixView("assets/css/") {
+	for view := range idx.entriesWithPrefixView("assets/css/") {
 		cssPaths = append(cssPaths, view.Path())
 	}
 	assert.Equal(t, []string{"assets/css/main.css", "assets/css/reset.css"}, cssPaths)
