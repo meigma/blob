@@ -11,7 +11,7 @@ import (
 	"github.com/klauspost/compress/zstd"
 
 	"github.com/meigma/blob/internal/blobtype"
-	"github.com/meigma/blob/internal/ioutil"
+	"github.com/meigma/blob/internal/file"
 )
 
 // File streams a file through the hash and optional compression pipeline.
@@ -25,18 +25,18 @@ func File(ctx context.Context, f *os.File, w io.Writer, enc *zstd.Encoder, buf [
 	}
 
 	hasher := sha256.New()
-	cw := &ioutil.CountingWriter{W: w}
-	cr := &ioutil.CountingReader{R: io.LimitReader(f, expectedSize)}
+	cw := &file.CountingWriter{W: w}
+	cr := &file.CountingReader{R: io.LimitReader(f, expectedSize)}
 
 	if compression == blobtype.CompressionNone {
 		// Stream: file → TeeReader(hasher) → countingWriter(data)
-		if _, err := ioutil.CopyWithContext(ctx, cw, io.TeeReader(cr, hasher), buf); err != nil {
+		if _, err := file.CopyWithContext(ctx, cw, io.TeeReader(cr, hasher), buf); err != nil {
 			return 0, 0, nil, wrapOverflowErr(err)
 		}
 	} else {
 		// Stream: file → TeeReader(hasher) → zstd encoder → countingWriter(data)
 		enc.Reset(cw)
-		if _, err := ioutil.CopyWithContext(ctx, enc, io.TeeReader(cr, hasher), buf); err != nil {
+		if _, err := file.CopyWithContext(ctx, enc, io.TeeReader(cr, hasher), buf); err != nil {
 			enc.Close()
 			return 0, 0, nil, wrapOverflowErr(err)
 		}
@@ -53,7 +53,7 @@ func File(ctx context.Context, f *os.File, w io.Writer, enc *zstd.Encoder, buf [
 }
 
 func wrapOverflowErr(err error) error {
-	if errors.Is(err, ioutil.ErrOverflow) {
+	if errors.Is(err, file.ErrOverflow) {
 		return blobtype.ErrSizeOverflow
 	}
 	return err

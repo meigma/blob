@@ -18,9 +18,8 @@ import (
 
 	"github.com/meigma/blob/internal/batch"
 	"github.com/meigma/blob/internal/blobtype"
-	"github.com/meigma/blob/internal/fileops"
+	"github.com/meigma/blob/internal/file"
 	"github.com/meigma/blob/internal/index"
-	"github.com/meigma/blob/internal/pathutil"
 )
 
 // Re-export types from internal/blobtype for public API.
@@ -88,7 +87,7 @@ type ByteSource interface {
 type Blob struct {
 	idx              *index.Index
 	indexData        []byte
-	ops              *fileops.Ops
+	reader           *file.Reader
 	maxFileSize      uint64
 	maxDecoderMemory uint64
 	verifyOnClose    bool
@@ -107,17 +106,17 @@ func New(indexData []byte, source ByteSource, opts ...Option) (*Blob, error) {
 	b := &Blob{
 		idx:              idx,
 		indexData:        indexData,
-		maxFileSize:      fileops.DefaultMaxFileSize,
-		maxDecoderMemory: fileops.DefaultMaxDecoderMemory,
+		maxFileSize:      file.DefaultMaxFileSize,
+		maxDecoderMemory: file.DefaultMaxDecoderMemory,
 		verifyOnClose:    true,
 	}
 	for _, opt := range opts {
 		opt(b)
 	}
-	b.ops = fileops.New(
+	b.reader = file.NewReader(
 		source,
-		fileops.WithMaxFileSize(b.maxFileSize),
-		fileops.WithMaxDecoderMemory(b.maxDecoderMemory),
+		file.WithMaxFileSize(b.maxFileSize),
+		file.WithMaxDecoderMemory(b.maxDecoderMemory),
 	)
 	return b, nil
 }
@@ -136,7 +135,7 @@ func (b *Blob) Open(name string) (fs.File, error) {
 	// Check if it's a file
 	if view, ok := b.idx.LookupView(name); ok {
 		entry := blobtype.EntryFromViewWithPath(view, name)
-		return b.ops.OpenFile(&entry, b.verifyOnClose), nil
+		return b.reader.OpenFile(&entry, b.verifyOnClose), nil
 	}
 
 	// Check if it's a directory
@@ -160,7 +159,7 @@ func (b *Blob) Stat(name string) (fs.FileInfo, error) {
 	// Check if it's a file
 	if view, ok := b.idx.LookupView(name); ok {
 		entry := blobtype.EntryFromViewWithPath(view, name)
-		info, err := fileops.NewFileInfo(&entry, pathutil.Base(name))
+		info, err := file.NewInfo(&entry, file.Base(name))
 		if err != nil {
 			return nil, &fs.PathError{Op: "stat", Path: name, Err: err}
 		}
@@ -169,11 +168,11 @@ func (b *Blob) Stat(name string) (fs.FileInfo, error) {
 
 	// Check if it's a directory
 	if b.isDir(name) {
-		dirName := pathutil.Base(name)
+		dirName := file.Base(name)
 		if name == "." {
 			dirName = "."
 		}
-		return fileops.NewDirInfo(dirName), nil
+		return file.NewDirInfo(dirName), nil
 	}
 
 	return nil, &fs.PathError{Op: "stat", Path: name, Err: fs.ErrNotExist}
@@ -194,7 +193,7 @@ func (b *Blob) ReadFile(name string) ([]byte, error) {
 	}
 
 	entry := blobtype.EntryFromViewWithPath(view, name)
-	return b.ops.ReadAll(&entry)
+	return b.reader.ReadAll(&entry)
 }
 
 // ReadDir implements fs.ReadDirFS.
@@ -207,7 +206,7 @@ func (b *Blob) ReadDir(name string) ([]fs.DirEntry, error) {
 		return nil, &fs.PathError{Op: "readdir", Path: name, Err: fs.ErrInvalid}
 	}
 
-	prefix := pathutil.DirPrefix(name)
+	prefix := file.DirPrefix(name)
 	di := newDirIter(b.idx, prefix)
 	defer di.Close()
 
@@ -227,10 +226,10 @@ func (b *Blob) ReadDir(name string) ([]fs.DirEntry, error) {
 	return entries, nil
 }
 
-// Ops returns the underlying file operations helper.
+// Reader returns the underlying file reader.
 // This is useful for cached readers that need to share the decompression pool.
-func (b *Blob) Ops() *fileops.Ops {
-	return b.ops
+func (b *Blob) Reader() *file.Reader {
+	return b.reader
 }
 
 // IndexData returns the raw FlatBuffers-encoded index data.
@@ -341,7 +340,7 @@ func (b *Blob) collectPrefixEntries(prefix string) []*batch.Entry {
 	if prefix == "" || prefix == "." {
 		dirPrefix = ""
 	} else {
-		dirPrefix = pathutil.DirPrefix(prefix)
+		dirPrefix = file.DirPrefix(prefix)
 	}
 
 	var entries []*batch.Entry //nolint:prealloc // size unknown until iteration
@@ -371,7 +370,7 @@ func (b *Blob) copyEntries(destDir string, entries []*batch.Entry, cfg *copyConf
 	if cfg.workers != 0 {
 		procOpts = append(procOpts, batch.WithWorkers(cfg.workers))
 	}
-	proc := batch.NewProcessor(b.ops.Source(), b.ops.Pool(), b.maxFileSize, procOpts...)
+	proc := batch.NewProcessor(b.reader.Source(), b.reader.Pool(), b.maxFileSize, procOpts...)
 
 	return proc.Process(entries, sink)
 }
@@ -392,9 +391,9 @@ func (d *openDir) Stat() (fs.FileInfo, error) {
 	if name == "." {
 		name = "."
 	} else {
-		name = pathutil.Base(d.name)
+		name = file.Base(d.name)
 	}
-	return fileops.NewDirInfo(name), nil
+	return file.NewDirInfo(name), nil
 }
 
 func (d *openDir) Close() error {
@@ -407,7 +406,7 @@ func (d *openDir) Close() error {
 
 func (d *openDir) ReadDir(n int) ([]fs.DirEntry, error) {
 	if d.iter == nil {
-		d.iter = newDirIter(d.b.idx, pathutil.DirPrefix(d.name))
+		d.iter = newDirIter(d.b.idx, file.DirPrefix(d.name))
 	}
 
 	if n <= 0 {
@@ -481,22 +480,22 @@ func (it *dirIter) Next() (fs.DirEntry, bool) {
 		}
 
 		path := string(view.PathBytes())
-		childName, isSubDir := pathutil.Child(path, it.prefix)
+		childName, isSubDir := file.Child(path, it.prefix)
 		if childName == it.lastName {
 			continue
 		}
 		it.lastName = childName
 
 		if isSubDir {
-			return fileops.NewDirEntry(fileops.NewDirInfo(childName), nil), true
+			return file.NewDirEntry(file.NewDirInfo(childName), nil), true
 		}
 		entry := blobtype.EntryFromViewWithPath(view, path)
-		info, err := fileops.NewFileInfo(&entry, childName)
+		info, err := file.NewInfo(&entry, childName)
 		if err != nil {
 			// Return a fallback info with size 0
-			info = &fileops.FileInfo{}
+			info = &file.Info{}
 		}
-		return fileops.NewDirEntry(info, err), true
+		return file.NewDirEntry(info, err), true
 	}
 }
 

@@ -1,4 +1,4 @@
-package fileops
+package file
 
 import (
 	"bytes"
@@ -68,7 +68,7 @@ func TestFile_Read(t *testing.T) {
 			t.Parallel()
 
 			source := newMockSource(tt.sourceData)
-			ops := New(source, WithMaxFileSize(0))
+			ops := NewReader(source, WithMaxFileSize(0))
 			f := ops.OpenFile(tt.entry, true)
 			defer f.Close()
 
@@ -97,7 +97,7 @@ func TestFile_PartialRead(t *testing.T) {
 
 	content := []byte("hello world, this is test content")
 	source := newMockSource(content)
-	ops := New(source, WithMaxFileSize(0))
+	ops := NewReader(source, WithMaxFileSize(0))
 
 	entry := &Entry{
 		Path:         "test.txt",
@@ -136,7 +136,7 @@ func TestFile_VerifyOnClose(t *testing.T) {
 
 	content := []byte("hello world")
 	source := newMockSource(content)
-	ops := New(source, WithMaxFileSize(0))
+	ops := NewReader(source, WithMaxFileSize(0))
 
 	t.Run("verifies on close when enabled", func(t *testing.T) {
 		t.Parallel()
@@ -192,7 +192,7 @@ func TestFile_Stat(t *testing.T) {
 
 	content := []byte("test content")
 	source := newMockSource(content)
-	ops := New(source, WithMaxFileSize(0))
+	ops := NewReader(source, WithMaxFileSize(0))
 
 	entry := &Entry{
 		Path:         "dir/test.txt",
@@ -231,7 +231,7 @@ func TestFile_EmptyFile(t *testing.T) {
 
 	empty := []byte{}
 	source := newMockSource(empty)
-	ops := New(source, WithMaxFileSize(0))
+	ops := NewReader(source, WithMaxFileSize(0))
 
 	entry := &Entry{
 		Path:         "empty.txt",
@@ -264,7 +264,7 @@ func TestFile_IncrementalRead(t *testing.T) {
 
 	content := []byte("hello world, this is a longer piece of test content")
 	source := newMockSource(content)
-	ops := New(source, WithMaxFileSize(0))
+	ops := NewReader(source, WithMaxFileSize(0))
 
 	entry := &Entry{
 		Path:         "test.txt",
@@ -299,7 +299,7 @@ func TestFile_IncrementalRead(t *testing.T) {
 	}
 }
 
-func TestFileInfo(t *testing.T) {
+func TestInfo(t *testing.T) {
 	t.Parallel()
 
 	entry := &Entry{
@@ -308,9 +308,9 @@ func TestFileInfo(t *testing.T) {
 		Mode:         0o755,
 	}
 
-	info, err := NewFileInfo(entry, "test.txt")
+	info, err := NewInfo(entry, "test.txt")
 	if err != nil {
-		t.Fatalf("NewFileInfo() error = %v", err)
+		t.Fatalf("NewInfo() error = %v", err)
 	}
 
 	if info.Name() != "test.txt" {

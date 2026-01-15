@@ -1,9 +1,9 @@
-// Package fileops provides internal file reading operations for the blob package.
-package fileops
+// Package file provides internal file reading operations for the blob package.
+package file
 
 import "github.com/meigma/blob/internal/blobtype"
 
-// Re-export types from blobtype to avoid import changes throughout fileops.
+// Re-export types from blobtype to avoid import changes throughout file.
 type (
 	Entry       = blobtype.Entry
 	Compression = blobtype.Compression

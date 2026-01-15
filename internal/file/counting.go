@@ -1,5 +1,4 @@
-// Package ioutil provides I/O utility types and functions.
-package ioutil
+package file
 
 import (
 	"errors"

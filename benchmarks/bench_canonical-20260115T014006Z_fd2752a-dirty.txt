@@ -1,7 +1,7 @@
 goos: linux
 goarch: amd64
 pkg: github.com/meigma/blob
-cpu: AMD EPYC 9254 24-Core Processor                
+cpu: AMD EPYC 9254 24-Core Processor
 BenchmarkWriterCreate/files=128/size=16k/none/compressible-48         	     186	   6994101 ns/op	 299.85 MB/s	  381700 B/op	    3088 allocs/op
 BenchmarkWriterCreate/files=128/size=16k/none/compressible-48         	     159	   7399065 ns/op	 283.43 MB/s	  385900 B/op	    3088 allocs/op
 BenchmarkWriterCreate/files=128/size=16k/none/compressible-48         	     146	   7519024 ns/op	 278.91 MB/s	  388551 B/op	    3088 allocs/op
@@ -357,7 +357,7 @@ ok  	github.com/meigma/blob	548.692s
 goos: linux
 goarch: amd64
 pkg: github.com/meigma/blob/cache
-cpu: AMD EPYC 9254 24-Core Processor                
+cpu: AMD EPYC 9254 24-Core Processor
 BenchmarkCachedReaderReadFileHit-48                	 7035464	       169.3 ns/op	193549.30 MB/s	       0 B/op	       0 allocs/op
 BenchmarkCachedReaderReadFileHit-48                	 6337796	       167.6 ns/op	195484.26 MB/s	       0 B/op	       0 allocs/op
 BenchmarkCachedReaderReadFileHit-48                	 6983110	       170.1 ns/op	192631.71 MB/s	       0 B/op	       0 allocs/op
@@ -556,7 +556,7 @@ ok  	github.com/meigma/blob/internal/batch	0.006s
 ?   	github.com/meigma/blob/internal/blobtype	[no test files]
 ?   	github.com/meigma/blob/internal/fb	[no test files]
 PASS
-ok  	github.com/meigma/blob/internal/fileops	0.005s
+ok  	github.com/meigma/blob/internal/file	0.005s
 ?   	github.com/meigma/blob/internal/ioutil	[no test files]
 ?   	github.com/meigma/blob/internal/pathutil	[no test files]
 ?   	github.com/meigma/blob/internal/sizing	[no test files]

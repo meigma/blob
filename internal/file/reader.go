@@ -1,4 +1,4 @@
-package fileops
+package file
 
 import (
 	"bytes"
@@ -23,66 +23,66 @@ type ByteSource interface {
 	Size() int64
 }
 
-// Ops handles reading and verifying file content from a ByteSource.
-type Ops struct {
+// Reader reads and verifies file content from a ByteSource.
+type Reader struct {
 	source           ByteSource
 	maxFileSize      uint64
 	maxDecoderMemory uint64
 	pool             *DecompressPool
 }
 
-// Option configures an Ops instance.
-type Option func(*Ops)
+// Option configures a Reader.
+type Option func(*Reader)
 
 // WithMaxFileSize sets the maximum file size limit.
 // Set to 0 to disable the limit.
 func WithMaxFileSize(limit uint64) Option {
-	return func(o *Ops) {
-		o.maxFileSize = limit
+	return func(r *Reader) {
+		r.maxFileSize = limit
 	}
 }
 
 // WithMaxDecoderMemory sets the maximum decoder memory limit.
 // Set to 0 to disable the limit.
 func WithMaxDecoderMemory(limit uint64) Option {
-	return func(o *Ops) {
-		o.maxDecoderMemory = limit
+	return func(r *Reader) {
+		r.maxDecoderMemory = limit
 	}
 }
 
-// New creates a new Ops instance for reading files from the given source.
-func New(source ByteSource, opts ...Option) *Ops {
-	o := &Ops{
+// NewReader creates a Reader for reading files from the given source.
+func NewReader(source ByteSource, opts ...Option) *Reader {
+	r := &Reader{
 		source:           source,
 		maxFileSize:      DefaultMaxFileSize,
 		maxDecoderMemory: DefaultMaxDecoderMemory,
 	}
 	for _, opt := range opts {
-		opt(o)
+		opt(r)
 	}
-	o.pool = NewDecompressPool(o.maxDecoderMemory)
-	return o
+	r.pool = NewDecompressPool(r.maxDecoderMemory)
+	return r
 }
 
 // ReadAll reads the entire content of an entry, decompresses if needed,
 // and verifies the hash. Returns the uncompressed content.
-func (o *Ops) ReadAll(entry *Entry) ([]byte, error) {
-	if err := ValidateAll(entry, o.source.Size(), o.maxFileSize); err != nil {
+func (r *Reader) ReadAll(entry *Entry) ([]byte, error) {
+	if err := ValidateAll(entry, r.source.Size(), r.maxFileSize); err != nil {
 		return nil, fmt.Errorf("read %s: %w", entry.Path, err)
 	}
 
-	section, err := o.sectionReader(entry)
+	section, err := r.sectionReader(entry)
 	if err != nil {
 		return nil, fmt.Errorf("read %s: %w", entry.Path, err)
 	}
 
-	reader, release, err := o.entryReader(entry, section)
+	reader, release, err := r.entryReader(entry, section)
 	if err != nil {
 		return nil, err
 	}
 	defer release()
 
-	content, sum, err := o.readContentAndHash(entry, reader)
+	content, sum, err := r.readContentAndHash(entry, reader)
 	if err != nil {
 		return nil, err
 	}
@@ -95,22 +95,22 @@ func (o *Ops) ReadAll(entry *Entry) ([]byte, error) {
 }
 
 // Source returns the underlying ByteSource.
-func (o *Ops) Source() ByteSource {
-	return o.source
+func (r *Reader) Source() ByteSource {
+	return r.source
 }
 
 // MaxFileSize returns the configured maximum file size.
-func (o *Ops) MaxFileSize() uint64 {
-	return o.maxFileSize
+func (r *Reader) MaxFileSize() uint64 {
+	return r.maxFileSize
 }
 
 // Pool returns the decompression pool for reuse.
-func (o *Ops) Pool() *DecompressPool {
-	return o.pool
+func (r *Reader) Pool() *DecompressPool {
+	return r.pool
 }
 
 // sectionReader creates a bounded section reader for an entry.
-func (o *Ops) sectionReader(entry *Entry) (*io.SectionReader, error) {
+func (r *Reader) sectionReader(entry *Entry) (*io.SectionReader, error) {
 	offset, err := sizing.ToInt64(entry.DataOffset, ErrSizeOverflow)
 	if err != nil {
 		return nil, err
@@ -119,16 +119,16 @@ func (o *Ops) sectionReader(entry *Entry) (*io.SectionReader, error) {
 	if err != nil {
 		return nil, err
 	}
-	return io.NewSectionReader(o.source, offset, length), nil
+	return io.NewSectionReader(r.source, offset, length), nil
 }
 
 // entryReader creates the appropriate reader for an entry based on compression.
-func (o *Ops) entryReader(entry *Entry, section *io.SectionReader) (io.Reader, func(), error) {
+func (r *Reader) entryReader(entry *Entry, section *io.SectionReader) (io.Reader, func(), error) {
 	switch entry.Compression {
 	case CompressionNone:
 		return section, func() {}, nil
 	case CompressionZstd:
-		dec, release, err := o.pool.Get(section)
+		dec, release, err := r.pool.Get(section)
 		if err != nil {
 			return nil, func() {}, fmt.Errorf("%w: %v", ErrDecompression, err)
 		}
@@ -139,7 +139,7 @@ func (o *Ops) entryReader(entry *Entry, section *io.SectionReader) (io.Reader, f
 }
 
 // readContentAndHash reads content and computes its hash.
-func (o *Ops) readContentAndHash(entry *Entry, reader io.Reader) (content, sum []byte, err error) {
+func (r *Reader) readContentAndHash(entry *Entry, reader io.Reader) (content, sum []byte, err error) {
 	contentSize, err := sizing.ToInt(entry.OriginalSize, ErrSizeOverflow)
 	if err != nil {
 		return nil, nil, fmt.Errorf("read %s: %w", entry.Path, err)

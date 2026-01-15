@@ -1,5 +1,5 @@
 // Package blobtype defines shared types used across the blob package and its
-// internal packages. This avoids circular imports between blob and internal/fileops.
+// internal packages. This avoids circular imports between blob and internal/file.
 package blobtype
 
 // Compression identifies the compression algorithm used for a file.

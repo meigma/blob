@@ -12,7 +12,7 @@ import (
 	"sync/atomic"
 
 	"github.com/meigma/blob/internal/blobtype"
-	"github.com/meigma/blob/internal/fileops"
+	"github.com/meigma/blob/internal/file"
 	"github.com/meigma/blob/internal/sizing"
 )
 
@@ -36,8 +36,8 @@ const (
 // It provides efficient reading by grouping adjacent entries and processing them
 // together, minimizing the number of read operations on the underlying source.
 type Processor struct {
-	source      fileops.ByteSource
-	pool        *fileops.DecompressPool
+	source      file.ByteSource
+	pool        *file.DecompressPool
 	maxFileSize uint64
 	workers     int // 0 = auto, <0 = serial, >0 = fixed count
 }
@@ -59,7 +59,7 @@ func WithWorkers(n int) ProcessorOption {
 // The source provides random access to the data blob.
 // The pool provides reusable zstd decoders for compressed entries.
 // maxFileSize limits the size of individual entries (0 for no limit).
-func NewProcessor(source fileops.ByteSource, pool *fileops.DecompressPool, maxFileSize uint64, opts ...ProcessorOption) *Processor {
+func NewProcessor(source file.ByteSource, pool *file.DecompressPool, maxFileSize uint64, opts ...ProcessorOption) *Processor {
 	p := &Processor{
 		source:      source,
 		pool:        pool,
@@ -98,7 +98,7 @@ func (p *Processor) Process(entries []*Entry, sink Sink) error {
 	// Validate all entries
 	sourceSize := p.source.Size()
 	for _, entry := range toProcess {
-		if err := fileops.ValidateAll(entry, sourceSize, p.maxFileSize); err != nil {
+		if err := file.ValidateAll(entry, sourceSize, p.maxFileSize); err != nil {
 			return fmt.Errorf("batch: %s: %w", entry.Path, err)
 		}
 	}
@@ -303,7 +303,7 @@ func (p *Processor) decompress(entry *Entry, data []byte) ([]byte, error) {
 			}
 			return nil, fmt.Errorf("%w: %v", blobtype.ErrDecompression, err)
 		}
-		if err := fileops.EnsureNoExtra(dec); err != nil {
+		if err := file.EnsureNoExtra(dec); err != nil {
 			return nil, err
 		}
 		return content, nil
@@ -337,7 +337,7 @@ func (p *Processor) streamDecompressVerify(entry *Entry, data []byte, w io.Write
 	}
 
 	// Verify no extra data
-	if err := fileops.EnsureNoExtra(tee); err != nil {
+	if err := file.EnsureNoExtra(tee); err != nil {
 		return err
 	}
 

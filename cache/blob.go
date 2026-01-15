@@ -10,7 +10,7 @@ import (
 
 	"github.com/meigma/blob"
 	"github.com/meigma/blob/internal/batch"
-	"github.com/meigma/blob/internal/fileops"
+	"github.com/meigma/blob/internal/file"
 )
 
 // Blob wraps a blob.Blob with content-addressed caching.
@@ -93,7 +93,7 @@ func (b *Blob) Open(name string) (fs.File, error) {
 	// Check cache first
 	if content, cached := b.cache.Get(entry.Hash); cached {
 		return &cachedContentFile{
-			entry:   entryToFileops(entry),
+			entry:   entryTofile(entry),
 			content: content,
 		}, nil
 	}
@@ -104,7 +104,7 @@ func (b *Blob) Open(name string) (fs.File, error) {
 		return nil, err
 	}
 
-	f, ok := baseFile.(*fileops.File)
+	f, ok := baseFile.(*file.File)
 	if !ok {
 		// Should not happen for files, but return base file if it does
 		return baseFile, nil
@@ -258,7 +258,7 @@ func (b *Blob) prefetchEntries(entries []*batch.Entry) error {
 	if workers != 0 {
 		procOpts = append(procOpts, batch.WithWorkers(workers))
 	}
-	proc := batch.NewProcessor(b.base.Ops().Source(), b.base.Ops().Pool(), b.base.Ops().MaxFileSize(), procOpts...)
+	proc := batch.NewProcessor(b.base.Reader().Source(), b.base.Reader().Pool(), b.base.Reader().MaxFileSize(), procOpts...)
 
 	var sink batch.Sink = &cacheSink{cache: b.cache}
 	if _, ok := b.cache.(StreamingCache); !ok {
@@ -270,30 +270,30 @@ func (b *Blob) prefetchEntries(entries []*batch.Entry) error {
 // wrapFileForCaching wraps a base file with caching support.
 //
 //nolint:gocritic // hugeParam acceptable for Entry value semantics
-func (b *Blob) wrapFileForCaching(f *fileops.File, entry blob.Entry) (fs.File, error) {
-	fileopsEntry := entryToFileops(entry)
+func (b *Blob) wrapFileForCaching(f *file.File, entry blob.Entry) (fs.File, error) {
+	fileEntry := entryTofile(entry)
 
 	// Check if cache supports streaming
 	if sc, ok := b.cache.(StreamingCache); ok {
 		w, err := sc.Writer(entry.Hash)
 		if err != nil {
 			// Fall back to buffered caching
-			return b.wrapFileBuffered(f, fileopsEntry)
+			return b.wrapFileBuffered(f, fileEntry)
 		}
 		return &streamingCachedFile{
 			File:   f,
-			entry:  fileopsEntry,
+			entry:  fileEntry,
 			writer: w,
 		}, nil
 	}
 
-	return b.wrapFileBuffered(f, fileopsEntry)
+	return b.wrapFileBuffered(f, fileEntry)
 }
 
 // wrapFileBuffered wraps a file with in-memory buffering for caching.
 //
 //nolint:gocritic // hugeParam acceptable for Entry value semantics
-func (b *Blob) wrapFileBuffered(f *fileops.File, entry fileops.Entry) (fs.File, error) {
+func (b *Blob) wrapFileBuffered(f *file.File, entry file.Entry) (fs.File, error) {
 	// Check if file is small enough to buffer
 	if entry.OriginalSize > uint64(math.MaxInt) {
 		// Too large to buffer, skip caching
@@ -308,10 +308,10 @@ func (b *Blob) wrapFileBuffered(f *fileops.File, entry fileops.Entry) (fs.File, 
 	}, nil
 }
 
-// entryToFileops converts a blob.Entry to a fileops.Entry.
+// entryTofile converts a blob.Entry to a file.Entry.
 // Both are aliases for blobtype.Entry, so this is a type identity.
 //
 //nolint:gocritic // hugeParam acceptable for Entry value semantics
-func entryToFileops(e blob.Entry) fileops.Entry {
+func entryTofile(e blob.Entry) file.Entry {
 	return e
 }

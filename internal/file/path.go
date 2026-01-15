@@ -1,5 +1,4 @@
-// Package pathutil provides path manipulation for slash-separated archive paths.
-package pathutil
+package file
 
 import "strings"
 

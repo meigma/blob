@@ -1,4 +1,4 @@
-package fileops
+package file
 
 import (
 	"bytes"
@@ -150,7 +150,7 @@ func TestOps_ReadAll(t *testing.T) {
 			t.Parallel()
 
 			source := newMockSource(tt.sourceData)
-			ops := New(source, WithMaxFileSize(0)) // no limit
+			ops := NewReader(source, WithMaxFileSize(0)) // no limit
 
 			got, err := ops.ReadAll(tt.entry)
 
@@ -186,7 +186,7 @@ func TestOps_Options(t *testing.T) {
 
 	t.Run("default options", func(t *testing.T) {
 		t.Parallel()
-		ops := New(source)
+		ops := NewReader(source)
 		if ops.MaxFileSize() != DefaultMaxFileSize {
 			t.Errorf("MaxFileSize() = %d, want %d", ops.MaxFileSize(), DefaultMaxFileSize)
 		}
@@ -194,7 +194,7 @@ func TestOps_Options(t *testing.T) {
 
 	t.Run("custom max file size", func(t *testing.T) {
 		t.Parallel()
-		ops := New(source, WithMaxFileSize(1000))
+		ops := NewReader(source, WithMaxFileSize(1000))
 		if ops.MaxFileSize() != 1000 {
 			t.Errorf("MaxFileSize() = %d, want %d", ops.MaxFileSize(), 1000)
 		}
@@ -202,7 +202,7 @@ func TestOps_Options(t *testing.T) {
 
 	t.Run("file exceeds max size", func(t *testing.T) {
 		t.Parallel()
-		ops := New(source, WithMaxFileSize(5)) // very small limit
+		ops := NewReader(source, WithMaxFileSize(5)) // very small limit
 
 		entry := &Entry{
 			Path:         "test.txt",
@@ -225,7 +225,7 @@ func TestOps_EmptyFile(t *testing.T) {
 
 	empty := []byte{}
 	source := newMockSource(empty)
-	ops := New(source, WithMaxFileSize(0))
+	ops := NewReader(source, WithMaxFileSize(0))
 
 	entry := &Entry{
 		Path:         "empty.txt",

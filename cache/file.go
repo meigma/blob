@@ -5,13 +5,12 @@ import (
 	"io"
 	"io/fs"
 
-	"github.com/meigma/blob/internal/fileops"
-	"github.com/meigma/blob/internal/pathutil"
+	"github.com/meigma/blob/internal/file"
 )
 
 // cachedContentFile wraps already-cached content as an fs.File.
 type cachedContentFile struct {
-	entry   fileops.Entry
+	entry   file.Entry
 	content []byte
 	offset  int
 }
@@ -26,7 +25,7 @@ func (f *cachedContentFile) Read(p []byte) (int, error) {
 }
 
 func (f *cachedContentFile) Stat() (fs.FileInfo, error) {
-	return fileops.NewFileInfo(&f.entry, pathutil.Base(f.entry.Path))
+	return file.NewInfo(&f.entry, file.Base(f.entry.Path))
 }
 
 func (f *cachedContentFile) Close() error {
@@ -35,8 +34,8 @@ func (f *cachedContentFile) Close() error {
 
 // streamingCachedFile wraps a file and streams reads to a Writer.
 type streamingCachedFile struct {
-	*fileops.File
-	entry   fileops.Entry
+	*file.File
+	entry   file.Entry
 	writer  Writer
 	written bool
 	failed  bool
@@ -76,8 +75,8 @@ func (f *streamingCachedFile) Close() error {
 
 // bufferedCachedFile wraps a file and buffers reads for caching.
 type bufferedCachedFile struct {
-	*fileops.File
-	entry fileops.Entry
+	*file.File
+	entry file.Entry
 	cache Cache
 	buf   *bytes.Buffer
 }

@@ -1,4 +1,4 @@
-package fileops
+package file
 
 import (
 	"bytes"
@@ -9,17 +9,16 @@ import (
 	"io/fs"
 	"time"
 
-	"github.com/meigma/blob/internal/pathutil"
 	"github.com/meigma/blob/internal/sizing"
 )
 
 // File implements fs.File for streaming reads with hash verification.
 type File struct {
-	ops           *Ops
+	reader        *Reader
 	entry         Entry
 	verifyOnClose bool
 
-	reader    io.Reader
+	r         io.Reader
 	release   func()
 	hasher    hash.Hash
 	remaining uint64
@@ -34,9 +33,9 @@ type File struct {
 var _ fs.File = (*File)(nil)
 
 // OpenFile creates a new File for streaming reads.
-func (o *Ops) OpenFile(entry *Entry, verifyOnClose bool) *File {
+func (r *Reader) OpenFile(entry *Entry, verifyOnClose bool) *File {
 	return &File{
-		ops:           o,
+		reader:        r,
 		entry:         *entry,
 		verifyOnClose: verifyOnClose,
 	}
@@ -63,7 +62,7 @@ func (f *File) Read(p []byte) (int, error) {
 		p = p[:f.remaining]
 	}
 
-	n, err := f.reader.Read(p)
+	n, err := f.r.Read(p)
 	if n > 0 {
 		_, _ = f.hasher.Write(p[:n]) //nolint:errcheck // hash writes never fail
 		f.remaining -= uint64(n)
@@ -86,7 +85,7 @@ func (f *File) Read(p []byte) (int, error) {
 
 // Stat returns file info.
 func (f *File) Stat() (fs.FileInfo, error) {
-	return NewFileInfo(&f.entry, pathutil.Base(f.entry.Path))
+	return NewInfo(&f.entry, Base(f.entry.Path))
 }
 
 // Close releases resources and optionally verifies the hash.
@@ -128,7 +127,7 @@ func (f *File) init() error {
 	}
 	f.initialized = true
 
-	if err := ValidateForRead(&f.entry, f.ops.source.Size(), f.ops.maxFileSize); err != nil {
+	if err := ValidateForRead(&f.entry, f.reader.source.Size(), f.reader.maxFileSize); err != nil {
 		f.initErr = fmt.Errorf("read %s: %w", f.entry.Path, err)
 		return f.initErr
 	}
@@ -141,18 +140,18 @@ func (f *File) init() error {
 		return f.initErr
 	}
 
-	section, err := f.ops.sectionReader(&f.entry)
+	section, err := f.reader.sectionReader(&f.entry)
 	if err != nil {
 		f.initErr = err
 		return f.initErr
 	}
 
-	reader, release, err := f.ops.entryReader(&f.entry, section)
+	rd, release, err := f.reader.entryReader(&f.entry, section)
 	if err != nil {
 		f.initErr = err
 		return f.initErr
 	}
-	f.reader = reader
+	f.r = rd
 	f.release = release
 
 	f.remaining = f.entry.OriginalSize
@@ -163,7 +162,7 @@ func (f *File) init() error {
 
 func (f *File) readExtra() (int, error) {
 	var scratch [1]byte
-	n, err := f.reader.Read(scratch[:])
+	n, err := f.r.Read(scratch[:])
 	if n > 0 {
 		return 0, ErrSizeOverflow
 	}
@@ -191,31 +190,31 @@ func (f *File) verifyHash() error {
 	return f.verifyErr
 }
 
-// FileInfo implements fs.FileInfo for regular files.
-type FileInfo struct {
+// Info implements fs.FileInfo for regular files.
+type Info struct {
 	entry Entry
 	name  string
 	size  int64
 }
 
-// NewFileInfo creates a FileInfo from an entry.
-func NewFileInfo(entry *Entry, name string) (*FileInfo, error) {
+// NewInfo creates an Info from an entry.
+func NewInfo(entry *Entry, name string) (*Info, error) {
 	size, err := sizing.ToInt64(entry.OriginalSize, ErrSizeOverflow)
 	if err != nil {
 		return nil, err
 	}
-	return &FileInfo{entry: *entry, name: name, size: size}, nil
+	return &Info{entry: *entry, name: name, size: size}, nil
 }
 
-func (fi *FileInfo) Name() string       { return fi.name }
-func (fi *FileInfo) Size() int64        { return fi.size }
-func (fi *FileInfo) Mode() fs.FileMode  { return fi.entry.Mode }
-func (fi *FileInfo) ModTime() time.Time { return fi.entry.ModTime }
-func (fi *FileInfo) IsDir() bool        { return false }
-func (fi *FileInfo) Sys() any           { return nil }
+func (fi *Info) Name() string       { return fi.name }
+func (fi *Info) Size() int64        { return fi.size }
+func (fi *Info) Mode() fs.FileMode  { return fi.entry.Mode }
+func (fi *Info) ModTime() time.Time { return fi.entry.ModTime }
+func (fi *Info) IsDir() bool        { return false }
+func (fi *Info) Sys() any           { return nil }
 
 // Entry returns the underlying blob entry.
-func (fi *FileInfo) Entry() *Entry {
+func (fi *Info) Entry() *Entry {
 	return &fi.entry
 }
 
