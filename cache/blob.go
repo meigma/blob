@@ -88,7 +88,7 @@ func (b *Blob) Open(name string) (fs.File, error) {
 		// Not a file, delegate to base (handles directories)
 		return b.base.Open(name)
 	}
-	entry := entryFromViewWithPath(view, name)
+	entry := blob.EntryFromViewWithPath(view, name)
 
 	// Check cache first
 	if content, cached := b.cache.Get(entry.Hash); cached {
@@ -135,7 +135,7 @@ func (b *Blob) ReadFile(name string) ([]byte, error) {
 	if !ok {
 		return nil, &fs.PathError{Op: "readfile", Path: name, Err: fs.ErrNotExist}
 	}
-	entry := entryFromViewWithPath(view, name)
+	entry := blob.EntryFromViewWithPath(view, name)
 
 	// Check cache first (fast path, avoids singleflight overhead)
 	if content, cached := b.cache.Get(entry.Hash); cached {
@@ -217,7 +217,7 @@ func (b *Blob) collectEntriesForPaths(paths []string) []*batch.Entry {
 		if !ok {
 			continue
 		}
-		entry := entryFromViewWithPath(view, path)
+		entry := blob.EntryFromViewWithPath(view, path)
 		entries = append(entries, entry)
 	}
 	return entryPointers(entries)
@@ -226,7 +226,7 @@ func (b *Blob) collectEntriesForPaths(paths []string) []*batch.Entry {
 func (b *Blob) collectEntriesWithPrefix(prefix string) []*batch.Entry {
 	var entries []batch.Entry //nolint:prealloc // size unknown until iteration
 	for view := range b.base.EntriesWithPrefix(prefix) {
-		entry := entryFromViewWithPath(view, "")
+		entry := blob.EntryFromViewWithPath(view, "")
 		entries = append(entries, entry)
 	}
 	return entryPointers(entries)
@@ -314,19 +314,4 @@ func (b *Blob) wrapFileBuffered(f *fileops.File, entry fileops.Entry) (fs.File, 
 //nolint:gocritic // hugeParam acceptable for Entry value semantics
 func entryToFileops(e blob.Entry) fileops.Entry {
 	return e
-}
-
-func entryFromViewWithPath(view blob.EntryView, path string) blob.Entry {
-	return blob.Entry{
-		Path:         path,
-		DataOffset:   view.DataOffset(),
-		DataSize:     view.DataSize(),
-		OriginalSize: view.OriginalSize(),
-		Hash:         view.HashBytes(),
-		Mode:         view.Mode(),
-		UID:          view.UID(),
-		GID:          view.GID(),
-		ModTime:      view.ModTime(),
-		Compression:  view.Compression(),
-	}
 }

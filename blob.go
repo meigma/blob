@@ -18,6 +18,7 @@ import (
 
 	"github.com/meigma/blob/internal/blobtype"
 	"github.com/meigma/blob/internal/fileops"
+	"github.com/meigma/blob/internal/index"
 	"github.com/meigma/blob/internal/pathutil"
 )
 
@@ -28,7 +29,13 @@ type (
 
 	// Compression identifies the compression algorithm used for a file.
 	Compression = blobtype.Compression
+
+	// EntryView provides a read-only view of an index entry.
+	EntryView = blobtype.EntryView
 )
+
+// EntryFromViewWithPath creates an Entry from an EntryView with the given path.
+var EntryFromViewWithPath = blobtype.EntryFromViewWithPath
 
 // Re-export compression constants.
 const (
@@ -107,7 +114,7 @@ func WithVerifyOnClose(enabled bool) Option {
 // Blob implements fs.FS, fs.StatFS, fs.ReadFileFS, and fs.ReadDirFS
 // for compatibility with the standard library.
 type Blob struct {
-	idx              *index
+	idx              *index.Index
 	indexData        []byte
 	ops              *fileops.Ops
 	maxFileSize      uint64
@@ -120,7 +127,7 @@ type Blob struct {
 // The indexData is the FlatBuffers-encoded index blob and source provides
 // access to file content. Options can be used to configure size and decoder limits.
 func New(indexData []byte, source ByteSource, opts ...Option) (*Blob, error) {
-	idx, err := loadIndex(indexData)
+	idx, err := index.Load(indexData)
 	if err != nil {
 		return nil, err
 	}
@@ -155,8 +162,8 @@ func (b *Blob) Open(name string) (fs.File, error) {
 	}
 
 	// Check if it's a file
-	if view, ok := b.idx.lookupView(name); ok {
-		entry := entryFromViewWithPath(view, name)
+	if view, ok := b.idx.LookupView(name); ok {
+		entry := blobtype.EntryFromViewWithPath(view, name)
 		return b.ops.OpenFile(&entry, b.verifyOnClose), nil
 	}
 
@@ -179,8 +186,8 @@ func (b *Blob) Stat(name string) (fs.FileInfo, error) {
 	}
 
 	// Check if it's a file
-	if view, ok := b.idx.lookupView(name); ok {
-		entry := entryFromViewWithPath(view, name)
+	if view, ok := b.idx.LookupView(name); ok {
+		entry := blobtype.EntryFromViewWithPath(view, name)
 		info, err := fileops.NewFileInfo(&entry, pathutil.Base(name))
 		if err != nil {
 			return nil, &fs.PathError{Op: "stat", Path: name, Err: err}
@@ -209,12 +216,12 @@ func (b *Blob) ReadFile(name string) ([]byte, error) {
 		return nil, &fs.PathError{Op: "readfile", Path: name, Err: fs.ErrInvalid}
 	}
 
-	view, ok := b.idx.lookupView(name)
+	view, ok := b.idx.LookupView(name)
 	if !ok {
 		return nil, &fs.PathError{Op: "readfile", Path: name, Err: fs.ErrNotExist}
 	}
 
-	entry := entryFromViewWithPath(view, name)
+	entry := blobtype.EntryFromViewWithPath(view, name)
 	return b.ops.ReadAll(&entry)
 }
 
@@ -264,14 +271,14 @@ func (b *Blob) IndexData() []byte {
 //
 // The returned view is only valid while the Blob remains alive.
 func (b *Blob) Entry(path string) (EntryView, bool) {
-	return b.idx.lookupView(path)
+	return b.idx.LookupView(path)
 }
 
 // Entries returns an iterator over all entries as read-only views.
 //
 // The returned views are only valid while the Blob remains alive.
 func (b *Blob) Entries() iter.Seq[EntryView] {
-	return b.idx.entriesView()
+	return b.idx.EntriesView()
 }
 
 // EntriesWithPrefix returns an iterator over entries with the given prefix
@@ -279,12 +286,12 @@ func (b *Blob) Entries() iter.Seq[EntryView] {
 //
 // The returned views are only valid while the Blob remains alive.
 func (b *Blob) EntriesWithPrefix(prefix string) iter.Seq[EntryView] {
-	return b.idx.entriesWithPrefixView(prefix)
+	return b.idx.EntriesWithPrefixView(prefix)
 }
 
 // Len returns the number of entries in the archive.
 func (b *Blob) Len() int {
-	return b.idx.len()
+	return b.idx.Len()
 }
 
 // openDir implements fs.File and fs.ReadDirFile for directories.
@@ -353,10 +360,10 @@ func (d *openDir) readAll() ([]fs.DirEntry, error) {
 // isDir checks if name is a directory (has entries under it).
 func (b *Blob) isDir(name string) bool {
 	if name == "." {
-		return b.idx.len() > 0
+		return b.idx.Len() > 0
 	}
 	prefix := name + "/"
-	for range b.idx.entriesWithPrefixView(prefix) {
+	for range b.idx.EntriesWithPrefixView(prefix) {
 		return true
 	}
 	return false
@@ -371,8 +378,8 @@ type dirIter struct {
 	done     bool
 }
 
-func newDirIter(idx *index, prefix string) *dirIter {
-	next, stop := iter.Pull(idx.entriesWithPrefixView(prefix))
+func newDirIter(idx *index.Index, prefix string) *dirIter {
+	next, stop := iter.Pull(idx.EntriesWithPrefixView(prefix))
 	return &dirIter{
 		next:   next,
 		stop:   stop,
@@ -401,7 +408,7 @@ func (it *dirIter) Next() (fs.DirEntry, bool) {
 		if isSubDir {
 			return fileops.NewDirEntry(fileops.NewDirInfo(childName), nil), true
 		}
-		entry := entryFromViewWithPath(view, path)
+		entry := blobtype.EntryFromViewWithPath(view, path)
 		info, err := fileops.NewFileInfo(&entry, childName)
 		if err != nil {
 			// Return a fallback info with size 0

@@ -4,6 +4,7 @@ import (
 	"io/fs"
 
 	"github.com/meigma/blob/internal/batch"
+	"github.com/meigma/blob/internal/blobtype"
 	"github.com/meigma/blob/internal/pathutil"
 )
 
@@ -105,11 +106,11 @@ func (b *Blob) collectPathEntries(paths []string) []*batch.Entry {
 		if !fs.ValidPath(path) {
 			continue
 		}
-		view, ok := b.idx.lookupView(path)
+		view, ok := b.idx.LookupView(path)
 		if !ok {
 			continue
 		}
-		entry := entryFromViewWithPath(view, path)
+		entry := blobtype.EntryFromViewWithPath(view, path)
 		entries = append(entries, &entry)
 	}
 	return entries
@@ -129,8 +130,8 @@ func (b *Blob) collectPrefixEntries(prefix string) []*batch.Entry {
 	}
 
 	var entries []*batch.Entry //nolint:prealloc // size unknown until iteration
-	for view := range b.idx.entriesWithPrefixView(dirPrefix) {
-		entry := entryFromViewWithPath(view, view.Path())
+	for view := range b.idx.EntriesWithPrefixView(dirPrefix) {
+		entry := blobtype.EntryFromViewWithPath(view, view.Path())
 		entries = append(entries, &entry)
 	}
 	return entries

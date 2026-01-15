@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/meigma/blob/internal/fb"
+	"github.com/meigma/blob/internal/index"
 )
 
 // testEntry holds data for building test index entries.
@@ -90,10 +91,10 @@ func buildTestIndex(tb testing.TB, entries []testEntry) []byte {
 
 // mustLoadIndex loads an index or fails the test.
 // Returns the internal index for testing index-specific behavior.
-func mustLoadIndex(tb testing.TB, data []byte) *index {
+func mustLoadIndex(tb testing.TB, data []byte) *index.Index {
 	tb.Helper()
-	idx, err := loadIndex(data)
-	require.NoError(tb, err, "loadIndex failed")
+	idx, err := index.Load(data)
+	require.NoError(tb, err, "index.Load failed")
 	return idx
 }
 
@@ -102,7 +103,7 @@ func TestLoadIndex(t *testing.T) {
 
 	t.Run("empty data", func(t *testing.T) {
 		t.Parallel()
-		_, err := loadIndex(nil)
+		_, err := index.Load(nil)
 		assert.Error(t, err, "expected error for empty data")
 	})
 
@@ -112,7 +113,7 @@ func TestLoadIndex(t *testing.T) {
 			{Path: "test.txt", DataOffset: 0, DataSize: 100},
 		})
 		idx := mustLoadIndex(t, data)
-		assert.Equal(t, 1, idx.len())
+		assert.Equal(t, 1, idx.Len())
 	})
 }
 
@@ -129,7 +130,7 @@ func TestIndexLookup(t *testing.T) {
 
 	t.Run("existing path", func(t *testing.T) {
 		t.Parallel()
-		view, ok := idx.lookupView("a/file1.txt")
+		view, ok := idx.LookupView("a/file1.txt")
 		require.True(t, ok, "expected to find entry")
 		assert.Equal(t, "a/file1.txt", view.Path())
 		assert.Equal(t, uint64(0), view.DataOffset())
@@ -137,14 +138,14 @@ func TestIndexLookup(t *testing.T) {
 
 	t.Run("non-existing path", func(t *testing.T) {
 		t.Parallel()
-		_, ok := idx.lookupView("nonexistent.txt")
+		_, ok := idx.LookupView("nonexistent.txt")
 		assert.False(t, ok, "expected not to find entry")
 	})
 
 	t.Run("all entries accessible", func(t *testing.T) {
 		t.Parallel()
 		for _, e := range entries {
-			view, ok := idx.lookupView(e.Path)
+			view, ok := idx.LookupView(e.Path)
 			require.True(t, ok, "expected to find entry %q", e.Path)
 			assert.Equal(t, e.DataOffset, view.DataOffset(), "entry %q offset mismatch", e.Path)
 		}
@@ -164,7 +165,7 @@ func TestIndexEntries(t *testing.T) {
 
 	expected := []string{"a.txt", "b.txt", "c.txt"}
 	paths := make([]string, 0, len(expected))
-	for view := range idx.entriesView() {
+	for view := range idx.EntriesView() {
 		paths = append(paths, view.Path())
 	}
 
@@ -226,7 +227,7 @@ func TestIndexEntriesWithPrefix(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			paths := make([]string, 0, len(tc.expected))
-			for view := range idx.entriesWithPrefixView(tc.prefix) {
+			for view := range idx.EntriesWithPrefixView(tc.prefix) {
 				paths = append(paths, view.Path())
 			}
 			assert.Equal(t, tc.expected, paths)
@@ -262,7 +263,7 @@ func TestIndexEntryMetadata(t *testing.T) {
 	data := buildTestIndex(t, entries)
 	idx := mustLoadIndex(t, data)
 
-	view, ok := idx.lookupView("test.txt")
+	view, ok := idx.LookupView("test.txt")
 	require.True(t, ok, "expected to find entry")
 
 	assert.Equal(t, "test.txt", view.Path())
@@ -283,5 +284,5 @@ func TestIndexVersion(t *testing.T) {
 	data := buildTestIndex(t, []testEntry{{Path: "test.txt"}})
 	idx := mustLoadIndex(t, data)
 
-	assert.Equal(t, uint32(1), idx.version())
+	assert.Equal(t, uint32(1), idx.Version())
 }

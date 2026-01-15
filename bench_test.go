@@ -10,6 +10,8 @@ import (
 	"runtime"
 	"testing"
 
+	"github.com/meigma/blob/internal/blobtype"
+	"github.com/meigma/blob/internal/index"
 	"github.com/meigma/blob/internal/testutil"
 )
 
@@ -117,11 +119,11 @@ func BenchmarkIndexLookup(b *testing.B) {
 			b.ResetTimer()
 			for i := 0; b.Loop(); i++ {
 				path := paths[i%len(paths)]
-				entry, ok := idx.lookupView(path)
+				entry, ok := idx.LookupView(path)
 				if !ok {
 					b.Fatalf("missing entry for %q", path)
 				}
-				benchSinkEntry = entryFromViewWithPath(entry, path)
+				benchSinkEntry = blobtype.EntryFromViewWithPath(entry, path)
 			}
 		})
 	}
@@ -147,7 +149,7 @@ func BenchmarkIndexLookupCopy(b *testing.B) {
 			b.ResetTimer()
 			for i := 0; b.Loop(); i++ {
 				path := paths[i%len(paths)]
-				view, ok := idx.lookupView(path)
+				view, ok := idx.LookupView(path)
 				if !ok {
 					b.Fatalf("missing entry for %q", path)
 				}
@@ -178,7 +180,7 @@ func BenchmarkEntriesWithPrefix(b *testing.B) {
 			b.ResetTimer()
 			for b.Loop() {
 				count := 0
-				for range idx.entriesWithPrefixView(prefix) {
+				for range idx.EntriesWithPrefixView(prefix) {
 					count++
 				}
 				if count == 0 {
@@ -211,7 +213,7 @@ func BenchmarkEntriesWithPrefixCopy(b *testing.B) {
 			b.ResetTimer()
 			for b.Loop() {
 				count := 0
-				for view := range idx.entriesWithPrefixView(prefix) {
+				for view := range idx.EntriesWithPrefixView(prefix) {
 					benchSinkEntry = view.Entry()
 					count++
 				}
@@ -418,7 +420,7 @@ func countBenchDirEntries(fileCount, dirCount int) int {
 // createBenchIndex creates a test archive and returns the internal index for benchmarking.
 // Index benchmarks always use CompressionNone since the index structure is identical regardless
 // of data compression.
-func createBenchIndex(b *testing.B, dir string) *index {
+func createBenchIndex(b *testing.B, dir string) *index.Index {
 	b.Helper()
 
 	var indexBuf, dataBuf bytes.Buffer
@@ -426,7 +428,7 @@ func createBenchIndex(b *testing.B, dir string) *index {
 		b.Fatal(err)
 	}
 
-	idx, err := loadIndex(indexBuf.Bytes())
+	idx, err := index.Load(indexBuf.Bytes())
 	if err != nil {
 		b.Fatal(err)
 	}

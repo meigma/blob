@@ -13,6 +13,8 @@ import (
 	"github.com/klauspost/compress/zstd"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/meigma/blob/internal/index"
 )
 
 func TestCreate(t *testing.T) {
@@ -33,15 +35,15 @@ func TestCreate(t *testing.T) {
 	err := Create(context.Background(), dir, &indexBuf, &dataBuf)
 	require.NoError(t, err)
 
-	// Load index and verify (using internal loadIndex for testing)
-	idx, err := loadIndex(indexBuf.Bytes())
+	// Load index and verify (using internal index.Load for testing)
+	idx, err := index.Load(indexBuf.Bytes())
 	require.NoError(t, err)
 
-	assert.Equal(t, 4, idx.len())
+	assert.Equal(t, 4, idx.Len())
 
 	// Verify entries are sorted by path
-	paths := make([]string, 0, idx.len())
-	for view := range idx.entriesView() {
+	paths := make([]string, 0, idx.Len())
+	for view := range idx.EntriesView() {
 		paths = append(paths, view.Path())
 	}
 	assert.Equal(t, []string{"a.txt", "b.txt", "sub/c.txt", "sub/deep/d.go"}, paths)
@@ -49,7 +51,7 @@ func TestCreate(t *testing.T) {
 	// Verify we can look up each file and data is correct
 	for path, content := range files {
 		path = filepath.ToSlash(path)
-		view, ok := idx.lookupView(path)
+		view, ok := idx.LookupView(path)
 		require.True(t, ok, "entry %q not found", path)
 
 		// Verify data content
@@ -71,10 +73,10 @@ func TestCreateEmpty(t *testing.T) {
 	err := Create(context.Background(), dir, &indexBuf, &dataBuf)
 	require.NoError(t, err)
 
-	idx, err := loadIndex(indexBuf.Bytes())
+	idx, err := index.Load(indexBuf.Bytes())
 	require.NoError(t, err)
 
-	assert.Equal(t, 0, idx.len())
+	assert.Equal(t, 0, idx.Len())
 	assert.Equal(t, 0, dataBuf.Len())
 }
 
@@ -90,10 +92,10 @@ func TestCreateCompression(t *testing.T) {
 	err := Create(context.Background(), dir, &indexBuf, &dataBuf, CreateWithCompression(CompressionZstd))
 	require.NoError(t, err)
 
-	idx, err := loadIndex(indexBuf.Bytes())
+	idx, err := index.Load(indexBuf.Bytes())
 	require.NoError(t, err)
 
-	view, ok := idx.lookupView("test.txt")
+	view, ok := idx.LookupView("test.txt")
 	require.True(t, ok)
 
 	// Compressed should be smaller than original
@@ -129,10 +131,10 @@ func TestCreateMetadata(t *testing.T) {
 	err := Create(context.Background(), dir, &indexBuf, &dataBuf)
 	require.NoError(t, err)
 
-	idx, err := loadIndex(indexBuf.Bytes())
+	idx, err := index.Load(indexBuf.Bytes())
 	require.NoError(t, err)
 
-	view, ok := idx.lookupView("test.txt")
+	view, ok := idx.LookupView("test.txt")
 	require.True(t, ok)
 
 	assert.Equal(t, fs.FileMode(0o755), view.Mode())
@@ -150,14 +152,14 @@ func TestCreateSkipsSymlinks(t *testing.T) {
 	err := Create(context.Background(), dir, &indexBuf, &dataBuf)
 	require.NoError(t, err)
 
-	idx, err := loadIndex(indexBuf.Bytes())
+	idx, err := index.Load(indexBuf.Bytes())
 	require.NoError(t, err)
 
 	// Only real file should be present
-	assert.Equal(t, 1, idx.len())
-	_, ok := idx.lookupView("real.txt")
+	assert.Equal(t, 1, idx.Len())
+	_, ok := idx.LookupView("real.txt")
 	assert.True(t, ok)
-	_, ok = idx.lookupView("link.txt")
+	_, ok = idx.LookupView("link.txt")
 	assert.False(t, ok)
 }
 
@@ -196,12 +198,12 @@ func TestCreatePrefixScans(t *testing.T) {
 	err := Create(context.Background(), dir, &indexBuf, &dataBuf)
 	require.NoError(t, err)
 
-	idx, err := loadIndex(indexBuf.Bytes())
+	idx, err := index.Load(indexBuf.Bytes())
 	require.NoError(t, err)
 
 	// Verify prefix scan works correctly
 	cssPaths := make([]string, 0, 2)
-	for view := range idx.entriesWithPrefixView("assets/css/") {
+	for view := range idx.EntriesWithPrefixView("assets/css/") {
 		cssPaths = append(cssPaths, view.Path())
 	}
 	assert.Equal(t, []string{"assets/css/main.css", "assets/css/reset.css"}, cssPaths)

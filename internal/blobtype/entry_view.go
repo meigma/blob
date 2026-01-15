@@ -1,4 +1,4 @@
-package blob
+package blobtype
 
 import (
 	"io/fs"
@@ -68,19 +68,21 @@ func (ev EntryView) ModTime() time.Time {
 
 // Compression returns the compression algorithm used.
 func (ev EntryView) Compression() Compression {
-	return compressionFromFB(ev.entry.Compression())
+	return CompressionFromFB(ev.entry.Compression())
 }
 
 // Entry returns a fully copied Entry.
 func (ev EntryView) Entry() Entry {
-	return entryFromFlatBuffers(&ev.entry)
+	return EntryFromFlatBuffers(&ev.entry)
 }
 
-func entryViewFromFlatBuffers(entry fb.Entry) EntryView {
+// EntryViewFromFlatBuffers creates an EntryView from a FlatBuffers Entry.
+func EntryViewFromFlatBuffers(entry fb.Entry) EntryView {
 	return EntryView{entry: entry}
 }
 
-func entryFromViewWithPath(ev EntryView, path string) Entry {
+// EntryFromViewWithPath creates an Entry from an EntryView with the given path.
+func EntryFromViewWithPath(ev EntryView, path string) Entry {
 	return Entry{
 		Path:         path,
 		DataOffset:   ev.DataOffset(),
@@ -93,4 +95,35 @@ func entryFromViewWithPath(ev EntryView, path string) Entry {
 		ModTime:      ev.ModTime(),
 		Compression:  ev.Compression(),
 	}
+}
+
+// EntryFromFlatBuffers converts a FlatBuffers Entry to an Entry.
+func EntryFromFlatBuffers(entry *fb.Entry) Entry {
+	// Copy hash bytes since FlatBuffers data is shared.
+	hashLen := entry.HashLength()
+	hash := make([]byte, hashLen)
+	for i := range hashLen {
+		hash[i] = entry.Hash(i)
+	}
+
+	return Entry{
+		Path:         string(entry.Path()),
+		DataOffset:   entry.DataOffset(),
+		DataSize:     entry.DataSize(),
+		OriginalSize: entry.OriginalSize(),
+		Hash:         hash,
+		Mode:         fs.FileMode(entry.Mode()),
+		UID:          entry.Uid(),
+		GID:          entry.Gid(),
+		ModTime:      time.Unix(0, entry.MtimeNs()),
+		Compression:  CompressionFromFB(entry.Compression()),
+	}
+}
+
+// CompressionFromFB converts a FlatBuffers Compression to a Compression.
+func CompressionFromFB(c fb.Compression) Compression {
+	if v := int8(c); v >= 0 && v <= int8(CompressionZstd) {
+		return Compression(v) //nolint:gosec // bounds checked above
+	}
+	return CompressionNone
 }

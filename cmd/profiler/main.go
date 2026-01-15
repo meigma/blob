@@ -227,7 +227,7 @@ func runProfile(cfg config, b *blob.Blob, paths []string, rootDir string) (profi
 			if !ok {
 				return profileStats{}, fmt.Errorf("missing entry for %q", path)
 			}
-			sinkEntry = entryFromViewWithPath(view, path)
+			sinkEntry = blob.EntryFromViewWithPath(view, path)
 			ops++
 		}
 
@@ -427,21 +427,6 @@ func scanPrefix(prefix string) string {
 		return prefix + "/"
 	}
 	return prefix
-}
-
-func entryFromViewWithPath(view blob.EntryView, path string) blob.Entry {
-	return blob.Entry{
-		Path:         path,
-		DataOffset:   view.DataOffset(),
-		DataSize:     view.DataSize(),
-		OriginalSize: view.OriginalSize(),
-		Hash:         view.HashBytes(),
-		Mode:         view.Mode(),
-		UID:          view.UID(),
-		GID:          view.GID(),
-		ModTime:      view.ModTime(),
-		Compression:  view.Compression(),
-	}
 }
 
 //nolint:gocritic // hugeParam acceptable for config struct in CLI tool
