@@ -2,6 +2,7 @@ package blob
 
 import (
 	"context"
+	"crypto/sha256"
 	"errors"
 	"fmt"
 	"io"
@@ -47,12 +48,14 @@ func Create(ctx context.Context, dir string, indexW, dataW io.Writer, opts ...Cr
 	defer root.Close()
 
 	w := &writer{cfg: cfg}
-	entries, err := w.writeData(ctx, root, dataW)
+	hasher := sha256.New()
+	dataWriter := io.MultiWriter(dataW, hasher)
+	entries, dataSize, err := w.writeData(ctx, root, dataWriter)
 	if err != nil {
 		return err
 	}
 
-	indexData := buildIndex(entries)
+	indexData := buildIndex(entries, dataSize, hasher.Sum(nil))
 	_, err = indexW.Write(indexData)
 	return err
 }
@@ -63,7 +66,7 @@ type writer struct {
 }
 
 // writeData streams file contents to the data writer while populating entries.
-func (w *writer) writeData(ctx context.Context, root *os.Root, data io.Writer) ([]Entry, error) {
+func (w *writer) writeData(ctx context.Context, root *os.Root, data io.Writer) ([]Entry, uint64, error) {
 	entries := make([]Entry, 0, 1024)
 	var offset uint64
 	strict := w.cfg.changeDetection == ChangeDetectionStrict
@@ -77,7 +80,7 @@ func (w *writer) writeData(ctx context.Context, root *os.Root, data io.Writer) (
 		var err error
 		enc, err = zstd.NewWriter(io.Discard, zstd.WithEncoderConcurrency(1), zstd.WithLowerEncoderMem(true))
 		if err != nil {
-			return nil, fmt.Errorf("create zstd encoder: %w", err)
+			return nil, 0, fmt.Errorf("create zstd encoder: %w", err)
 		}
 	}
 	buf := make([]byte, 32*1024)
@@ -96,10 +99,10 @@ func (w *writer) writeData(ctx context.Context, root *os.Root, data io.Writer) (
 		return nil
 	})
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 
-	return entries, nil
+	return entries, offset, nil
 }
 
 // processEntry handles a single directory entry during archive creation.
@@ -191,7 +194,7 @@ func (w *writer) writeEntry(ctx context.Context, root *os.Root, data io.Writer, 
 }
 
 // buildIndex serializes entries to FlatBuffers format.
-func buildIndex(entries []Entry) []byte {
+func buildIndex(entries []Entry, dataSize uint64, dataHash []byte) []byte {
 	builder := flatbuffers.NewBuilder(1024)
 
 	// Build entries in reverse order (FlatBuffers requirement)
@@ -227,10 +230,23 @@ func buildIndex(entries []Entry) []byte {
 	}
 	entriesOffset := builder.EndVector(len(entries))
 
+	var dataHashOffset flatbuffers.UOffsetT
+	if len(dataHash) > 0 {
+		fb.IndexStartDataHashVector(builder, len(dataHash))
+		for i := len(dataHash) - 1; i >= 0; i-- {
+			builder.PrependByte(dataHash[i])
+		}
+		dataHashOffset = builder.EndVector(len(dataHash))
+	}
+
 	fb.IndexStart(builder)
 	fb.IndexAddVersion(builder, 1)
 	fb.IndexAddHashAlgorithm(builder, fb.HashAlgorithmSHA256)
 	fb.IndexAddEntries(builder, entriesOffset)
+	fb.IndexAddDataSize(builder, dataSize)
+	if dataHashOffset != 0 {
+		fb.IndexAddDataHash(builder, dataHashOffset)
+	}
 	indexOffset := fb.IndexEnd(builder)
 
 	builder.Finish(indexOffset)

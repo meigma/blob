@@ -13,7 +13,9 @@ type pushConfig struct {
 // The primary tag from the ref is always applied. These tags are applied
 // after the initial push succeeds.
 func WithTags(tags ...string) PushOption {
-	panic("not implemented")
+	return func(cfg *pushConfig) {
+		cfg.tags = append(cfg.tags, tags...)
+	}
 }
 
 // WithAnnotations sets custom annotations on the manifest.
@@ -21,5 +23,12 @@ func WithTags(tags ...string) PushOption {
 // Standard annotations like org.opencontainers.image.created are set
 // automatically and can be overridden.
 func WithAnnotations(annotations map[string]string) PushOption {
-	panic("not implemented")
+	return func(cfg *pushConfig) {
+		if cfg.annotations == nil {
+			cfg.annotations = make(map[string]string)
+		}
+		for k, v := range annotations {
+			cfg.annotations[k] = v
+		}
+	}
 }

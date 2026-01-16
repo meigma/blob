@@ -377,6 +377,22 @@ func (b *Blob) IndexData() []byte
 
 IndexData returns the raw FlatBuffers-encoded index data. This is useful for creating new Blobs with different data sources.
 
+#### DataHash
+
+```go
+func (b *Blob) DataHash() ([]byte, bool)
+```
+
+DataHash returns the hash of the data blob bytes recorded in the index. The returned slice aliases the index buffer and must be treated as immutable. The boolean is false when the index does not record data metadata.
+
+#### DataSize
+
+```go
+func (b *Blob) DataSize() (uint64, bool)
+```
+
+DataSize returns the data blob size in bytes recorded in the index. The boolean is false when the index does not record data metadata.
+
 #### Stream
 
 ```go

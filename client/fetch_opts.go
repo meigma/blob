@@ -11,5 +11,7 @@ type fetchConfig struct {
 //
 // The fetched manifest is still added to the cache after retrieval.
 func WithSkipCache() FetchOption {
-	panic("not implemented")
+	return func(cfg *fetchConfig) {
+		cfg.skipCache = true
+	}
 }

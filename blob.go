@@ -251,6 +251,19 @@ func (b *Blob) IndexData() []byte {
 	return b.indexData
 }
 
+// DataHash returns the hash of the data blob bytes from the index.
+// The returned slice aliases the index buffer and must be treated as immutable.
+// ok is false when the index did not record data metadata.
+func (b *Blob) DataHash() ([]byte, bool) {
+	return b.idx.DataHash()
+}
+
+// DataSize returns the size of the data blob in bytes from the index.
+// ok is false when the index did not record data metadata.
+func (b *Blob) DataSize() (uint64, bool) {
+	return b.idx.DataSize()
+}
+
 // Stream returns a reader that streams the entire data blob from beginning to end.
 // This is useful for copying or transmitting the complete data content.
 func (b *Blob) Stream() io.Reader {

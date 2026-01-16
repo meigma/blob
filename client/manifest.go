@@ -1,6 +1,7 @@
 package client
 
 import (
+	"fmt"
 	"time"
 
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
@@ -51,6 +52,56 @@ func (m *BlobManifest) Raw() ocispec.Manifest {
 }
 
 // parseBlobManifest parses an OCI manifest into a BlobManifest.
-func parseBlobManifest(manifest ocispec.Manifest, digest string) (*BlobManifest, error) {
-	panic("not implemented")
+func parseBlobManifest(manifest *ocispec.Manifest, digest string) (*BlobManifest, error) {
+	if manifest.MediaType != ocispec.MediaTypeImageManifest {
+		return nil, fmt.Errorf("%w: unexpected manifest media type %q", ErrInvalidManifest, manifest.MediaType)
+	}
+	if manifest.ArtifactType != ArtifactType {
+		return nil, fmt.Errorf("%w: unexpected artifact type %q", ErrInvalidManifest, manifest.ArtifactType)
+	}
+
+	var indexDesc, dataDesc ocispec.Descriptor
+	var foundIndex, foundData bool
+
+	for _, layer := range manifest.Layers {
+		switch layer.MediaType {
+		case MediaTypeIndex:
+			if foundIndex {
+				return nil, fmt.Errorf("%w: multiple index layers", ErrInvalidManifest)
+			}
+			indexDesc = layer
+			foundIndex = true
+		case MediaTypeData:
+			if foundData {
+				return nil, fmt.Errorf("%w: multiple data layers", ErrInvalidManifest)
+			}
+			dataDesc = layer
+			foundData = true
+		}
+	}
+
+	if !foundIndex {
+		return nil, ErrMissingIndex
+	}
+	if !foundData {
+		return nil, ErrMissingData
+	}
+	if len(manifest.Layers) != 2 {
+		return nil, fmt.Errorf("%w: expected 2 layers, got %d", ErrInvalidManifest, len(manifest.Layers))
+	}
+
+	var created time.Time
+	if ts, ok := manifest.Annotations[ocispec.AnnotationCreated]; ok {
+		if t, err := time.Parse(time.RFC3339, ts); err == nil {
+			created = t
+		}
+	}
+
+	return &BlobManifest{
+		raw:       *manifest,
+		digest:    digest,
+		indexDesc: indexDesc,
+		dataDesc:  dataDesc,
+		created:   created,
+	}, nil
 }

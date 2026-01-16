@@ -1,56 +1,57 @@
 package client
 
 import (
-	"net/http"
-
-	"github.com/meigma/blob/client/oci"
+	"github.com/meigma/blob/client/oras"
 )
 
 // Option configures a Client.
 type Option func(*Client)
 
 // WithOCIClient sets a custom OCI client.
-// If not set, a default OCI client is created.
-func WithOCIClient(c *oci.Client) Option {
-	panic("not implemented")
-}
-
-// WithHTTPClient sets the HTTP client used for requests.
-// This is passed through to the OCI client.
-func WithHTTPClient(client *http.Client) Option {
-	panic("not implemented")
-}
-
-// WithCredentials sets static username/password credentials for a registry.
-// This is passed through to the OCI client.
-func WithCredentials(registry, username, password string) Option {
-	panic("not implemented")
-}
-
-// WithToken sets a bearer token for a registry.
-// This is passed through to the OCI client.
-func WithToken(registry, token string) Option {
-	panic("not implemented")
-}
-
-// WithDockerConfig enables reading credentials from ~/.docker/config.json.
-// This is passed through to the OCI client.
-func WithDockerConfig() Option {
-	panic("not implemented")
+// If not set, a default ORAS-based client is created.
+//
+// When a custom OCIClient is provided, pass-through options like
+// WithPlainHTTP and WithDockerConfig are ignored.
+func WithOCIClient(c OCIClient) Option {
+	return func(client *Client) {
+		client.oci = c
+	}
 }
 
 // WithPlainHTTP enables plain HTTP (no TLS) for registries.
-// This is passed through to the OCI client.
+// This is passed through to the default ORAS client.
 func WithPlainHTTP(enabled bool) Option {
-	panic("not implemented")
+	return func(c *Client) {
+		c.orasOpts = append(c.orasOpts, oras.WithPlainHTTP(enabled))
+	}
+}
+
+// WithDockerConfig enables reading credentials from ~/.docker/config.json.
+// This is passed through to the default ORAS client.
+func WithDockerConfig() Option {
+	return func(c *Client) {
+		c.orasOpts = append(c.orasOpts, oras.WithDockerConfig())
+	}
+}
+
+// WithUserAgent sets the User-Agent header for requests.
+// This is passed through to the default ORAS client.
+func WithUserAgent(ua string) Option {
+	return func(c *Client) {
+		c.orasOpts = append(c.orasOpts, oras.WithUserAgent(ua))
+	}
 }
 
 // WithRefCache sets the cache for reference to digest mappings.
 func WithRefCache(cache RefCache) Option {
-	panic("not implemented")
+	return func(c *Client) {
+		c.refCache = cache
+	}
 }
 
 // WithManifestCache sets the cache for manifest lookups.
 func WithManifestCache(cache ManifestCache) Option {
-	panic("not implemented")
+	return func(c *Client) {
+		c.manifestCache = cache
+	}
 }

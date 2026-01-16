@@ -2,7 +2,7 @@
 //
 // Client provides blob-agnostic operations for interacting with OCI registries,
 // handling authentication and OCI 1.0/1.1 compatibility transparently.
-package oci
+package oras
 
 import (
 	"bytes"
@@ -178,9 +178,6 @@ func (c *Client) FetchManifest(ctx context.Context, repoRef string, expected *oc
 	if err := validateDescriptor(expected); err != nil {
 		return ocispec.Manifest{}, err
 	}
-	if expected.MediaType != "" && expected.MediaType != ocispec.MediaTypeImageManifest {
-		return ocispec.Manifest{}, fmt.Errorf("%w: unsupported media type %s", ErrManifestInvalid, expected.MediaType)
-	}
 
 	repo, err := c.repository(repoRef)
 	if err != nil {
@@ -197,7 +194,12 @@ func (c *Client) FetchManifest(ctx context.Context, repoRef string, expected *oc
 		return ocispec.Manifest{}, fmt.Errorf("%w: unsupported media type %s", ErrManifestInvalid, desc.MediaType)
 	}
 
-	limited := io.LimitReader(rc, expected.Size)
+	// Use returned descriptor's size if expected size is 0
+	size := expected.Size
+	if size == 0 {
+		size = desc.Size
+	}
+	limited := io.LimitReader(rc, size)
 
 	var manifest ocispec.Manifest
 	if err := json.NewDecoder(limited).Decode(&manifest); err != nil {
