@@ -257,6 +257,11 @@ func (b *Blob) Stream() io.Reader {
 	return io.NewSectionReader(b.reader.Source(), 0, b.reader.Source().Size())
 }
 
+// Size returns the total size of the data blob in bytes.
+func (b *Blob) Size() int64 {
+	return b.reader.Source().Size()
+}
+
 // Entry returns a read-only view of the entry for the given path.
 //
 // The returned view is only valid while the Blob remains alive.
