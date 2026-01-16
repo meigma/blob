@@ -6,6 +6,23 @@ sidebar_position: 4
 
 How to extract archive contents to the local filesystem.
 
+## Working with BlobFile
+
+When using `OpenFile` or `CreateBlob`, you receive a `*BlobFile` which embeds `*Blob`. All extraction methods work identically:
+
+```go
+blobFile, err := blob.OpenFile("index.blob", "data.blob")
+if err != nil {
+	return err
+}
+defer blobFile.Close()
+
+// All Blob methods work on BlobFile
+err = blobFile.CopyDir("/dest", ".")
+```
+
+The examples below use `*Blob` but apply equally to `*BlobFile`.
+
 ## Extracting Specific Files
 
 To extract specific files by path, use `CopyTo`:

@@ -251,6 +251,12 @@ func (b *Blob) IndexData() []byte {
 	return b.indexData
 }
 
+// Stream returns a reader that streams the entire data blob from beginning to end.
+// This is useful for copying or transmitting the complete data content.
+func (b *Blob) Stream() io.Reader {
+	return io.NewSectionReader(b.reader.Source(), 0, b.reader.Source().Size())
+}
+
 // Entry returns a read-only view of the entry for the given path.
 //
 // The returned view is only valid while the Blob remains alive.
