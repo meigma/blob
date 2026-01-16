@@ -222,7 +222,19 @@ err = archive.CopyDir("/dest", ".",
 For production builds prioritizing correctness:
 
 ```go
-// Archive creation
+// Archive creation with CreateBlob (recommended)
+blobFile, err := blob.CreateBlob(ctx, srcDir, destDir,
+	blob.CreateBlobWithCompression(blob.CompressionZstd),
+	blob.CreateBlobWithSkipCompression(blob.DefaultSkipCompression(1024)),
+	blob.CreateBlobWithChangeDetection(blob.ChangeDetectionStrict),
+	blob.CreateBlobWithMaxFiles(100000),
+)
+if err != nil {
+	return err
+}
+defer blobFile.Close()
+
+// Or with the lower-level Create API
 err := blob.Create(ctx, srcDir, indexW, dataW,
 	blob.CreateWithChangeDetection(blob.ChangeDetectionStrict),
 	blob.CreateWithCompression(blob.CompressionZstd),

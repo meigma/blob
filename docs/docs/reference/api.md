@@ -26,6 +26,19 @@ type Blob struct {
 
 Blob provides random access to archive files. Blob implements `fs.FS`, `fs.StatFS`, `fs.ReadFileFS`, and `fs.ReadDirFS` for compatibility with the standard library.
 
+#### BlobFile
+
+```go
+type BlobFile struct {
+    *Blob
+    // contains filtered or unexported fields
+}
+```
+
+BlobFile wraps a `*Blob` with an underlying data file handle. It embeds `*Blob`, so all Blob methods are directly accessible. BlobFile must be closed to release file resources.
+
+BlobFile implements `fs.FS`, `fs.StatFS`, `fs.ReadFileFS`, and `fs.ReadDirFS` for compatibility with the standard library.
+
 #### Entry
 
 ```go
@@ -145,6 +158,29 @@ New creates a Blob for accessing files in the archive.
 | blob | `*Blob` | The created Blob accessor |
 | err | `error` | Non-nil if index parsing fails |
 
+#### OpenFile
+
+```go
+func OpenFile(indexPath, dataPath string, opts ...Option) (*BlobFile, error)
+```
+
+OpenFile opens a blob archive from local index and data files. The index file is read into memory; the data file is opened for random access. The returned BlobFile must be closed to release file resources.
+
+**Parameters:**
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| indexPath | `string` | Path to the index blob file |
+| dataPath | `string` | Path to the data blob file |
+| opts | `...Option` | Configuration options (same as New) |
+
+**Returns:**
+
+| Return | Type | Description |
+|--------|------|-------------|
+| blobFile | `*BlobFile` | The opened archive with file handle |
+| err | `error` | Non-nil if file opening or index parsing fails |
+
 #### Create
 
 ```go
@@ -173,6 +209,30 @@ Create walks dir recursively, including all regular files. Empty directories are
 
 | Return | Type | Description |
 |--------|------|-------------|
+| err | `error` | Non-nil if archive creation fails |
+
+#### CreateBlob
+
+```go
+func CreateBlob(ctx context.Context, srcDir, destDir string, opts ...CreateBlobOption) (*BlobFile, error)
+```
+
+CreateBlob builds an archive from a directory and returns an open BlobFile handle. The index and data files are written to destDir with default names (`index.blob` and `data.blob`). This is a convenience function that combines Create and OpenFile.
+
+**Parameters:**
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| ctx | `context.Context` | Context for cancellation |
+| srcDir | `string` | Source directory to archive |
+| destDir | `string` | Destination directory for archive files |
+| opts | `...CreateBlobOption` | Configuration options |
+
+**Returns:**
+
+| Return | Type | Description |
+|--------|------|-------------|
+| blobFile | `*BlobFile` | The created and opened archive |
 | err | `error` | Non-nil if archive creation fails |
 
 #### DefaultSkipCompression
@@ -317,6 +377,47 @@ func (b *Blob) IndexData() []byte
 
 IndexData returns the raw FlatBuffers-encoded index data. This is useful for creating new Blobs with different data sources.
 
+#### Stream
+
+```go
+func (b *Blob) Stream() io.Reader
+```
+
+Stream returns an `io.Reader` that streams the entire data blob from beginning to end. This is useful for copying or transmitting the complete data content.
+
+#### Save
+
+```go
+func (b *Blob) Save(indexPath, dataPath string) error
+```
+
+Save writes the blob's index and data to the specified file paths. Uses atomic writes (temp file + rename) to prevent partial writes on failure. Parent directories are created as needed.
+
+**Parameters:**
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| indexPath | `string` | Path where index blob will be written |
+| dataPath | `string` | Path where data blob will be written |
+
+**Returns:**
+
+| Return | Type | Description |
+|--------|------|-------------|
+| err | `error` | Non-nil if file writing fails |
+
+### BlobFile Methods
+
+BlobFile embeds `*Blob`, so all Blob methods (Open, Stat, ReadFile, ReadDir, CopyTo, CopyDir, Entry, Entries, etc.) are directly accessible on BlobFile.
+
+#### Close
+
+```go
+func (bf *BlobFile) Close() error
+```
+
+Close closes the underlying data file. Should be called to release file resources. Safe to call multiple times.
+
 ### Options
 
 Options configure a Blob via the `New` function.
@@ -366,6 +467,23 @@ type CreateOption func(*createConfig)
 | `CreateWithSkipCompression(fns ...SkipCompressionFunc)` | Predicates that decide to store files uncompressed. If any returns true, compression is skipped. | none |
 | `CreateWithMaxFiles(n int)` | Maximum file count. 0 uses `DefaultMaxFiles`, &lt;0 means unlimited. | 200,000 |
 
+### CreateBlob Options
+
+CreateBlob options configure archive creation and file naming via the `CreateBlob` function.
+
+```go
+type CreateBlobOption func(*createBlobConfig)
+```
+
+| Option | Description | Default |
+|--------|-------------|---------|
+| `CreateBlobWithIndexName(name string)` | Override the index filename. | "index.blob" |
+| `CreateBlobWithDataName(name string)` | Override the data filename. | "data.blob" |
+| `CreateBlobWithCompression(c Compression)` | Compression algorithm. Use `CompressionNone` or `CompressionZstd`. | CompressionNone |
+| `CreateBlobWithChangeDetection(cd ChangeDetection)` | File change detection during archive creation. | ChangeDetectionNone |
+| `CreateBlobWithSkipCompression(fns ...SkipCompressionFunc)` | Predicates that decide to store files uncompressed. | none |
+| `CreateBlobWithMaxFiles(n int)` | Maximum file count. 0 uses `DefaultMaxFiles`, &lt;0 means unlimited. | 200,000 |
+
 ### Constants
 
 #### Compression Constants
@@ -381,6 +499,13 @@ type CreateOption func(*createConfig)
 |----------|-------|-------------|
 | `ChangeDetectionNone` | 0 | No change detection (default) |
 | `ChangeDetectionStrict` | 1 | Verify files did not change during archive creation |
+
+#### File Name Constants
+
+| Constant | Value | Description |
+|----------|-------|-------------|
+| `DefaultIndexName` | "index.blob" | Default filename for index when using CreateBlob |
+| `DefaultDataName` | "data.blob" | Default filename for data when using CreateBlob |
 
 #### Other Constants
 

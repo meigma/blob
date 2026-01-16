@@ -82,6 +82,27 @@ func openCachedArchive(indexData []byte, source blob.ByteSource) (*cache.Blob, e
 }
 ```
 
+### Using BlobFile with Caching
+
+When using `OpenFile`, extract the embedded `*Blob` for caching:
+
+```go
+blobFile, err := blob.OpenFile("index.blob", "data.blob")
+if err != nil {
+	return nil, err
+}
+// Note: caller is responsible for closing blobFile when done
+
+diskCache, err := disk.New("/var/cache/blob")
+if err != nil {
+	blobFile.Close()
+	return nil, err
+}
+
+// Wrap the embedded Blob with caching
+cached := cache.New(blobFile.Blob, diskCache)
+```
+
 The cached blob implements the same `fs.FS` interfaces as the base blob, so you can use it as a drop-in replacement.
 
 ## Reading Files

@@ -19,6 +19,57 @@ We will create a simple program that:
 3. Lists directory contents
 4. Extracts files to a destination
 
+## Quick Start with Files
+
+For working directly with local files, blob provides convenient helper functions that handle file I/O automatically:
+
+```go
+package main
+
+import (
+	"context"
+	"fmt"
+	"log"
+
+	"github.com/meigma/blob"
+)
+
+func main() {
+	// Create an archive from a directory
+	blobFile, err := blob.CreateBlob(context.Background(), "./src", "./archive",
+		blob.CreateBlobWithCompression(blob.CompressionZstd),
+	)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer blobFile.Close()
+
+	// Read a file
+	content, err := blobFile.ReadFile("main.go")
+	if err != nil {
+		log.Fatal(err)
+	}
+	fmt.Printf("Content: %s\n", content)
+}
+```
+
+To open an existing archive:
+
+```go
+blobFile, err := blob.OpenFile("./archive/index.blob", "./archive/data.blob")
+if err != nil {
+	log.Fatal(err)
+}
+defer blobFile.Close()
+
+// Use like any Blob
+content, _ := blobFile.ReadFile("config.json")
+```
+
+The rest of this tutorial shows the lower-level API for more control over archive creation and data sources.
+
+---
+
 ## Step 1: Create a Project
 
 First, create a new directory and initialize a Go module:

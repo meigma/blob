@@ -6,7 +6,67 @@ sidebar_position: 1
 
 How to build blob archives from directories for storage in OCI registries.
 
-## Basic Usage
+## Using CreateBlob (Recommended)
+
+For file-based archives, `CreateBlob` is the simplest approach. It creates the archive files and returns an open `BlobFile` ready for use:
+
+```go
+import (
+	"context"
+
+	"github.com/meigma/blob"
+)
+
+func createArchive(srcDir, destDir string) (*blob.BlobFile, error) {
+	return blob.CreateBlob(context.Background(), srcDir, destDir,
+		blob.CreateBlobWithCompression(blob.CompressionZstd),
+	)
+}
+```
+
+This creates `index.blob` and `data.blob` in `destDir` and returns an open archive. Remember to close it when done:
+
+```go
+blobFile, err := blob.CreateBlob(ctx, srcDir, destDir)
+if err != nil {
+	return err
+}
+defer blobFile.Close()
+
+// Use the archive immediately
+content, err := blobFile.ReadFile("config.json")
+```
+
+### Custom Filenames
+
+Override the default filenames with options:
+
+```go
+blobFile, err := blob.CreateBlob(ctx, srcDir, destDir,
+	blob.CreateBlobWithIndexName("my-archive.idx"),
+	blob.CreateBlobWithDataName("my-archive.dat"),
+)
+```
+
+### Saving an Existing Blob
+
+To save an in-memory or remote Blob to local files:
+
+```go
+// archive is a *blob.Blob from any source
+err := archive.Save("/path/to/index.blob", "/path/to/data.blob")
+```
+
+---
+
+## Using Create (Advanced)
+
+The lower-level `Create` function provides more control when you need to:
+- Write to non-file destinations (network streams, cloud storage)
+- Handle index and data separately
+- Integrate with custom I/O pipelines
+
+### Basic Usage
 
 To create an archive, provide a source directory and writers for the index and data:
 
@@ -150,9 +210,29 @@ if errors.Is(err, context.DeadlineExceeded) {
 }
 ```
 
-## Complete Example
+## Complete Examples
 
-A production archive creation function with all options:
+### Using CreateBlob
+
+A production archive creation function with `CreateBlob`:
+
+```go
+func createProductionArchive(srcDir, destDir string) (*blob.BlobFile, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
+	defer cancel()
+
+	return blob.CreateBlob(ctx, srcDir, destDir,
+		blob.CreateBlobWithCompression(blob.CompressionZstd),
+		blob.CreateBlobWithSkipCompression(blob.DefaultSkipCompression(1024)),
+		blob.CreateBlobWithChangeDetection(blob.ChangeDetectionStrict),
+		blob.CreateBlobWithMaxFiles(100000),
+	)
+}
+```
+
+### Using Create
+
+A production archive creation function with the lower-level `Create` API:
 
 ```go
 func createProductionArchive(srcDir, indexPath, dataPath string) error {
