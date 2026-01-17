@@ -37,7 +37,7 @@ func dirSize(root string) (int64, error) {
 	return total, err
 }
 
-func pruneDir(root string, targetBytes int64) (freed int64, remaining int64, err error) {
+func pruneDir(root string, targetBytes int64) (freed, remaining int64, err error) {
 	if targetBytes < 0 {
 		targetBytes = 0
 	}

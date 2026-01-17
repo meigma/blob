@@ -282,7 +282,8 @@ func (c *BlockCache) getBlock(sourceID string, blockSize, blockIndex, blockLen i
 	key := c.blockKeyHex(sourceID, blockSize, blockIndex)
 	result, err, _ := c.fetchGroup.Do(key, func() (any, error) {
 		path := c.pathForKey(key)
-		if data, err := os.ReadFile(path); err == nil {
+		// path is safe: constructed from hex-encoded SHA256 hash via pathForKey
+		if data, err := os.ReadFile(path); err == nil { //nolint:gosec // path is derived from hash, not user input
 			if int64(len(data)) == blockLen {
 				return data, nil
 			}
@@ -299,7 +300,9 @@ func (c *BlockCache) getBlock(sourceID string, blockSize, blockIndex, blockLen i
 		if int64(len(data)) != blockLen {
 			return nil, io.ErrUnexpectedEOF
 		}
-		_ = c.writeBlock(path, data)
+		// Ignore write errors - we still return the fetched data even if caching fails.
+		// This is intentional: cache writes are opportunistic and should not fail the read.
+		_ = c.writeBlock(path, data) //nolint:errcheck // cache write is best-effort
 		return data, nil
 	})
 	if err != nil {
@@ -360,9 +363,10 @@ func (c *BlockCache) blockKeyHex(sourceID string, blockSize, blockIndex int64) s
 	_, _ = hasher.Write([]byte(sourceID)) //nolint:errcheck // hash writes never fail
 
 	var buf [16]byte
-	binary.BigEndian.PutUint64(buf[:8], uint64(blockSize))
-	binary.BigEndian.PutUint64(buf[8:], uint64(blockIndex))
-	_, _ = hasher.Write(buf[:]) //nolint:errcheck // hash writes never fail
+	// blockSize and blockIndex are validated positive before reaching here
+	binary.BigEndian.PutUint64(buf[:8], uint64(blockSize))  //nolint:gosec // blockSize validated > 0
+	binary.BigEndian.PutUint64(buf[8:], uint64(blockIndex)) //nolint:gosec // blockIndex always >= 0
+	_, _ = hasher.Write(buf[:])                             //nolint:errcheck // hash writes never fail
 
 	return hex.EncodeToString(hasher.Sum(nil))
 }

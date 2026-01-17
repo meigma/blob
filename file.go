@@ -98,7 +98,7 @@ func OpenFile(indexPath, dataPath string, opts ...Option) (*BlobFile, error) {
 	sourceID := ""
 	if idx, loadErr := index.Load(indexData); loadErr == nil {
 		if hash, ok := idx.DataHash(); ok {
-			sourceID = fmt.Sprintf("sha256:%s", hex.EncodeToString(hash))
+			sourceID = "sha256:" + hex.EncodeToString(hash)
 		}
 	}
 
