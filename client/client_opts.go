@@ -56,3 +56,10 @@ func WithManifestCache(mc cache.ManifestCache) Option {
 		c.manifestCache = mc
 	}
 }
+
+// WithIndexCache sets the cache for index blob lookups.
+func WithIndexCache(ic cache.IndexCache) Option {
+	return func(c *Client) {
+		c.indexCache = ic
+	}
+}

@@ -40,15 +40,42 @@ func (c *Client) Pull(ctx context.Context, ref string, opts ...PullOption) (*blo
 
 	// Step 2: Fetch index blob (small, download fully)
 	indexDesc := manifest.IndexDescriptor()
-	indexReader, err := c.oci.FetchBlob(ctx, ref, &indexDesc)
-	if err != nil {
-		return nil, fmt.Errorf("fetch index blob: %w", mapOCIError(err))
+	indexDigest := indexDesc.Digest.String()
+	if cfg.maxIndexSize > 0 && indexDesc.Size > cfg.maxIndexSize {
+		return nil, fmt.Errorf("read index blob: %w", fmt.Errorf("index blob too large: %d > %d", indexDesc.Size, cfg.maxIndexSize))
 	}
-	defer indexReader.Close()
 
-	indexData, err := readIndexData(indexReader, indexDesc.Size, cfg.maxIndexSize)
-	if err != nil {
-		return nil, fmt.Errorf("read index blob: %w", err)
+	var (
+		indexData []byte
+		fromCache bool
+	)
+	if !cfg.skipCache && c.indexCache != nil {
+		if cached, ok := c.indexCache.GetIndex(indexDigest); ok {
+			if cfg.maxIndexSize > 0 && int64(len(cached)) > cfg.maxIndexSize {
+				return nil, fmt.Errorf("read index blob: %w", fmt.Errorf("index blob too large: %d > %d", len(cached), cfg.maxIndexSize))
+			}
+			indexData = cached
+			fromCache = true
+		}
+	}
+
+	if !fromCache {
+		indexReader, err := c.oci.FetchBlob(ctx, ref, &indexDesc)
+		if err != nil {
+			return nil, fmt.Errorf("fetch index blob: %w", mapOCIError(err))
+		}
+		defer indexReader.Close()
+
+		indexData, err = readIndexData(indexReader, indexDesc.Size, cfg.maxIndexSize)
+		if err != nil {
+			return nil, fmt.Errorf("read index blob: %w", err)
+		}
+
+		if c.indexCache != nil {
+			if err := c.indexCache.PutIndex(indexDigest, indexData); err != nil {
+				return nil, fmt.Errorf("cache index: %w", err)
+			}
+		}
 	}
 
 	// Step 3: Build data blob URL for range requests
