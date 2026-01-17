@@ -27,7 +27,7 @@ type OCIClient interface {
 	PushManifest(ctx context.Context, repoRef, tag string, manifest *ocispec.Manifest) (ocispec.Descriptor, error)
 
 	// FetchManifest fetches a manifest from the repository by descriptor.
-	FetchManifest(ctx context.Context, repoRef string, expected *ocispec.Descriptor) (ocispec.Manifest, error)
+	FetchManifest(ctx context.Context, repoRef string, expected *ocispec.Descriptor) (ocispec.Manifest, []byte, error)
 
 	// Resolve resolves a reference (tag or digest) to a descriptor.
 	Resolve(ctx context.Context, repoRef, ref string) (ocispec.Descriptor, error)

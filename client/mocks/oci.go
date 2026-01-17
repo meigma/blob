@@ -31,7 +31,7 @@ var _ client.OCIClient = &OCIClientMock{}
 //			FetchBlobFunc: func(ctx context.Context, repoRef string, desc *ocispec.Descriptor) (io.ReadCloser, error) {
 //				panic("mock out the FetchBlob method")
 //			},
-//			FetchManifestFunc: func(ctx context.Context, repoRef string, expected *ocispec.Descriptor) (ocispec.Manifest, error) {
+//			FetchManifestFunc: func(ctx context.Context, repoRef string, expected *ocispec.Descriptor) (ocispec.Manifest, []byte, error) {
 //				panic("mock out the FetchManifest method")
 //			},
 //			InvalidateAuthHeadersFunc: func(repoRef string) error {
@@ -66,7 +66,7 @@ type OCIClientMock struct {
 	FetchBlobFunc func(ctx context.Context, repoRef string, desc *ocispec.Descriptor) (io.ReadCloser, error)
 
 	// FetchManifestFunc mocks the FetchManifest method.
-	FetchManifestFunc func(ctx context.Context, repoRef string, expected *ocispec.Descriptor) (ocispec.Manifest, error)
+	FetchManifestFunc func(ctx context.Context, repoRef string, expected *ocispec.Descriptor) (ocispec.Manifest, []byte, error)
 
 	// InvalidateAuthHeadersFunc mocks the InvalidateAuthHeaders method.
 	InvalidateAuthHeadersFunc func(repoRef string) error
@@ -289,7 +289,7 @@ func (mock *OCIClientMock) FetchBlobCalls() []struct {
 }
 
 // FetchManifest calls FetchManifestFunc.
-func (mock *OCIClientMock) FetchManifest(ctx context.Context, repoRef string, expected *ocispec.Descriptor) (ocispec.Manifest, error) {
+func (mock *OCIClientMock) FetchManifest(ctx context.Context, repoRef string, expected *ocispec.Descriptor) (ocispec.Manifest, []byte, error) {
 	if mock.FetchManifestFunc == nil {
 		panic("OCIClientMock.FetchManifestFunc: method is nil but OCIClient.FetchManifest was just called")
 	}

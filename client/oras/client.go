@@ -174,24 +174,24 @@ func (c *Client) PushManifest(ctx context.Context, repoRef, tag string, manifest
 //
 // Call Resolve first and pass the resolved descriptor to avoid extra lookups.
 // Handles both OCI 1.0 and 1.1 manifest formats.
-func (c *Client) FetchManifest(ctx context.Context, repoRef string, expected *ocispec.Descriptor) (ocispec.Manifest, error) {
+func (c *Client) FetchManifest(ctx context.Context, repoRef string, expected *ocispec.Descriptor) (ocispec.Manifest, []byte, error) {
 	if err := validateDescriptor(expected); err != nil {
-		return ocispec.Manifest{}, err
+		return ocispec.Manifest{}, nil, err
 	}
 
 	repo, err := c.repository(repoRef)
 	if err != nil {
-		return ocispec.Manifest{}, err
+		return ocispec.Manifest{}, nil, err
 	}
 
 	desc, rc, err := repo.FetchReference(ctx, expected.Digest.String())
 	if err != nil {
-		return ocispec.Manifest{}, mapError(err)
+		return ocispec.Manifest{}, nil, mapError(err)
 	}
 	defer rc.Close()
 
 	if expected.MediaType == "" && desc.MediaType != "" && desc.MediaType != ocispec.MediaTypeImageManifest {
-		return ocispec.Manifest{}, fmt.Errorf("%w: unsupported media type %s", ErrManifestInvalid, desc.MediaType)
+		return ocispec.Manifest{}, nil, fmt.Errorf("%w: unsupported media type %s", ErrManifestInvalid, desc.MediaType)
 	}
 
 	// Use returned descriptor's size if expected size is 0
@@ -199,14 +199,30 @@ func (c *Client) FetchManifest(ctx context.Context, repoRef string, expected *oc
 	if size == 0 {
 		size = desc.Size
 	}
-	limited := io.LimitReader(rc, size)
-
-	var manifest ocispec.Manifest
-	if err := json.NewDecoder(limited).Decode(&manifest); err != nil {
-		return ocispec.Manifest{}, fmt.Errorf("%w: %v", ErrManifestInvalid, err)
+	reader := io.Reader(rc)
+	if size > 0 {
+		reader = io.LimitReader(rc, size)
 	}
 
-	return manifest, nil
+	raw, err := io.ReadAll(reader)
+	if err != nil {
+		return ocispec.Manifest{}, nil, fmt.Errorf("%w: %v", ErrManifestInvalid, err)
+	}
+	if size > 0 && int64(len(raw)) != size {
+		return ocispec.Manifest{}, nil, fmt.Errorf("%w: expected %d bytes, got %d", ErrSizeMismatch, size, len(raw))
+	}
+
+	computed := expected.Digest.Algorithm().FromBytes(raw)
+	if computed != expected.Digest {
+		return ocispec.Manifest{}, nil, fmt.Errorf("%w: expected %s, got %s", ErrDigestMismatch, expected.Digest, computed)
+	}
+
+	var manifest ocispec.Manifest
+	if err := json.Unmarshal(raw, &manifest); err != nil {
+		return ocispec.Manifest{}, nil, fmt.Errorf("%w: %v", ErrManifestInvalid, err)
+	}
+
+	return manifest, raw, nil
 }
 
 // Resolve resolves a reference to a descriptor.

@@ -82,14 +82,14 @@ func (c *Client) fetchManifestByDigest(ctx context.Context, ref, digest string, 
 		return nil, err
 	}
 
-	rawManifest, err := c.oci.FetchManifest(ctx, ref, &desc)
+	rawManifest, rawBytes, err := c.oci.FetchManifest(ctx, ref, &desc)
 	if err != nil {
 		return nil, mapOCIError(err)
 	}
 
 	// Cache the raw manifest
 	if c.manifestCache != nil {
-		if err := c.manifestCache.PutManifest(digest, &rawManifest); err != nil {
+		if err := c.manifestCache.PutManifest(digest, rawBytes); err != nil {
 			return nil, fmt.Errorf("cache manifest: %w", err)
 		}
 	}

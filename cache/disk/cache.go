@@ -46,7 +46,7 @@ func WithDirPerm(mode os.FileMode) Option {
 }
 
 // WithMaxBytes sets the maximum cache size in bytes.
-// Values <= 0 disable the limit.
+// Values < 0 are invalid. Use 0 to disable the limit.
 func WithMaxBytes(n int64) Option {
 	return func(c *Cache) {
 		c.maxBytes = n
