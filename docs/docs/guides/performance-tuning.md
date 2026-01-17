@@ -166,6 +166,46 @@ The default is serial (1 worker). Higher values:
 - Increase concurrent network requests
 - May saturate network or storage bandwidth
 
+## Block Cache Tuning
+
+For remote sources with scattered random reads, block caching can significantly reduce latency.
+
+### Block Size
+
+Smaller blocks reduce wasted bytes but increase metadata overhead. Larger blocks improve sequential read performance:
+
+```go
+blockCache, err := disk.NewBlockCache(dir,
+    disk.WithBlockMaxBytes(256 << 20),
+)
+
+// Small files or fine-grained access
+cachedSource, err := blockCache.Wrap(source,
+    cache.WithBlockSize(16 << 10),  // 16 KB
+)
+
+// Large files or coarser access
+cachedSource, err := blockCache.Wrap(source,
+    cache.WithBlockSize(256 << 10), // 256 KB
+)
+```
+
+### Bypass Threshold
+
+Adjust `MaxBlocksPerRead` based on your access patterns:
+
+```go
+// Lower threshold: bypass cache more aggressively for sequential reads
+cachedSource, err := blockCache.Wrap(source,
+    cache.WithMaxBlocksPerRead(2),  // Bypass reads > 2 blocks
+)
+
+// Disable bypass: cache everything (useful for small archives)
+cachedSource, err := blockCache.Wrap(source,
+    cache.WithMaxBlocksPerRead(0),  // Cache all reads
+)
+```
+
 ## Tuning Scenarios
 
 ### Memory-Constrained Environment
@@ -274,3 +314,4 @@ log.Printf("extraction took %v", time.Since(start))
 - [Architecture](../explanation/architecture) - Understand how the format affects performance
 - [Creating Archives](creating-archives) - Options that affect read performance
 - [Caching](caching) - Improve repeated read performance
+- [Block Caching](block-caching) - Block-level caching for remote sources

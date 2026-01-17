@@ -2,6 +2,7 @@ package batch
 
 import (
 	"crypto/sha256"
+	"encoding/hex"
 	"io"
 	"testing"
 
@@ -11,7 +12,8 @@ import (
 
 // mockByteSource provides an in-memory ByteSource for testing.
 type mockByteSource struct {
-	data []byte
+	data     []byte
+	sourceID string
 }
 
 func (m *mockByteSource) ReadAt(p []byte, off int64) (int, error) {
@@ -27,6 +29,14 @@ func (m *mockByteSource) ReadAt(p []byte, off int64) (int, error) {
 
 func (m *mockByteSource) Size() int64 {
 	return int64(len(m.data))
+}
+
+func (m *mockByteSource) SourceID() string {
+	if m.sourceID == "" {
+		sum := sha256.Sum256(m.data)
+		m.sourceID = "mock:" + hex.EncodeToString(sum[:])
+	}
+	return m.sourceID
 }
 
 // mockSink captures processed entries for testing.

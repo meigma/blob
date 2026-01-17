@@ -112,10 +112,17 @@ Compression identifies the compression algorithm used for a file.
 type ByteSource interface {
     io.ReaderAt
     Size() int64
+    SourceID() string
 }
 ```
 
 ByteSource provides random access to the data blob. Implementations exist for local files (`*os.File`) and HTTP range requests (`http.Source`).
+
+| Method | Signature | Description |
+|--------|-----------|-------------|
+| ReadAt | `ReadAt(p []byte, off int64) (int, error)` | Reads bytes at the given offset (from io.ReaderAt). |
+| Size | `Size() int64` | Returns the total size of the data blob. |
+| SourceID | `SourceID() string` | Returns a stable identifier for the underlying content, used by block cache for cache keys. |
 
 #### ChangeDetection
 
@@ -595,6 +602,14 @@ func (s *Source) Size() int64
 
 Size returns the total size of the remote content.
 
+#### SourceID
+
+```go
+func (s *Source) SourceID() string
+```
+
+SourceID returns a stable identifier for the remote content. The identifier is derived from the URL and, when available, ETag or Last-Modified headers. Used as part of block cache keys.
+
 #### ReadAt
 
 ```go
@@ -622,6 +637,7 @@ type Option func(*Source)
 | `WithClient(client *http.Client)` | HTTP client used for requests | `http.DefaultClient` |
 | `WithHeaders(headers http.Header)` | Additional headers on each request | none |
 | `WithHeader(key, value string)` | Single header on each request | none |
+| `WithSourceID(id string)` | Override the automatic source identifier used for block cache keys | auto-generated |
 
 ---
 
@@ -639,19 +655,27 @@ Package cache provides content-addressed caching for blob archives.
 
 ```go
 type Cache interface {
-    Get(hash []byte) ([]byte, bool)
-    Put(hash []byte, content []byte) error
+    Get(hash []byte) (fs.File, bool)
+    Put(hash []byte, f fs.File) error
+    Delete(hash []byte) error
+    MaxBytes() int64
+    SizeBytes() int64
+    Prune(targetBytes int64) (int64, error)
 }
 ```
 
 Cache provides content-addressed storage for file contents. Keys are SHA256 hashes of uncompressed file content. Values are the uncompressed content. Because keys are content hashes, cache hits are implicitly verified.
 
-Implementations should handle their own size limits and eviction policies. Implementations must be safe for concurrent use.
+Implementations must be safe for concurrent use.
 
 | Method | Signature | Description |
 |--------|-----------|-------------|
-| Get | `Get(hash []byte) ([]byte, bool)` | Retrieves content by its SHA256 hash. Returns `nil, false` if not cached. |
-| Put | `Put(hash []byte, content []byte) error` | Stores content indexed by its SHA256 hash. |
+| Get | `Get(hash []byte) (fs.File, bool)` | Retrieves content by its SHA256 hash. Returns `nil, false` if not cached. |
+| Put | `Put(hash []byte, f fs.File) error` | Stores content by reading from the provided fs.File. |
+| Delete | `Delete(hash []byte) error` | Removes cached content for the given hash. |
+| MaxBytes | `MaxBytes() int64` | Returns the configured cache size limit (0 = unlimited). |
+| SizeBytes | `SizeBytes() int64` | Returns the current cache size in bytes. |
+| Prune | `Prune(targetBytes int64) (int64, error)` | Removes entries until cache is at or below targetBytes. Returns bytes freed. |
 
 #### StreamingCache
 
@@ -685,6 +709,62 @@ Writer streams content into the cache. Content is written via Write calls. After
 | Write | `Write(p []byte) (n int, err error)` | Writes content to the cache buffer. |
 | Commit | `Commit() error` | Finalizes the cache entry, making it available via Get. |
 | Discard | `Discard() error` | Aborts the cache write and cleans up temporary data. |
+
+#### ByteSource
+
+```go
+type ByteSource interface {
+    io.ReaderAt
+    Size() int64
+    SourceID() string
+}
+```
+
+ByteSource provides random access to data for block caching. This mirrors the `blob.ByteSource` interface.
+
+| Method | Signature | Description |
+|--------|-----------|-------------|
+| ReadAt | `ReadAt(p []byte, off int64) (int, error)` | Reads bytes at the given offset (from io.ReaderAt). |
+| Size | `Size() int64` | Returns the total size of the source. |
+| SourceID | `SourceID() string` | Returns a stable identifier for cache key generation. |
+
+#### BlockCache
+
+```go
+type BlockCache interface {
+    Wrap(src ByteSource, opts ...WrapOption) (ByteSource, error)
+    MaxBytes() int64
+    SizeBytes() int64
+    Prune(targetBytes int64) (int64, error)
+}
+```
+
+BlockCache wraps ByteSources with block-level caching. Block caching is most effective for random, non-contiguous reads over remote sources.
+
+| Method | Signature | Description |
+|--------|-----------|-------------|
+| Wrap | `Wrap(src ByteSource, opts ...WrapOption) (ByteSource, error)` | Wraps a source with block caching. |
+| MaxBytes | `MaxBytes() int64` | Returns the configured cache size limit (0 = unlimited). |
+| SizeBytes | `SizeBytes() int64` | Returns the current cache size in bytes. |
+| Prune | `Prune(targetBytes int64) (int64, error)` | Removes entries until cache is at or below targetBytes. |
+
+### Constants
+
+| Constant | Value | Description |
+|----------|-------|-------------|
+| `DefaultBlockSize` | 65536 (64 KB) | Default block size for block caches |
+| `DefaultMaxBlocksPerRead` | 4 | Default threshold for bypassing cache on large reads |
+
+### Wrap Options
+
+```go
+type WrapOption func(*WrapConfig)
+```
+
+| Option | Description | Default |
+|--------|-------------|---------|
+| `WithBlockSize(n int64)` | Block size in bytes for caching. | 64 KB |
+| `WithMaxBlocksPerRead(n int)` | Bypass caching when read spans more than n blocks. 0 disables the limit. | 4 |
 
 ### Types
 
@@ -870,3 +950,112 @@ type Option func(*Cache)
 |--------|-------------|---------|
 | `WithShardPrefixLen(n int)` | Number of hex characters used for directory sharding. Use 0 to disable sharding. | 2 |
 | `WithDirPerm(mode os.FileMode)` | Directory permissions for cache directories. | 0700 |
+| `WithMaxBytes(n int64)` | Maximum cache size in bytes. 0 disables the limit. | 0 (unlimited) |
+
+### Cache Methods
+
+#### MaxBytes
+
+```go
+func (c *Cache) MaxBytes() int64
+```
+
+MaxBytes returns the configured cache size limit (0 = unlimited).
+
+#### SizeBytes
+
+```go
+func (c *Cache) SizeBytes() int64
+```
+
+SizeBytes returns the current cache size in bytes.
+
+#### Prune
+
+```go
+func (c *Cache) Prune(targetBytes int64) (int64, error)
+```
+
+Prune removes cached entries until the cache is at or below targetBytes. Returns the number of bytes freed.
+
+---
+
+### BlockCache Type
+
+```go
+type BlockCache struct {
+    // contains filtered or unexported fields
+}
+```
+
+BlockCache provides a disk-backed block cache for ByteSources. It implements `cache.BlockCache`.
+
+### BlockCache Functions
+
+#### NewBlockCache
+
+```go
+func NewBlockCache(dir string, opts ...BlockCacheOption) (*BlockCache, error)
+```
+
+NewBlockCache creates a disk-backed block cache rooted at the specified directory.
+
+**Parameters:**
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| dir | `string` | Root directory for the block cache |
+| opts | `...BlockCacheOption` | Configuration options |
+
+**Returns:**
+
+| Return | Type | Description |
+|--------|------|-------------|
+| cache | `*BlockCache` | The created block cache |
+| err | `error` | Non-nil if directory creation fails |
+
+### BlockCache Methods
+
+#### Wrap
+
+```go
+func (c *BlockCache) Wrap(src cache.ByteSource, opts ...cache.WrapOption) (cache.ByteSource, error)
+```
+
+Wrap returns a ByteSource that caches reads in fixed-size blocks.
+
+#### MaxBytes
+
+```go
+func (c *BlockCache) MaxBytes() int64
+```
+
+MaxBytes returns the configured cache size limit (0 = unlimited).
+
+#### SizeBytes
+
+```go
+func (c *BlockCache) SizeBytes() int64
+```
+
+SizeBytes returns the current cache size in bytes.
+
+#### Prune
+
+```go
+func (c *BlockCache) Prune(targetBytes int64) (int64, error)
+```
+
+Prune removes cached entries until the cache is at or below targetBytes.
+
+### BlockCache Options
+
+```go
+type BlockCacheOption func(*BlockCache)
+```
+
+| Option | Description | Default |
+|--------|-------------|---------|
+| `WithBlockMaxBytes(n int64)` | Maximum cache size in bytes. 0 disables the limit. | 0 (unlimited) |
+| `WithBlockShardPrefixLen(n int)` | Number of hex characters for directory sharding. 0 disables sharding. | 2 |
+| `WithBlockDirPerm(mode os.FileMode)` | Directory permissions for cache directories. | 0700 |

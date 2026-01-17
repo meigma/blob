@@ -1,8 +1,12 @@
 package blob
 
 import (
+	"encoding/hex"
 	"fmt"
 	"os"
+	"path/filepath"
+
+	"github.com/meigma/blob/internal/index"
 )
 
 // Default file names for blob archives.
@@ -14,17 +18,21 @@ const (
 // fileSource wraps *os.File to implement ByteSource.
 // os.File has ReadAt but not Size, so we cache the size at construction.
 type fileSource struct {
-	file *os.File
-	size int64
+	file     *os.File
+	size     int64
+	sourceID string
 }
 
 // newFileSource creates a fileSource from an open file.
-func newFileSource(f *os.File) (*fileSource, error) {
+func newFileSource(f *os.File, sourceID string) (*fileSource, error) {
 	info, err := f.Stat()
 	if err != nil {
 		return nil, fmt.Errorf("stat data file: %w", err)
 	}
-	return &fileSource{file: f, size: info.Size()}, nil
+	if sourceID == "" {
+		sourceID = fallbackFileSourceID(f.Name(), info)
+	}
+	return &fileSource{file: f, size: info.Size(), sourceID: sourceID}, nil
 }
 
 // ReadAt implements io.ReaderAt.
@@ -35,6 +43,19 @@ func (fs *fileSource) ReadAt(p []byte, off int64) (int, error) {
 // Size returns the total size of the file.
 func (fs *fileSource) Size() int64 {
 	return fs.size
+}
+
+// SourceID returns a stable identifier for the file content.
+func (fs *fileSource) SourceID() string {
+	return fs.sourceID
+}
+
+func fallbackFileSourceID(path string, info os.FileInfo) string {
+	absPath, err := filepath.Abs(path)
+	if err != nil {
+		absPath = path
+	}
+	return fmt.Sprintf("file:%s:%d:%d", absPath, info.Size(), info.ModTime().UnixNano())
 }
 
 // BlobFile wraps a Blob with its underlying data file handle.
@@ -74,7 +95,14 @@ func OpenFile(indexPath, dataPath string, opts ...Option) (*BlobFile, error) {
 	}
 
 	// Wrap data file as ByteSource
-	source, err := newFileSource(dataFile)
+	sourceID := ""
+	if idx, loadErr := index.Load(indexData); loadErr == nil {
+		if hash, ok := idx.DataHash(); ok {
+			sourceID = fmt.Sprintf("sha256:%s", hex.EncodeToString(hash))
+		}
+	}
+
+	source, err := newFileSource(dataFile, sourceID)
 	if err != nil {
 		dataFile.Close()
 		return nil, err

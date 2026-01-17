@@ -32,4 +32,14 @@ type Cache interface {
 	// Delete removes cached content for the given hash.
 	// Implementations should treat missing entries as a no-op.
 	Delete(hash []byte) error
+
+	// MaxBytes returns the configured cache size limit (0 = unlimited).
+	MaxBytes() int64
+
+	// SizeBytes returns the current cache size in bytes.
+	SizeBytes() int64
+
+	// Prune removes cached entries until the cache is at or below targetBytes.
+	// Returns the number of bytes freed.
+	Prune(targetBytes int64) (int64, error)
 }

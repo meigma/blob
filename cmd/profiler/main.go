@@ -595,3 +595,7 @@ func (w *wrappedSource) ReadAt(p []byte, off int64) (int, error) {
 func (w *wrappedSource) Size() int64 {
 	return w.b.Size()
 }
+
+func (w *wrappedSource) SourceID() string {
+	return w.b.Reader().Source().SourceID()
+}

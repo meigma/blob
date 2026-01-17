@@ -276,6 +276,10 @@ func (c *countingByteSource) ReadCount() int64 {
 	return c.readCount.Load()
 }
 
+func (c *countingByteSource) SourceID() string {
+	return c.source.SourceID()
+}
+
 // readAll reads all data from an fs.File.
 func readAll(f interface{ Read([]byte) (int, error) }) ([]byte, error) {
 	var buf bytes.Buffer

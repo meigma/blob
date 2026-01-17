@@ -2,10 +2,12 @@ package blob
 
 import (
 	"fmt"
+	"os"
 	"path/filepath"
 	"testing"
 	"time"
 
+	blobcache "github.com/meigma/blob/cache"
 	"github.com/meigma/blob/cache/disk"
 	"github.com/meigma/blob/internal/testutil"
 )
@@ -196,4 +198,229 @@ func BenchmarkBlobReadFileHTTPDiskCacheHit(b *testing.B) {
 			}
 		})
 	}
+}
+
+func BenchmarkBlobReadFileBlockCacheRandom(b *testing.B) {
+	const fileCount = 1024
+	const fileSize = 16 << 10
+
+	blockSizes := []int64{64 << 10, 256 << 10}
+	compressions := []Compression{CompressionNone, CompressionZstd}
+
+	for _, compression := range compressions {
+		name := fmt.Sprintf("files=%d/size=%dk/%s", fileCount, fileSize>>10, compression.String())
+		b.Run(name, func(b *testing.B) {
+			dir := b.TempDir()
+			paths := makeBenchFiles(b, dir, fileCount, fileSize, benchPatternRandom)
+			indexData, dataData := createBenchArchive(b, dir, compression)
+
+			for _, source := range benchCacheSources() {
+				for _, blockSize := range blockSizes {
+					label := source.name
+					if label == "" {
+						label = "source=memory"
+					}
+					runName := fmt.Sprintf("%s/block=%dk", label, blockSize>>10)
+					b.Run(runName, func(b *testing.B) {
+						byteSource, cleanup, err := source.new(b, dataData)
+						if err != nil {
+							b.Fatal(err)
+						}
+						if cleanup != nil {
+							defer cleanup()
+						}
+
+						cacheDir := filepath.Join(dir, "block-cache", label, fmt.Sprintf("block=%dk", blockSize>>10))
+						cachedSource, err := wrapWithBlockCache(b, cacheDir, byteSource, blockSize, 0)
+						if err != nil {
+							b.Fatal(err)
+						}
+
+						cached, err := New(indexData, cachedSource)
+						if err != nil {
+							b.Fatal(err)
+						}
+
+						for _, path := range paths {
+							content, err := cached.ReadFile(path)
+							if err != nil {
+								b.Fatal(err)
+							}
+							benchSinkBytes = content
+						}
+
+						b.SetBytes(fileSize)
+						b.ReportAllocs()
+						b.ResetTimer()
+						var seed uint64 = 1
+						for b.Loop() {
+							seed = seed*1664525 + 1013904223
+							path := paths[int(seed%uint64(len(paths)))]
+							content, err := cached.ReadFile(path)
+							if err != nil {
+								b.Fatal(err)
+							}
+							benchSinkBytes = content
+						}
+					})
+				}
+			}
+		})
+	}
+}
+
+func BenchmarkBlobOpenBlockCacheRandomPartial(b *testing.B) {
+	const fileCount = 1024
+	const fileSize = 64 << 10
+	const readSize = 4 << 10
+	const blockSize = 256 << 10
+
+	dir := b.TempDir()
+	paths := makeBenchFiles(b, dir, fileCount, fileSize, benchPatternRandom)
+	indexData, dataData := createBenchArchive(b, dir, CompressionZstd)
+
+	for _, source := range benchCacheSources() {
+		label := source.name
+		if label == "" {
+			label = "source=memory"
+		}
+		b.Run(label, func(b *testing.B) {
+			byteSource, cleanup, err := source.new(b, dataData)
+			if err != nil {
+				b.Fatal(err)
+			}
+			if cleanup != nil {
+				defer cleanup()
+			}
+
+			cacheDir := filepath.Join(dir, "block-cache", label, fmt.Sprintf("block=%dk", blockSize>>10))
+			cachedSource, err := wrapWithBlockCache(b, cacheDir, byteSource, blockSize, 0)
+			if err != nil {
+				b.Fatal(err)
+			}
+
+			cached, err := New(indexData, cachedSource, WithVerifyOnClose(false))
+			if err != nil {
+				b.Fatal(err)
+			}
+
+			for _, path := range paths {
+				content, err := cached.ReadFile(path)
+				if err != nil {
+					b.Fatal(err)
+				}
+				benchSinkBytes = content
+			}
+
+			buf := make([]byte, readSize)
+			b.SetBytes(readSize)
+			b.ReportAllocs()
+			b.ResetTimer()
+			var seed uint64 = 7
+			for b.Loop() {
+				seed = seed*1664525 + 1013904223
+				path := paths[int(seed%uint64(len(paths)))]
+				f, err := cached.Open(path)
+				if err != nil {
+					b.Fatal(err)
+				}
+				n, err := f.Read(buf)
+				if err != nil {
+					_ = f.Close()
+					b.Fatal(err)
+				}
+				if err := f.Close(); err != nil {
+					b.Fatal(err)
+				}
+				benchSinkBytes = buf[:n]
+			}
+		})
+	}
+}
+
+func BenchmarkBlobCopyDirBlockCache(b *testing.B) {
+	const fileCount = 256
+	const fileSize = 16 << 10
+
+	type cacheCase struct {
+		name             string
+		enabled          bool
+		blockSize        int64
+		maxBlocksPerRead int
+	}
+	cacheCases := []cacheCase{
+		{name: "block=off"},
+		{name: "block=256k", enabled: true, blockSize: 256 << 10},
+		{name: "block=256k/max=4", enabled: true, blockSize: 256 << 10, maxBlocksPerRead: 4},
+	}
+
+	dir := b.TempDir()
+	_ = makeBenchFiles(b, dir, fileCount, fileSize, benchPatternRandom)
+	indexData, dataData := createBenchArchive(b, dir, CompressionZstd)
+
+	for _, source := range benchCacheSources() {
+		label := source.name
+		if label == "" {
+			label = "source=memory"
+		}
+		for _, cfg := range cacheCases {
+			runName := fmt.Sprintf("%s/%s", label, cfg.name)
+			b.Run(runName, func(b *testing.B) {
+				byteSource, cleanup, err := source.new(b, dataData)
+				if err != nil {
+					b.Fatal(err)
+				}
+				if cleanup != nil {
+					defer cleanup()
+				}
+
+				if cfg.enabled {
+					cacheDir := filepath.Join(dir, "block-cache", label, cfg.name)
+					byteSource, err = wrapWithBlockCache(b, cacheDir, byteSource, cfg.blockSize, cfg.maxBlocksPerRead)
+					if err != nil {
+						b.Fatal(err)
+					}
+				}
+
+				cached, err := New(indexData, byteSource)
+				if err != nil {
+					b.Fatal(err)
+				}
+
+				destDir := filepath.Join(dir, "copy", label, cfg.name)
+				if err := os.MkdirAll(destDir, 0o755); err != nil {
+					b.Fatal(err)
+				}
+
+				if err := cached.CopyDir(destDir, ".", CopyWithOverwrite(true)); err != nil {
+					b.Fatal(err)
+				}
+
+				b.SetBytes(int64(fileCount * fileSize))
+				b.ReportAllocs()
+				b.ResetTimer()
+				for b.Loop() {
+					if err := cached.CopyDir(destDir, ".", CopyWithOverwrite(true)); err != nil {
+						b.Fatal(err)
+					}
+				}
+			})
+		}
+	}
+}
+
+func wrapWithBlockCache(b *testing.B, dir string, src ByteSource, blockSize int64, maxBlocksPerRead int) (ByteSource, error) {
+	b.Helper()
+
+	blockCache, err := disk.NewBlockCache(dir)
+	if err != nil {
+		return nil, err
+	}
+
+	opts := []blobcache.WrapOption{blobcache.WithBlockSize(blockSize)}
+	if maxBlocksPerRead > 0 {
+		opts = append(opts, blobcache.WithMaxBlocksPerRead(maxBlocksPerRead))
+	}
+
+	return blockCache.Wrap(src, opts...)
 }

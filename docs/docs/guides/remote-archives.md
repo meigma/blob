@@ -255,4 +255,5 @@ func openRemoteArchive(indexURL, dataURL, token string) (*blob.Blob, error) {
 ## See Also
 
 - [Caching](caching) - Cache remote content for faster repeated access
+- [Block Caching](block-caching) - Block-level caching for random access reads
 - [Performance Tuning](performance-tuning) - Optimize for network latency
