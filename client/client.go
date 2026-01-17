@@ -7,14 +7,15 @@
 package client
 
 import (
+	"github.com/meigma/blob/client/cache"
 	"github.com/meigma/blob/client/oras"
 )
 
 // Client provides high-level operations for blob archives in OCI registries.
 type Client struct {
 	oci           OCIClient
-	refCache      RefCache
-	manifestCache ManifestCache
+	refCache      cache.RefCache
+	manifestCache cache.ManifestCache
 
 	// orasOpts are options passed through to the ORAS client when
 	// no custom OCIClient is provided.

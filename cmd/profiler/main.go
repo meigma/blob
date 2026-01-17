@@ -194,7 +194,11 @@ func runProfile(cfg config, b *blob.Blob, paths []string, rootDir string) (profi
 				return profileStats{}, err
 			}
 			defer cleanup() //nolint:errcheck // cleanup errors are non-fatal in profiler
-			readFS = cache.New(b, c, cache.WithPrefetchConcurrency(cfg.prefetchWorkers))
+			cachedBlob, cErr := blob.New(b.IndexData(), &wrappedSource{b}, blob.WithCache(c))
+			if cErr != nil {
+				return profileStats{}, cErr
+			}
+			readFS = cachedBlob
 		}
 
 		rng := rand.New(rand.NewSource(cfg.randomSeed)) //nolint:gosec // intentional for reproducible benchmarks
@@ -219,9 +223,12 @@ func runProfile(cfg config, b *blob.Blob, paths []string, rootDir string) (profi
 		}
 		defer cleanup() //nolint:errcheck // cleanup errors are non-fatal in profiler
 
-		cached := cache.New(b, c, cache.WithPrefetchConcurrency(cfg.prefetchWorkers))
+		cachedBlob, cErr := blob.New(b.IndexData(), &wrappedSource{b}, blob.WithCache(c))
+		if cErr != nil {
+			return profileStats{}, cErr
+		}
 		for _, path := range paths {
-			content, err := cached.ReadFile(path)
+			content, err := cachedBlob.ReadFile(path)
 			if err != nil {
 				return profileStats{}, err
 			}
@@ -234,7 +241,7 @@ func runProfile(cfg config, b *blob.Blob, paths []string, rootDir string) (profi
 		rng := rand.New(rand.NewSource(cfg.randomSeed)) //nolint:gosec // intentional for reproducible benchmarks
 		for shouldContinue() {
 			path := pickPath(paths, ops, rng, cfg.readRandom)
-			content, err := cached.ReadFile(path)
+			content, err := cachedBlob.ReadFile(path)
 			if err != nil {
 				return profileStats{}, err
 			}
@@ -294,48 +301,6 @@ func runProfile(cfg config, b *blob.Blob, paths []string, rootDir string) (profi
 			}
 			sinkCount = count
 			ops++
-		}
-
-	case "prefetchdir":
-		if cfg.cache == cacheNone {
-			return profileStats{}, errors.New("prefetchdir requires cache")
-		}
-		prefix := cfg.prefetchPrefix
-		if prefix == "." {
-			prefix = ""
-		}
-		prefetchBytes := prefetchSize(b, prefix)
-		if cfg.prefetchCold {
-			for shouldContinue() {
-				c, cleanup, err := newCache(cfg, rootDir)
-				if err != nil {
-					return profileStats{}, err
-				}
-				cached := cache.New(b, c, cache.WithPrefetchConcurrency(cfg.prefetchWorkers))
-				if err := cached.PrefetchDir(prefix); err != nil {
-					_ = cleanup() //nolint:errcheck // cleanup errors are non-fatal in profiler
-					return profileStats{}, err
-				}
-				if err := cleanup(); err != nil {
-					return profileStats{}, err
-				}
-				byteCount += prefetchBytes
-				ops++
-			}
-		} else {
-			c, cleanup, err := newCache(cfg, rootDir)
-			if err != nil {
-				return profileStats{}, err
-			}
-			defer cleanup() //nolint:errcheck // cleanup errors are non-fatal in profiler
-			cached := cache.New(b, c, cache.WithPrefetchConcurrency(cfg.prefetchWorkers))
-			for shouldContinue() {
-				if err := cached.PrefetchDir(prefix); err != nil {
-					return profileStats{}, err
-				}
-				byteCount += prefetchBytes
-				ops++
-			}
 		}
 
 	case "copydir":
@@ -409,7 +374,7 @@ func runProfile(cfg config, b *blob.Blob, paths []string, rootDir string) (profi
 func parseFlags() config {
 	var cfg config
 	var dataHTTPBPS string
-	flag.StringVar(&cfg.mode, "mode", "readfile", "mode: readfile, cached-readfile-hit, prefetchdir, copydir, writer, index-lookup, index-lookup-copy, entries-with-prefix, entries-with-prefix-copy")
+	flag.StringVar(&cfg.mode, "mode", "readfile", "mode: readfile, cached-readfile-hit, copydir, writer, index-lookup, index-lookup-copy, entries-with-prefix, entries-with-prefix-copy")
 	flag.IntVar(&cfg.files, "files", 512, "number of files")
 	flag.IntVar(&cfg.fileSize, "file-size", 16<<10, "file size in bytes")
 	flag.IntVar(&cfg.dirCount, "dir-count", 16, "number of directories")
@@ -427,9 +392,9 @@ func parseFlags() config {
 	flag.StringVar(&cfg.traceFile, "trace", "", "write trace to file")
 	flag.StringVar(&cfg.cache, "cache", "memory", "cache: memory, disk, none")
 	flag.StringVar(&cfg.cacheDir, "cache-dir", "", "cache directory (disk cache only)")
-	flag.StringVar(&cfg.prefetchPrefix, "prefix", "dir00", "prefix for prefetchdir, copydir, and entries-with-prefix modes")
+	flag.StringVar(&cfg.prefetchPrefix, "prefix", "dir00", "prefix for copydir and entries-with-prefix modes")
 	flag.BoolVar(&cfg.prefetchCold, "prefetch-cold", true, "recreate cache or copy destination each iteration")
-	flag.IntVar(&cfg.prefetchWorkers, "prefetch-workers", 0, "prefetch/copy workers: <0 serial, 0 auto, >0 fixed")
+	flag.IntVar(&cfg.prefetchWorkers, "prefetch-workers", 0, "copy workers: <0 serial, 0 auto, >0 fixed")
 	flag.BoolVar(&cfg.readRandom, "read-random", true, "randomize readfile path selection")
 	flag.StringVar(&cfg.tempDir, "temp-dir", "", "directory to use for dataset")
 	flag.BoolVar(&cfg.keepTemp, "keep-temp", false, "keep temp dir after run")
@@ -615,4 +580,18 @@ func newCache(cfg config, rootDir string) (cache.Cache, func() error, error) {
 	default:
 		return nil, nil, fmt.Errorf("unknown cache: %s", cfg.cache)
 	}
+}
+
+// wrappedSource wraps a blob.Blob to implement blob.ByteSource for creating
+// a new blob with caching from an existing blob's data.
+type wrappedSource struct {
+	b *blob.Blob
+}
+
+func (w *wrappedSource) ReadAt(p []byte, off int64) (int, error) {
+	return w.b.Reader().Source().ReadAt(p, off)
+}
+
+func (w *wrappedSource) Size() int64 {
+	return w.b.Size()
 }

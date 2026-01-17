@@ -1,8 +1,11 @@
 package testutil
 
 import (
+	"bytes"
 	"io"
+	"io/fs"
 	"sync"
+	"time"
 )
 
 // MockByteSource implements a simple in-memory byte source for tests.
@@ -48,18 +51,67 @@ func NewMockCache() *MockCache {
 	return &MockCache{data: make(map[string][]byte)}
 }
 
-// Get retrieves data by hash.
-func (c *MockCache) Get(hash []byte) ([]byte, bool) {
+// Get returns an fs.File for reading cached content.
+func (c *MockCache) Get(hash []byte) (fs.File, bool) {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	data, ok := c.data[string(hash)]
+	if !ok {
+		return nil, false
+	}
+	return &mockCacheFile{Reader: bytes.NewReader(data), size: int64(len(data))}, true
+}
+
+// Put stores content by reading from the provided fs.File.
+func (c *MockCache) Put(hash []byte, f fs.File) error {
+	content, err := io.ReadAll(f)
+	if err != nil {
+		return err
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.data[string(hash)] = content
+	return nil
+}
+
+// Delete removes cached content for the given hash.
+func (c *MockCache) Delete(hash []byte) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	delete(c.data, string(hash))
+	return nil
+}
+
+// GetBytes retrieves raw bytes by hash (for test assertions).
+func (c *MockCache) GetBytes(hash []byte) ([]byte, bool) {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 	data, ok := c.data[string(hash)]
 	return data, ok
 }
 
-// Put stores data by hash.
-func (c *MockCache) Put(hash, content []byte) error {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	c.data[string(hash)] = content
+// mockCacheFile wraps a bytes.Reader to implement fs.File.
+type mockCacheFile struct {
+	*bytes.Reader
+	size int64
+}
+
+func (f *mockCacheFile) Stat() (fs.FileInfo, error) {
+	return &mockFileInfo{size: f.size}, nil
+}
+
+func (f *mockCacheFile) Close() error {
 	return nil
 }
+
+// mockFileInfo implements fs.FileInfo for mockCacheFile.
+type mockFileInfo struct {
+	size int64
+}
+
+func (fi *mockFileInfo) Name() string       { return "" }
+func (fi *mockFileInfo) Size() int64        { return fi.size }
+func (fi *mockFileInfo) Mode() fs.FileMode  { return 0o644 }
+func (fi *mockFileInfo) ModTime() time.Time { return time.Time{} }
+func (fi *mockFileInfo) IsDir() bool        { return false }
+func (fi *mockFileInfo) Sys() any           { return nil }

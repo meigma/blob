@@ -1,5 +1,7 @@
 package blob
 
+import "github.com/meigma/blob/cache"
+
 // Option configures a Blob.
 type Option func(*Blob)
 
@@ -46,6 +48,16 @@ func WithDecoderLowmem(enabled bool) Option {
 func WithVerifyOnClose(enabled bool) Option {
 	return func(b *Blob) {
 		b.verifyOnClose = enabled
+	}
+}
+
+// WithCache enables content-addressed caching.
+//
+// When enabled, file content is cached after first read and served from cache
+// on subsequent reads. Concurrent requests for the same content are deduplicated.
+func WithCache(c cache.Cache) Option {
+	return func(b *Blob) {
+		b.cache = c
 	}
 }
 

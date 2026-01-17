@@ -1,6 +1,7 @@
 package client
 
 import (
+	"github.com/meigma/blob/client/cache"
 	"github.com/meigma/blob/client/oras"
 )
 
@@ -43,15 +44,15 @@ func WithUserAgent(ua string) Option {
 }
 
 // WithRefCache sets the cache for reference to digest mappings.
-func WithRefCache(cache RefCache) Option {
+func WithRefCache(rc cache.RefCache) Option {
 	return func(c *Client) {
-		c.refCache = cache
+		c.refCache = rc
 	}
 }
 
 // WithManifestCache sets the cache for manifest lookups.
-func WithManifestCache(cache ManifestCache) Option {
+func WithManifestCache(mc cache.ManifestCache) Option {
 	return func(c *Client) {
-		c.manifestCache = cache
+		c.manifestCache = mc
 	}
 }

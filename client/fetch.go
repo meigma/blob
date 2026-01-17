@@ -58,7 +58,9 @@ func (c *Client) resolveDigest(ctx context.Context, ref, reference string, skipC
 
 	// Cache the tag -> digest mapping
 	if c.refCache != nil {
-		c.refCache.PutDigest(ref, digest)
+		if err := c.refCache.PutDigest(ref, digest); err != nil {
+			return "", fmt.Errorf("cache ref digest: %w", err)
+		}
 	}
 
 	return digest, nil
@@ -70,7 +72,7 @@ func (c *Client) fetchManifestByDigest(ctx context.Context, ref, digest string, 
 	// Try manifest cache
 	if !skipCache && c.manifestCache != nil {
 		if cached, ok := c.manifestCache.GetManifest(digest); ok {
-			return cached, nil
+			return parseBlobManifest(cached, digest)
 		}
 	}
 
@@ -85,15 +87,12 @@ func (c *Client) fetchManifestByDigest(ctx context.Context, ref, digest string, 
 		return nil, mapOCIError(err)
 	}
 
-	manifest, err := parseBlobManifest(&rawManifest, digest)
-	if err != nil {
-		return nil, err
-	}
-
-	// Cache the manifest
+	// Cache the raw manifest
 	if c.manifestCache != nil {
-		c.manifestCache.PutManifest(digest, manifest)
+		if err := c.manifestCache.PutManifest(digest, &rawManifest); err != nil {
+			return nil, fmt.Errorf("cache manifest: %w", err)
+		}
 	}
 
-	return manifest, nil
+	return parseBlobManifest(&rawManifest, digest)
 }

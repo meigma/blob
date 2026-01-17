@@ -12,6 +12,8 @@ import (
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/meigma/blob/client/cache"
 )
 
 // mockOCIClient is a test mock for OCIClient.
@@ -120,26 +122,28 @@ func (c *memRefCache) GetDigest(ref string) (string, bool) {
 	return d, ok
 }
 
-func (c *memRefCache) PutDigest(ref, dgst string) {
+func (c *memRefCache) PutDigest(ref, dgst string) error {
 	c.data[ref] = dgst
+	return nil
 }
 
 // memManifestCache is a simple in-memory ManifestCache for testing.
 type memManifestCache struct {
-	data map[string]*BlobManifest
+	data map[string]*ocispec.Manifest
 }
 
 func newMemManifestCache() *memManifestCache {
-	return &memManifestCache{data: make(map[string]*BlobManifest)}
+	return &memManifestCache{data: make(map[string]*ocispec.Manifest)}
 }
 
-func (c *memManifestCache) GetManifest(dgst string) (*BlobManifest, bool) {
+func (c *memManifestCache) GetManifest(dgst string) (*ocispec.Manifest, bool) {
 	m, ok := c.data[dgst]
 	return m, ok
 }
 
-func (c *memManifestCache) PutManifest(dgst string, manifest *BlobManifest) {
+func (c *memManifestCache) PutManifest(dgst string, manifest *ocispec.Manifest) error {
 	c.data[dgst] = manifest
+	return nil
 }
 
 func TestClient_Fetch(t *testing.T) {
@@ -161,8 +165,8 @@ func TestClient_Fetch(t *testing.T) {
 		name          string
 		ref           string
 		opts          []FetchOption
-		refCache      RefCache
-		manifestCache ManifestCache
+		refCache      cache.RefCache
+		manifestCache cache.ManifestCache
 		setupMock     func(*mockOCIClient)
 		wantErr       error
 		wantDigest    string
@@ -222,18 +226,17 @@ func TestClient_Fetch(t *testing.T) {
 		{
 			name: "manifest cache hit after resolve skips fetch",
 			ref:  testRef,
-			manifestCache: func() ManifestCache {
-				cache := newMemManifestCache()
-				m, _ := parseBlobManifest(&ocispec.Manifest{
+			manifestCache: func() cache.ManifestCache {
+				c := newMemManifestCache()
+				require.NoError(t, c.PutManifest(testDigest, &ocispec.Manifest{
 					MediaType:    ocispec.MediaTypeImageManifest,
 					ArtifactType: ArtifactType,
 					Layers: []ocispec.Descriptor{
 						{MediaType: MediaTypeIndex, Digest: "sha256:cached-index", Size: 50},
 						{MediaType: MediaTypeData, Digest: "sha256:cached-data", Size: 500},
 					},
-				}, testDigest)
-				cache.PutManifest(testDigest, m)
-				return cache
+				}))
+				return c
 			}(),
 			setupMock: func(m *mockOCIClient) {
 				m.ResolveFunc = func(ctx context.Context, repoRef, ref string) (ocispec.Descriptor, error) {
@@ -252,18 +255,17 @@ func TestClient_Fetch(t *testing.T) {
 			name:     "both caches hit skips all network calls",
 			ref:      testRef,
 			refCache: &memRefCache{data: map[string]string{testRef: testDigest}},
-			manifestCache: func() ManifestCache {
-				cache := newMemManifestCache()
-				m, _ := parseBlobManifest(&ocispec.Manifest{
+			manifestCache: func() cache.ManifestCache {
+				c := newMemManifestCache()
+				require.NoError(t, c.PutManifest(testDigest, &ocispec.Manifest{
 					MediaType:    ocispec.MediaTypeImageManifest,
 					ArtifactType: ArtifactType,
 					Layers: []ocispec.Descriptor{
 						{MediaType: MediaTypeIndex, Digest: "sha256:cached-index", Size: 50},
 						{MediaType: MediaTypeData, Digest: "sha256:cached-data", Size: 500},
 					},
-				}, testDigest)
-				cache.PutManifest(testDigest, m)
-				return cache
+				}))
+				return c
 			}(),
 			setupMock: func(m *mockOCIClient) {
 				m.ResolveFunc = func(ctx context.Context, repoRef, ref string) (ocispec.Descriptor, error) {
@@ -284,18 +286,17 @@ func TestClient_Fetch(t *testing.T) {
 			ref:      testRef,
 			opts:     []FetchOption{WithSkipCache()},
 			refCache: &memRefCache{data: map[string]string{testRef: testDigest}},
-			manifestCache: func() ManifestCache {
-				cache := newMemManifestCache()
-				m, _ := parseBlobManifest(&ocispec.Manifest{
+			manifestCache: func() cache.ManifestCache {
+				c := newMemManifestCache()
+				require.NoError(t, c.PutManifest(testDigest, &ocispec.Manifest{
 					MediaType:    ocispec.MediaTypeImageManifest,
 					ArtifactType: ArtifactType,
 					Layers: []ocispec.Descriptor{
 						{MediaType: MediaTypeIndex, Digest: "sha256:cached-index", Size: 50},
 						{MediaType: MediaTypeData, Digest: "sha256:cached-data", Size: 500},
 					},
-				}, testDigest)
-				cache.PutManifest(testDigest, m)
-				return cache
+				}))
+				return c
 			}(),
 			setupMock: func(m *mockOCIClient) {
 				m.ResolveFunc = func(ctx context.Context, repoRef, ref string) (ocispec.Descriptor, error) {
@@ -479,5 +480,5 @@ func TestClient_Fetch_PopulatesCaches(t *testing.T) {
 	// Verify manifest cache was populated
 	cachedManifest, ok := manifestCache.GetManifest(testDigest)
 	assert.True(t, ok, "manifest cache should be populated")
-	assert.Equal(t, testDigest, cachedManifest.Digest())
+	assert.Equal(t, ArtifactType, cachedManifest.ArtifactType)
 }

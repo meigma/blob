@@ -66,9 +66,8 @@ type writer struct {
 }
 
 // writeData streams file contents to the data writer while populating entries.
-func (w *writer) writeData(ctx context.Context, root *os.Root, data io.Writer) ([]Entry, uint64, error) {
-	entries := make([]Entry, 0, 1024)
-	var offset uint64
+func (w *writer) writeData(ctx context.Context, root *os.Root, data io.Writer) (entries []Entry, totalBytes uint64, err error) {
+	entries = make([]Entry, 0, 1024)
 	strict := w.cfg.changeDetection == ChangeDetectionStrict
 	maxFiles := w.cfg.maxFiles
 	if maxFiles == 0 {
@@ -77,32 +76,32 @@ func (w *writer) writeData(ctx context.Context, root *os.Root, data io.Writer) (
 
 	var enc *zstd.Encoder
 	if w.cfg.compression != CompressionNone {
-		var err error
-		enc, err = zstd.NewWriter(io.Discard, zstd.WithEncoderConcurrency(1), zstd.WithLowerEncoderMem(true))
-		if err != nil {
-			return nil, 0, fmt.Errorf("create zstd encoder: %w", err)
+		var encErr error
+		enc, encErr = zstd.NewWriter(io.Discard, zstd.WithEncoderConcurrency(1), zstd.WithLowerEncoderMem(true))
+		if encErr != nil {
+			return nil, 0, fmt.Errorf("create zstd encoder: %w", encErr)
 		}
 	}
 	buf := make([]byte, 32*1024)
 
-	err := fs.WalkDir(root.FS(), ".", func(path string, d fs.DirEntry, walkErr error) error {
-		entry, skip, err := w.processEntry(ctx, root, data, enc, buf, path, d, walkErr, strict, maxFiles, len(entries))
-		if err != nil || skip {
-			return err
+	err = fs.WalkDir(root.FS(), ".", func(path string, d fs.DirEntry, walkErr error) error {
+		entry, skip, procErr := w.processEntry(ctx, root, data, enc, buf, path, d, walkErr, strict, maxFiles, len(entries))
+		if procErr != nil || skip {
+			return procErr
 		}
-		if entry.DataSize > ^uint64(0)-offset {
+		if entry.DataSize > ^uint64(0)-totalBytes {
 			return ErrSizeOverflow
 		}
-		entry.DataOffset = offset
+		entry.DataOffset = totalBytes
 		entries = append(entries, entry)
-		offset += entry.DataSize
+		totalBytes += entry.DataSize
 		return nil
 	})
 	if err != nil {
 		return nil, 0, err
 	}
 
-	return entries, offset, nil
+	return entries, totalBytes, nil
 }
 
 // processEntry handles a single directory entry during archive creation.

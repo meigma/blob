@@ -9,54 +9,27 @@
 // on cache hits.
 package cache
 
-import "io"
+import "io/fs"
 
-// Cache provides content-addressed storage for file contents.
+// Cache provides content-addressed file storage.
 //
-// Keys are SHA256 hashes of uncompressed file content. Values are the
-// uncompressed content. Because keys are content hashes, cache hits
-// are implicitly verified—no additional integrity check is needed.
+// Keys are SHA256 hashes of uncompressed file content. Because keys are
+// content hashes, cache hits are implicitly verified—no additional integrity
+// check is needed.
 //
 // Implementations should handle their own size limits and eviction policies.
 // Implementations must be safe for concurrent use.
 type Cache interface {
-	// Get retrieves content by its SHA256 hash.
-	// Returns nil, false if the content is not cached.
-	Get(hash []byte) ([]byte, bool)
+	// Get returns an fs.File for reading cached content.
+	// Returns nil, false if content is not cached.
+	// Each call returns a new file handle (safe for concurrent use).
+	Get(hash []byte) (fs.File, bool)
 
-	// Put stores content indexed by its SHA256 hash.
-	Put(hash []byte, content []byte) error
-}
+	// Put stores content by reading from the provided fs.File.
+	// The cache reads the file to completion; caller still owns/closes the file.
+	Put(hash []byte, f fs.File) error
 
-// StreamingCache extends Cache with streaming write support for large files.
-//
-// Implementations that support streaming (e.g., disk-based caches) should
-// implement this interface to allow caching during Open() without buffering
-// entire files in memory.
-type StreamingCache interface {
-	Cache
-
-	// Writer returns a Writer for streaming content into the cache.
-	// The hash is the expected SHA256 of the content being written.
-	Writer(hash []byte) (Writer, error)
-}
-
-// Writer streams content into the cache.
-//
-// Content is written via Write calls. After all content is written:
-//   - Call Commit if the content hash was verified successfully
-//   - Call Discard if verification failed or an error occurred
-//
-// Implementations should buffer writes to a temporary location and only
-// make the content available via Cache.Get after Commit is called.
-type Writer interface {
-	io.Writer
-
-	// Commit finalizes the cache entry, making it available via Get.
-	// Must be called after successful hash verification.
-	Commit() error
-
-	// Discard aborts the cache write and cleans up temporary data.
-	// Must be called if verification fails or an error occurs.
-	Discard() error
+	// Delete removes cached content for the given hash.
+	// Implementations should treat missing entries as a no-op.
+	Delete(hash []byte) error
 }

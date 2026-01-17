@@ -11,6 +11,8 @@
 package blob
 
 import (
+	"bytes"
+	"crypto/sha256"
 	"errors"
 	"fmt"
 	"io"
@@ -19,6 +21,9 @@ import (
 	"os"
 	"path/filepath"
 
+	"golang.org/x/sync/singleflight"
+
+	"github.com/meigma/blob/cache"
 	"github.com/meigma/blob/internal/batch"
 	"github.com/meigma/blob/internal/blobtype"
 	"github.com/meigma/blob/internal/file"
@@ -98,6 +103,9 @@ type Blob struct {
 	decoderLowmemSet      bool
 	decoderLowmem         bool
 	verifyOnClose         bool
+	cache                 cache.Cache        // nil = no caching
+	readGroup             singleflight.Group // zero value is valid
+	cacheGroup            singleflight.Group // zero value is valid
 }
 
 // New creates a Blob for accessing files in the archive.
@@ -140,6 +148,9 @@ func New(indexData []byte, source ByteSource, opts ...Option) (*Blob, error) {
 // verifies the content hash on Close (unless disabled by WithVerifyOnClose)
 // and returns ErrHashMismatch if verification fails. Callers must read to
 // EOF or Close to ensure integrity; partial reads may return unverified data.
+//
+// When caching is enabled (via WithCache), cached content is verified while
+// reading and may return ErrHashMismatch if the cache was corrupted.
 func (b *Blob) Open(name string) (fs.File, error) {
 	if !fs.ValidPath(name) {
 		return nil, &fs.PathError{Op: "open", Path: name, Err: fs.ErrInvalid}
@@ -148,6 +159,25 @@ func (b *Blob) Open(name string) (fs.File, error) {
 	// Check if it's a file
 	if view, ok := b.idx.LookupView(name); ok {
 		entry := blobtype.EntryFromViewWithPath(view, name)
+
+		// No cache - existing behavior
+		if b.cache == nil {
+			return b.reader.OpenFile(&entry, b.verifyOnClose), nil
+		}
+
+		// Cache hit - return file from cache
+		if f, ok := b.cache.Get(entry.Hash); ok {
+			return newCachedFile(f, &entry, b.verifyOnClose, b.cache.Delete), nil
+		}
+
+		// Cache miss - populate then return from cache
+		if err := b.ensureCached(&entry); err != nil {
+			return nil, &fs.PathError{Op: "open", Path: name, Err: err}
+		}
+
+		if f, ok := b.cache.Get(entry.Hash); ok {
+			return newCachedFile(f, &entry, b.verifyOnClose, b.cache.Delete), nil
+		}
 		return b.reader.OpenFile(&entry, b.verifyOnClose), nil
 	}
 
@@ -195,6 +225,9 @@ func (b *Blob) Stat(name string) (fs.FileInfo, error) {
 //
 // ReadFile reads and returns the entire contents of the named file.
 // The content is decompressed if necessary and verified against its hash.
+//
+// When caching is enabled, concurrent calls for the same content are
+// deduplicated using singleflight, preventing redundant network requests.
 func (b *Blob) ReadFile(name string) ([]byte, error) {
 	if !fs.ValidPath(name) {
 		return nil, &fs.PathError{Op: "readfile", Path: name, Err: fs.ErrInvalid}
@@ -206,7 +239,54 @@ func (b *Blob) ReadFile(name string) ([]byte, error) {
 	}
 
 	entry := blobtype.EntryFromViewWithPath(view, name)
-	return b.reader.ReadAll(&entry)
+
+	// No cache - existing behavior
+	if b.cache == nil {
+		return b.reader.ReadAll(&entry)
+	}
+
+	// Cache hit - read from cached file
+	if f, ok := b.cache.Get(entry.Hash); ok {
+		defer f.Close()
+		hasher := sha256.New()
+		content, err := io.ReadAll(io.TeeReader(f, hasher))
+		if err != nil {
+			return nil, err
+		}
+		if !bytes.Equal(hasher.Sum(nil), entry.Hash) {
+			_ = b.cache.Delete(entry.Hash) //nolint:errcheck // best-effort cache cleanup on hash mismatch
+			return nil, ErrHashMismatch
+		}
+		return content, nil
+	}
+
+	// Cache miss with singleflight
+	result, err, _ := b.readGroup.Do(string(entry.Hash), func() (any, error) {
+		// Double-check cache
+		if f, ok := b.cache.Get(entry.Hash); ok {
+			defer f.Close()
+			return io.ReadAll(f)
+		}
+
+		// Read into memory (we need []byte anyway)
+		content, err := b.reader.ReadAll(&entry)
+		if err != nil {
+			return nil, err
+		}
+
+		// Store in cache (errors are non-fatal)
+		_ = b.cache.Put(entry.Hash, &bytesFile{ //nolint:errcheck // caching is opportunistic
+			Reader: bytes.NewReader(content),
+			size:   int64(len(content)),
+		})
+
+		return content, nil
+	})
+
+	if err != nil {
+		return nil, err
+	}
+	return result.([]byte), nil //nolint:errcheck // type assertion always succeeds when err is nil
 }
 
 // ReadDir implements fs.ReadDirFS.

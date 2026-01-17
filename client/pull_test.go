@@ -223,17 +223,16 @@ func TestClient_Pull(t *testing.T) {
 
 		// Pre-populate caches
 		refCache := newMemRefCache()
-		refCache.PutDigest(testRef, testDigest)
+		require.NoError(t, refCache.PutDigest(testRef, testDigest))
 		manifestCache := newMemManifestCache()
-		cachedManifest, _ := parseBlobManifest(&ocispec.Manifest{
+		require.NoError(t, manifestCache.PutManifest(testDigest, &ocispec.Manifest{
 			MediaType:    ocispec.MediaTypeImageManifest,
 			ArtifactType: ArtifactType,
 			Layers: []ocispec.Descriptor{
 				{MediaType: MediaTypeIndex, Digest: "sha256:cached", Size: 50},
 				{MediaType: MediaTypeData, Digest: "sha256:cached", Size: 500},
 			},
-		}, testDigest)
-		manifestCache.PutManifest(testDigest, cachedManifest)
+		}))
 
 		c := &Client{
 			oci:           mock,
