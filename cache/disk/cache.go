@@ -4,10 +4,10 @@ package disk
 import (
 	"encoding/hex"
 	"errors"
+	"io"
+	"io/fs"
 	"os"
 	"path/filepath"
-
-	"github.com/meigma/blob/cache"
 )
 
 const (
@@ -15,7 +15,7 @@ const (
 	defaultDirPerm        = 0o700
 )
 
-// Cache implements cache.Cache and cache.StreamingCache using the local filesystem.
+// Cache implements cache.Cache using the local filesystem.
 type Cache struct {
 	dir            string
 	shardPrefixLen int
@@ -62,21 +62,23 @@ func New(dir string, opts ...Option) (*Cache, error) {
 	return c, nil
 }
 
-// Get retrieves content by its SHA256 hash.
-func (c *Cache) Get(hash []byte) ([]byte, bool) {
+// Get returns an fs.File for reading cached content.
+// Returns nil, false if the content is not cached.
+func (c *Cache) Get(hash []byte) (fs.File, bool) {
 	path, err := c.path(hash)
 	if err != nil {
 		return nil, false
 	}
-	data, err := os.ReadFile(path) //nolint:gosec // path is derived from hash, not user input
+	f, err := os.Open(path) //nolint:gosec // path is derived from hash, not user input
 	if err != nil {
 		return nil, false
 	}
-	return data, true
+	return f, true
 }
 
-// Put stores content indexed by its SHA256 hash.
-func (c *Cache) Put(hash, content []byte) error {
+// Put stores content by reading from the provided fs.File.
+// The cache reads the file to completion; caller still owns/closes the file.
+func (c *Cache) Put(hash []byte, f fs.File) error {
 	path, err := c.path(hash)
 	if err != nil {
 		return err
@@ -95,7 +97,8 @@ func (c *Cache) Put(hash, content []byte) error {
 		return err
 	}
 	tmpPath := tmp.Name()
-	if _, err := tmp.Write(content); err != nil {
+
+	if _, err := io.Copy(tmp, f); err != nil {
 		tmp.Close()
 		_ = os.Remove(tmpPath)
 		return err
@@ -116,29 +119,19 @@ func (c *Cache) Put(hash, content []byte) error {
 	return nil
 }
 
-// Writer opens a streaming cache writer for the given hash.
-func (c *Cache) Writer(hash []byte) (cache.Writer, error) {
+// Delete removes cached content for the given hash.
+func (c *Cache) Delete(hash []byte) error {
 	path, err := c.path(hash)
 	if err != nil {
-		return nil, err
+		return err
 	}
-	if _, statErr := os.Stat(path); statErr == nil {
-		return &noopWriter{}, nil
+	if err := os.Remove(path); err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return nil
+		}
+		return err
 	}
-
-	dir := filepath.Dir(path)
-	if mkdirErr := os.MkdirAll(dir, c.dirPerm); mkdirErr != nil {
-		return nil, mkdirErr
-	}
-	tmp, err := os.CreateTemp(dir, "cache-*")
-	if err != nil {
-		return nil, err
-	}
-	return &diskWriter{
-		file:      tmp,
-		tmpPath:   tmp.Name(),
-		finalPath: path,
-	}, nil
+	return nil
 }
 
 func (c *Cache) path(hash []byte) (string, error) {
@@ -155,42 +148,3 @@ func (c *Cache) path(hash []byte) (string, error) {
 	}
 	return filepath.Join(c.dir, hexHash[:prefixLen], hexHash), nil
 }
-
-type diskWriter struct {
-	file      *os.File
-	tmpPath   string
-	finalPath string
-}
-
-func (w *diskWriter) Write(p []byte) (int, error) {
-	return w.file.Write(p)
-}
-
-func (w *diskWriter) Commit() error {
-	if err := w.file.Close(); err != nil {
-		_ = os.Remove(w.tmpPath)
-		return err
-	}
-	if err := os.Rename(w.tmpPath, w.finalPath); err != nil {
-		if _, statErr := os.Stat(w.finalPath); statErr == nil {
-			_ = os.Remove(w.tmpPath)
-			return nil
-		}
-		_ = os.Remove(w.tmpPath)
-		return err
-	}
-	return nil
-}
-
-func (w *diskWriter) Discard() error {
-	if w.file != nil {
-		_ = w.file.Close()
-	}
-	return os.Remove(w.tmpPath)
-}
-
-type noopWriter struct{}
-
-func (w *noopWriter) Write(p []byte) (int, error) { return len(p), nil }
-func (w *noopWriter) Commit() error               { return nil }
-func (w *noopWriter) Discard() error              { return nil }

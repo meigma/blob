@@ -27,9 +27,23 @@ type TestEntry struct {
 	Compression  blobtype.Compression
 }
 
+// IndexMetadata holds optional index-level metadata for tests.
+type IndexMetadata struct {
+	DataSize uint64
+	DataHash []byte
+}
+
 // BuildTestIndex creates a FlatBuffers-encoded index from test entries.
 // Entries are automatically sorted by path (required for binary search).
 func BuildTestIndex(tb testing.TB, entries []TestEntry) []byte {
+	tb.Helper()
+	return BuildTestIndexWithMetadata(tb, entries, nil)
+}
+
+// BuildTestIndexWithMetadata creates a FlatBuffers-encoded index from test entries
+// with optional index-level metadata.
+// Entries are automatically sorted by path (required for binary search).
+func BuildTestIndexWithMetadata(tb testing.TB, entries []TestEntry, meta *IndexMetadata) []byte {
 	tb.Helper()
 
 	// Sort entries by path (required for EntriesByKey to work)
@@ -76,11 +90,26 @@ func BuildTestIndex(tb testing.TB, entries []TestEntry) []byte {
 	}
 	entriesOffset := builder.EndVector(len(entries))
 
+	var dataHashOffset flatbuffers.UOffsetT
+	if meta != nil && len(meta.DataHash) > 0 {
+		fb.IndexStartDataHashVector(builder, len(meta.DataHash))
+		for j := len(meta.DataHash) - 1; j >= 0; j-- {
+			builder.PrependByte(meta.DataHash[j])
+		}
+		dataHashOffset = builder.EndVector(len(meta.DataHash))
+	}
+
 	// Build index
 	fb.IndexStart(builder)
 	fb.IndexAddVersion(builder, 1)
 	fb.IndexAddHashAlgorithm(builder, fb.HashAlgorithmSHA256)
 	fb.IndexAddEntries(builder, entriesOffset)
+	if meta != nil {
+		fb.IndexAddDataSize(builder, meta.DataSize)
+		if dataHashOffset != 0 {
+			fb.IndexAddDataHash(builder, dataHashOffset)
+		}
+	}
 	indexOffset := fb.IndexEnd(builder)
 
 	builder.Finish(indexOffset)

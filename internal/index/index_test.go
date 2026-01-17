@@ -1,6 +1,7 @@
 package index
 
 import (
+	"crypto/sha256"
 	"io/fs"
 	"testing"
 	"time"
@@ -208,4 +209,46 @@ func TestIndexVersion(t *testing.T) {
 	idx := mustLoadIndex(t, data)
 
 	assert.Equal(t, uint32(1), idx.Version())
+}
+
+func TestIndexDataMetadata(t *testing.T) {
+	t.Parallel()
+
+	t.Run("present", func(t *testing.T) {
+		t.Parallel()
+
+		data := []byte("data blob bytes")
+		hash := sha256.Sum256(data)
+
+		meta := &testutil.IndexMetadata{
+			DataSize: uint64(len(data)),
+			DataHash: hash[:],
+		}
+
+		indexData := testutil.BuildTestIndexWithMetadata(t, []testutil.TestEntry{{Path: "test.txt"}}, meta)
+		idx := mustLoadIndex(t, indexData)
+
+		gotHash, ok := idx.DataHash()
+		require.True(t, ok, "expected data hash")
+		assert.Equal(t, hash[:], gotHash)
+
+		gotSize, ok := idx.DataSize()
+		require.True(t, ok, "expected data size")
+		assert.Equal(t, meta.DataSize, gotSize)
+	})
+
+	t.Run("missing", func(t *testing.T) {
+		t.Parallel()
+
+		indexData := testutil.BuildTestIndex(t, []testutil.TestEntry{{Path: "test.txt"}})
+		idx := mustLoadIndex(t, indexData)
+
+		gotHash, ok := idx.DataHash()
+		assert.False(t, ok, "expected no data hash")
+		assert.Nil(t, gotHash)
+
+		gotSize, ok := idx.DataSize()
+		assert.False(t, ok, "expected no data size")
+		assert.Equal(t, uint64(0), gotSize)
+	})
 }

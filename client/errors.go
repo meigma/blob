@@ -1,0 +1,21 @@
+package client
+
+import "errors"
+
+// Sentinel errors for client operations.
+var (
+	// ErrNotFound is returned when a blob archive does not exist at the reference.
+	ErrNotFound = errors.New("client: not found")
+
+	// ErrInvalidReference is returned when a reference string is malformed.
+	ErrInvalidReference = errors.New("client: invalid reference")
+
+	// ErrInvalidManifest is returned when a manifest is not a valid blob archive manifest.
+	ErrInvalidManifest = errors.New("client: invalid blob manifest")
+
+	// ErrMissingIndex is returned when the manifest does not contain an index blob.
+	ErrMissingIndex = errors.New("client: missing index blob")
+
+	// ErrMissingData is returned when the manifest does not contain a data blob.
+	ErrMissingData = errors.New("client: missing data blob")
+)

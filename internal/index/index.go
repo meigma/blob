@@ -53,6 +53,25 @@ func (idx *Index) Version() uint32 {
 	return idx.root.Version()
 }
 
+// DataHash returns the hash of the data blob bytes.
+// The returned slice aliases the index buffer and must be treated as immutable.
+func (idx *Index) DataHash() ([]byte, bool) {
+	hash := idx.root.DataHashBytes()
+	if len(hash) == 0 {
+		return nil, false
+	}
+	return hash, true
+}
+
+// DataSize returns the size of the data blob in bytes.
+// ok is false when the index did not record data metadata.
+func (idx *Index) DataSize() (uint64, bool) {
+	if _, ok := idx.DataHash(); !ok {
+		return 0, false
+	}
+	return idx.root.DataSize(), true
+}
+
 // LookupView returns a read-only view of the entry for the given path.
 //
 // The returned view is only valid while the index remains alive.

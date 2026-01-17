@@ -45,6 +45,12 @@ table Index {
 
   // File entries, sorted by path for binary search
   entries: [Entry] (required);
+
+  // Total size in bytes of the data blob
+  data_size: uint64;
+
+  // Hash of the data blob bytes, using hash_algorithm
+  data_hash: [ubyte];
 }
 
 root_type Index;

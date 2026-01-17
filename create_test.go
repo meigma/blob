@@ -62,6 +62,15 @@ func TestCreate(t *testing.T) {
 		expectedHash := sha256.Sum256([]byte(content))
 		assert.Equal(t, expectedHash[:], view.HashBytes(), "hash mismatch for %q", path)
 	}
+
+	dataHash, ok := idx.DataHash()
+	require.True(t, ok, "expected data hash")
+	expectedDataHash := sha256.Sum256(dataBuf.Bytes())
+	assert.Equal(t, expectedDataHash[:], dataHash)
+
+	dataSize, ok := idx.DataSize()
+	require.True(t, ok, "expected data size")
+	assert.Equal(t, uint64(dataBuf.Len()), dataSize)
 }
 
 func TestCreateEmpty(t *testing.T) {
@@ -78,6 +87,15 @@ func TestCreateEmpty(t *testing.T) {
 
 	assert.Equal(t, 0, idx.Len())
 	assert.Equal(t, 0, dataBuf.Len())
+
+	dataHash, ok := idx.DataHash()
+	require.True(t, ok, "expected data hash")
+	expectedDataHash := sha256.Sum256(nil)
+	assert.Equal(t, expectedDataHash[:], dataHash)
+
+	dataSize, ok := idx.DataSize()
+	require.True(t, ok, "expected data size")
+	assert.Equal(t, uint64(0), dataSize)
 }
 
 func TestCreateCompression(t *testing.T) {
