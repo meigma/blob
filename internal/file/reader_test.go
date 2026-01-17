@@ -3,6 +3,7 @@ package file
 import (
 	"bytes"
 	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"testing"
 
@@ -11,7 +12,8 @@ import (
 
 // mockByteSource implements ByteSource for testing.
 type mockByteSource struct {
-	data []byte
+	data     []byte
+	sourceID string
 }
 
 func (m *mockByteSource) ReadAt(p []byte, off int64) (n int, err error) {
@@ -26,8 +28,16 @@ func (m *mockByteSource) Size() int64 {
 	return int64(len(m.data))
 }
 
+func (m *mockByteSource) SourceID() string {
+	return m.sourceID
+}
+
 func newMockSource(data []byte) ByteSource {
-	return &mockByteSource{data: data}
+	sum := sha256.Sum256(data)
+	return &mockByteSource{
+		data:     data,
+		sourceID: "mock:" + hex.EncodeToString(sum[:]),
+	}
 }
 
 func compress(t *testing.T, data []byte) []byte {

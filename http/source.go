@@ -21,6 +21,7 @@ type Source struct {
 	size         int64
 	etag         string
 	lastModified string
+	sourceID     string
 }
 
 // Option configures a Source.
@@ -53,6 +54,13 @@ func WithHeader(key, value string) Option {
 	}
 }
 
+// WithSourceID overrides the default source identifier used for caching.
+func WithSourceID(id string) Option {
+	return func(s *Source) {
+		s.sourceID = id
+	}
+}
+
 // NewSource creates a Source backed by HTTP range requests.
 // It probes the remote to determine the content size.
 func NewSource(url string, opts ...Option) (*Source, error) {
@@ -74,12 +82,20 @@ func NewSource(url string, opts ...Option) (*Source, error) {
 	s.size = size
 	s.etag = etag
 	s.lastModified = lastModified
+	if s.sourceID == "" {
+		s.sourceID = s.defaultSourceID()
+	}
 	return s, nil
 }
 
 // Size returns the total size of the remote content.
 func (s *Source) Size() int64 {
 	return s.size
+}
+
+// SourceID returns a stable identifier for the remote content.
+func (s *Source) SourceID() string {
+	return s.sourceID
 }
 
 // ReadRange returns a reader for the specified byte range.
@@ -185,6 +201,16 @@ func (s *Source) ReadAt(p []byte, off int64) (int, error) {
 		return n, io.EOF
 	}
 	return n, nil
+}
+
+func (s *Source) defaultSourceID() string {
+	if s.etag != "" {
+		return fmt.Sprintf("url:%s|etag:%s", s.url, s.etag)
+	}
+	if s.lastModified != "" {
+		return fmt.Sprintf("url:%s|mod:%s|size:%d", s.url, s.lastModified, s.size)
+	}
+	return fmt.Sprintf("url:%s|size:%d", s.url, s.size)
 }
 
 func (s *Source) fetchMetadata() (size int64, etag, lastModified string, err error) {

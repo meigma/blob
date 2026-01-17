@@ -53,6 +53,77 @@ The shard prefix length determines directory distribution:
 - `3`: Creates 4096 subdirectories (000-fff)
 - `0`: Disables sharding (all files in one directory)
 
+## Managing Cache Size
+
+Both disk caches (content cache and block cache) support size limits and automatic pruning.
+
+### Setting Size Limits
+
+Specify a maximum cache size when creating the cache:
+
+```go
+// Content cache with 1 GB limit
+diskCache, err := disk.New("/path/to/cache",
+    disk.WithMaxBytes(1 << 30),  // 1 GB
+)
+
+// Block cache with 256 MB limit
+blockCache, err := disk.NewBlockCache("/path/to/blocks",
+    disk.WithBlockMaxBytes(256 << 20),  // 256 MB
+)
+```
+
+When the cache exceeds its limit, it automatically prunes old entries before adding new ones.
+
+### How Pruning Works
+
+Pruning removes entries by modification time (LRU-style eviction):
+
+1. Entries are sorted by modification time (oldest first)
+2. Oldest entries are removed until the cache is under the target size
+3. The cache tracks its size in memory for fast capacity checks
+
+### Manual Pruning
+
+To manually prune a cache to a specific size:
+
+```go
+// Prune to 100 MB
+freed, err := diskCache.Prune(100 << 20)
+if err != nil {
+    return err
+}
+fmt.Printf("Freed %d bytes\n", freed)
+```
+
+### Monitoring Cache Size
+
+Check the current cache size:
+
+```go
+// Get configured limit (0 = unlimited)
+maxBytes := diskCache.MaxBytes()
+
+// Get current size
+currentBytes := diskCache.SizeBytes()
+
+fmt.Printf("Cache: %d / %d bytes (%.1f%%)\n",
+    currentBytes, maxBytes,
+    float64(currentBytes)/float64(maxBytes)*100,
+)
+```
+
+### Sizing Guidelines
+
+| Use Case | Recommended Size | Rationale |
+|----------|-----------------|-----------|
+| Development workstation | 256 MB - 1 GB | Balance performance with disk usage |
+| CI/CD ephemeral | 0 (unlimited) | Disk is reclaimed after job |
+| Production server | 2-10 GB | Based on working set size |
+| Memory-constrained | 64-128 MB | Minimum useful size |
+
+The optimal size depends on your access patterns. Monitor cache hit rates and adjust accordingly.
+
 ## Wrapping a Blob with Caching
 
 To add caching to an existing blob:
@@ -263,5 +334,6 @@ func setupCachedArchive(indexData []byte, dataURL string) (*cache.Blob, error) {
 
 ## See Also
 
+- [Block Caching](block-caching) - Block-level caching for random access
 - [Working with Remote Archives](remote-archives) - Set up HTTP sources
 - [Performance Tuning](performance-tuning) - Optimize prefetch and read concurrency

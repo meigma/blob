@@ -24,10 +24,11 @@ func TestFileSource(t *testing.T) {
 	require.NoError(t, err)
 	defer f.Close()
 
-	source, err := newFileSource(f)
+	source, err := newFileSource(f, "")
 	require.NoError(t, err)
 
 	assert.Equal(t, int64(len(content)), source.Size())
+	assert.NotEmpty(t, source.SourceID())
 
 	buf := make([]byte, 4)
 	n, err := source.ReadAt(buf, 5)

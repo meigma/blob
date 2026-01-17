@@ -18,9 +18,11 @@ const (
 )
 
 // ByteSource provides random access to the data.
+// SourceID must return a stable identifier for the underlying content.
 type ByteSource interface {
 	io.ReaderAt
 	Size() int64
+	SourceID() string
 }
 
 type rangeReader interface {

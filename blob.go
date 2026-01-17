@@ -83,9 +83,11 @@ var (
 // ByteSource provides random access to the data blob.
 //
 // Implementations exist for local files (*os.File) and HTTP range requests.
+// SourceID must return a stable identifier for the underlying content.
 type ByteSource interface {
 	io.ReaderAt
 	Size() int64
+	SourceID() string
 }
 
 // Blob provides random access to archive files.

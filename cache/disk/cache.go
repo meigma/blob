@@ -8,6 +8,8 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"sync"
+	"sync/atomic"
 )
 
 const (
@@ -20,6 +22,9 @@ type Cache struct {
 	dir            string
 	shardPrefixLen int
 	dirPerm        os.FileMode
+	maxBytes       int64
+	bytes          atomic.Int64
+	pruneMu        sync.Mutex
 }
 
 // Option configures a disk cache.
@@ -40,6 +45,14 @@ func WithDirPerm(mode os.FileMode) Option {
 	}
 }
 
+// WithMaxBytes sets the maximum cache size in bytes.
+// Values <= 0 disable the limit.
+func WithMaxBytes(n int64) Option {
+	return func(c *Cache) {
+		c.maxBytes = n
+	}
+}
+
 // New creates a disk-backed cache rooted at dir.
 func New(dir string, opts ...Option) (*Cache, error) {
 	if dir == "" {
@@ -56,7 +69,15 @@ func New(dir string, opts ...Option) (*Cache, error) {
 	if c.shardPrefixLen < 0 {
 		return nil, errors.New("shard prefix length must be >= 0")
 	}
+	if c.maxBytes < 0 {
+		return nil, errors.New("max bytes must be >= 0")
+	}
 	if err := os.MkdirAll(dir, c.dirPerm); err != nil {
+		return nil, err
+	}
+	if size, err := dirSize(dir); err == nil {
+		c.bytes.Store(size)
+	} else {
 		return nil, err
 	}
 	return c, nil
@@ -98,7 +119,8 @@ func (c *Cache) Put(hash []byte, f fs.File) error {
 	}
 	tmpPath := tmp.Name()
 
-	if _, err := io.Copy(tmp, f); err != nil {
+	written, err := io.Copy(tmp, f)
+	if err != nil {
 		tmp.Close()
 		_ = os.Remove(tmpPath)
 		return err
@@ -106,6 +128,14 @@ func (c *Cache) Put(hash []byte, f fs.File) error {
 	if err := tmp.Close(); err != nil {
 		_ = os.Remove(tmpPath)
 		return err
+	}
+
+	if ok, err := c.ensureCapacity(written); err != nil {
+		_ = os.Remove(tmpPath)
+		return err
+	} else if !ok {
+		_ = os.Remove(tmpPath)
+		return nil
 	}
 
 	if err := os.Rename(tmpPath, path); err != nil {
@@ -116,6 +146,7 @@ func (c *Cache) Put(hash []byte, f fs.File) error {
 		_ = os.Remove(tmpPath)
 		return err
 	}
+	c.bytes.Add(written)
 	return nil
 }
 
@@ -125,13 +156,49 @@ func (c *Cache) Delete(hash []byte) error {
 	if err != nil {
 		return err
 	}
+	info, statErr := os.Stat(path)
+	if statErr != nil {
+		if errors.Is(statErr, os.ErrNotExist) {
+			return nil
+		}
+		return statErr
+	}
 	if err := os.Remove(path); err != nil {
 		if errors.Is(err, os.ErrNotExist) {
 			return nil
 		}
 		return err
 	}
+	if info != nil {
+		c.bytes.Add(-info.Size())
+	}
 	return nil
+}
+
+// MaxBytes returns the configured cache size limit (0 = unlimited).
+func (c *Cache) MaxBytes() int64 {
+	return c.maxBytes
+}
+
+// SizeBytes returns the current cache size in bytes.
+func (c *Cache) SizeBytes() int64 {
+	return c.bytes.Load()
+}
+
+// Prune removes cached entries until the cache is at or below targetBytes.
+func (c *Cache) Prune(targetBytes int64) (int64, error) {
+	if targetBytes < 0 {
+		targetBytes = 0
+	}
+	c.pruneMu.Lock()
+	defer c.pruneMu.Unlock()
+
+	freed, remaining, err := pruneDir(c.dir, targetBytes)
+	if err != nil {
+		return 0, err
+	}
+	c.bytes.Store(remaining)
+	return freed, nil
 }
 
 func (c *Cache) path(hash []byte) (string, error) {
@@ -147,4 +214,20 @@ func (c *Cache) path(hash []byte) (string, error) {
 		prefixLen = len(hexHash)
 	}
 	return filepath.Join(c.dir, hexHash[:prefixLen], hexHash), nil
+}
+
+func (c *Cache) ensureCapacity(need int64) (bool, error) {
+	if c.maxBytes <= 0 {
+		return true, nil
+	}
+	if need > c.maxBytes {
+		return false, nil
+	}
+	if c.SizeBytes()+need <= c.maxBytes {
+		return true, nil
+	}
+	if _, err := c.Prune(c.maxBytes - need); err != nil {
+		return false, err
+	}
+	return c.SizeBytes()+need <= c.maxBytes, nil
 }
