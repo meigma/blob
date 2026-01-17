@@ -180,6 +180,37 @@ func (c *memManifestCache) MaxBytes() int64            { return 0 }
 func (c *memManifestCache) SizeBytes() int64           { return 0 }
 func (c *memManifestCache) Prune(int64) (int64, error) { return 0, nil }
 
+// memIndexCache is a simple in-memory IndexCache for testing.
+type memIndexCache struct {
+	data map[string][]byte
+}
+
+func newMemIndexCache() *memIndexCache {
+	return &memIndexCache{data: make(map[string][]byte)}
+}
+
+func (c *memIndexCache) GetIndex(dgst string) ([]byte, bool) {
+	raw, ok := c.data[dgst]
+	if !ok {
+		return nil, false
+	}
+	return append([]byte(nil), raw...), true
+}
+
+func (c *memIndexCache) PutIndex(dgst string, raw []byte) error {
+	c.data[dgst] = append([]byte(nil), raw...)
+	return nil
+}
+
+func (c *memIndexCache) Delete(dgst string) error {
+	delete(c.data, dgst)
+	return nil
+}
+
+func (c *memIndexCache) MaxBytes() int64            { return 0 }
+func (c *memIndexCache) SizeBytes() int64           { return 0 }
+func (c *memIndexCache) Prune(int64) (int64, error) { return 0, nil }
+
 func TestClient_Fetch(t *testing.T) {
 	t.Parallel()
 

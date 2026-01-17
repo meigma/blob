@@ -81,6 +81,28 @@ func createTestBlobData(t *testing.T) (indexData, dataBytes []byte) {
 	return indexData, buf.Bytes()
 }
 
+func manifestForIndexData(t *testing.T, indexData, dataBytes []byte) (ocispec.Manifest, []byte, ocispec.Descriptor) {
+	t.Helper()
+
+	manifest := testManifest()
+	manifest.Layers[0].Digest = digest.FromBytes(indexData)
+	manifest.Layers[0].Size = int64(len(indexData))
+	if len(manifest.Layers) > 1 {
+		manifest.Layers[1].Digest = digest.FromBytes(dataBytes)
+		manifest.Layers[1].Size = int64(len(dataBytes))
+	}
+
+	raw := mustMarshalManifest(t, manifest)
+	manifestDigest := digest.FromBytes(raw)
+	desc := ocispec.Descriptor{
+		MediaType: ocispec.MediaTypeImageManifest,
+		Digest:    manifestDigest,
+		Size:      int64(len(raw)),
+	}
+
+	return manifest, raw, desc
+}
+
 // startDataServer starts an HTTP server that serves data with range request support.
 func startDataServer(t *testing.T, data []byte) *httptest.Server {
 	t.Helper()
@@ -165,6 +187,91 @@ func TestClient_Pull(t *testing.T) {
 		assert.Equal(t, "test content", string(content))
 	})
 
+	t.Run("index cache hit skips fetch blob", func(t *testing.T) {
+		t.Parallel()
+
+		indexData, dataBytes := createTestBlobData(t)
+		dataServer := startDataServer(t, dataBytes)
+
+		manifest, manifestBytes, cacheDesc := manifestForIndexData(t, indexData, dataBytes)
+		indexDigest := manifest.Layers[0].Digest.String()
+
+		mock := &pullMockOCIClient{}
+		mock.ResolveFunc = func(ctx context.Context, repoRef, ref string) (ocispec.Descriptor, error) {
+			return cacheDesc, nil
+		}
+		mock.FetchManifestFunc = func(ctx context.Context, repoRef string, expected *ocispec.Descriptor) (ocispec.Manifest, []byte, error) {
+			return manifest, manifestBytes, nil
+		}
+		mock.FetchBlobFunc = func(ctx context.Context, repoRef string, desc *ocispec.Descriptor) (io.ReadCloser, error) {
+			t.Fatal("FetchBlob should not be called when index cache is hit")
+			return nil, nil
+		}
+		mock.BlobURLFunc = func(repoRef, dgst string) (string, error) {
+			return dataServer.URL, nil
+		}
+		mock.AuthHeadersFunc = func(ctx context.Context, repoRef string) (http.Header, error) {
+			return http.Header{}, nil
+		}
+
+		indexCache := newMemIndexCache()
+		require.NoError(t, indexCache.PutIndex(indexDigest, indexData))
+
+		c := &Client{
+			oci:        mock,
+			indexCache: indexCache,
+		}
+
+		b, err := c.Pull(context.Background(), testRef)
+		require.NoError(t, err)
+		require.NotNil(t, b)
+
+		content, err := b.ReadFile("test.txt")
+		require.NoError(t, err)
+		assert.Equal(t, "test content", string(content))
+	})
+
+	t.Run("index cache stores fetched index", func(t *testing.T) {
+		t.Parallel()
+
+		indexData, dataBytes := createTestBlobData(t)
+		dataServer := startDataServer(t, dataBytes)
+
+		manifest, manifestBytes, cacheDesc := manifestForIndexData(t, indexData, dataBytes)
+		indexDigest := manifest.Layers[0].Digest.String()
+
+		mock := &pullMockOCIClient{}
+		mock.ResolveFunc = func(ctx context.Context, repoRef, ref string) (ocispec.Descriptor, error) {
+			return cacheDesc, nil
+		}
+		mock.FetchManifestFunc = func(ctx context.Context, repoRef string, expected *ocispec.Descriptor) (ocispec.Manifest, []byte, error) {
+			return manifest, manifestBytes, nil
+		}
+		mock.FetchBlobFunc = func(ctx context.Context, repoRef string, desc *ocispec.Descriptor) (io.ReadCloser, error) {
+			return io.NopCloser(bytes.NewReader(indexData)), nil
+		}
+		mock.BlobURLFunc = func(repoRef, dgst string) (string, error) {
+			return dataServer.URL, nil
+		}
+		mock.AuthHeadersFunc = func(ctx context.Context, repoRef string) (http.Header, error) {
+			return http.Header{}, nil
+		}
+
+		indexCache := newMemIndexCache()
+		c := &Client{
+			oci:        mock,
+			indexCache: indexCache,
+		}
+
+		b, err := c.Pull(context.Background(), testRef)
+		require.NoError(t, err)
+		require.NotNil(t, b)
+
+		cached, ok := indexCache.GetIndex(indexDigest)
+		require.True(t, ok)
+		assert.Equal(t, indexData, cached)
+	})
+
 	t.Run("index size limit enforced", func(t *testing.T) {
 		t.Parallel()
 
@@ -205,16 +312,22 @@ func TestClient_Pull(t *testing.T) {
 		indexData, dataBytes := createTestBlobData(t)
 		dataServer := startDataServer(t, dataBytes)
 
+		manifest, manifestBytes, cacheDesc := manifestForIndexData(t, indexData, dataBytes)
+		indexDigest := manifest.Layers[0].Digest.String()
+		testDigest := cacheDesc.Digest.String()
+
 		resolveCalled := false
+		fetchBlobCalled := false
 		mock := &pullMockOCIClient{}
 		mock.ResolveFunc = func(ctx context.Context, repoRef, ref string) (ocispec.Descriptor, error) {
 			resolveCalled = true
-			return testDesc, nil
+			return cacheDesc, nil
 		}
 		mock.FetchManifestFunc = func(ctx context.Context, repoRef string, expected *ocispec.Descriptor) (ocispec.Manifest, []byte, error) {
 			return manifest, manifestBytes, nil
 		}
 		mock.FetchBlobFunc = func(ctx context.Context, repoRef string, desc *ocispec.Descriptor) (io.ReadCloser, error) {
+			fetchBlobCalled = true
 			return io.NopCloser(bytes.NewReader(indexData)), nil
 		}
 		mock.BlobURLFunc = func(repoRef, dgst string) (string, error) {
@@ -229,17 +342,21 @@ func TestClient_Pull(t *testing.T) {
 		require.NoError(t, refCache.PutDigest(testRef, testDigest))
 		manifestCache := newMemManifestCache()
 		require.NoError(t, manifestCache.PutManifest(testDigest, manifestBytes))
+		indexCache := newMemIndexCache()
+		require.NoError(t, indexCache.PutIndex(indexDigest, indexData))
 
 		c := &Client{
 			oci:           mock,
 			refCache:      refCache,
 			manifestCache: manifestCache,
+			indexCache:    indexCache,
 		}
 
 		_, err := c.Pull(context.Background(), testRef, WithPullSkipCache())
 
 		require.NoError(t, err)
 		assert.True(t, resolveCalled, "Resolve should be called when skip cache is set")
+		assert.True(t, fetchBlobCalled, "FetchBlob should be called when skip cache is set")
 	})
 
 	t.Run("blob options are passed through", func(t *testing.T) {

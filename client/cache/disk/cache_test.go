@@ -265,6 +265,256 @@ func TestManifestCacheAlreadyCached(t *testing.T) {
 	}
 }
 
+func TestIndexCachePutGet(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	c, err := NewIndexCache(filepath.Join(dir, "indexes"))
+	if err != nil {
+		t.Fatalf("NewIndexCache() error = %v", err)
+	}
+
+	indexData := []byte("index data")
+	dgst := digest.FromBytes(indexData)
+
+	if err := c.PutIndex(dgst.String(), indexData); err != nil {
+		t.Fatalf("PutIndex() error = %v", err)
+	}
+
+	got, ok := c.GetIndex(dgst.String())
+	if !ok {
+		t.Fatal("GetIndex() ok = false, want true")
+	}
+	if string(got) != string(indexData) {
+		t.Fatalf("GetIndex() = %q, want %q", got, indexData)
+	}
+
+	hexHash := dgst.Encoded()
+	path := filepath.Join(dir, "indexes", hexHash[:defaultShardPrefixLen], hexHash)
+	if _, err := os.Stat(path); err != nil {
+		t.Fatalf("expected cache file at %s: %v", path, err)
+	}
+}
+
+func TestIndexCacheNotFound(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	c, err := NewIndexCache(dir)
+	if err != nil {
+		t.Fatalf("NewIndexCache() error = %v", err)
+	}
+
+	_, ok := c.GetIndex("sha256:deadbeef")
+	if ok {
+		t.Fatal("GetIndex() ok = true, want false for nonexistent digest")
+	}
+}
+
+func TestIndexCacheShardDisable(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	c, err := NewIndexCache(dir, WithShardPrefixLen(0))
+	if err != nil {
+		t.Fatalf("NewIndexCache() error = %v", err)
+	}
+
+	indexData := []byte("index data")
+	dgst := digest.FromBytes(indexData)
+
+	if err := c.PutIndex(dgst.String(), indexData); err != nil {
+		t.Fatalf("PutIndex() error = %v", err)
+	}
+
+	hexHash := dgst.Encoded()
+	path := filepath.Join(dir, hexHash)
+	if _, err := os.Stat(path); err != nil {
+		t.Fatalf("expected cache file at %s: %v", path, err)
+	}
+}
+
+func TestIndexCacheAlreadyCached(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	c, err := NewIndexCache(dir)
+	if err != nil {
+		t.Fatalf("NewIndexCache() error = %v", err)
+	}
+
+	indexData := []byte("index data")
+	dgst := digest.FromBytes(indexData)
+
+	if err := c.PutIndex(dgst.String(), indexData); err != nil {
+		t.Fatalf("PutIndex() error = %v", err)
+	}
+	if err := c.PutIndex(dgst.String(), indexData); err != nil { // Should be no-op
+		t.Fatalf("PutIndex() error = %v", err)
+	}
+
+	got, ok := c.GetIndex(dgst.String())
+	if !ok {
+		t.Fatal("GetIndex() ok = false, want true")
+	}
+	if string(got) != string(indexData) {
+		t.Fatalf("GetIndex() = %q, want %q", got, indexData)
+	}
+}
+
+func TestIndexCacheNewEmptyDir(t *testing.T) {
+	t.Parallel()
+
+	if _, err := NewIndexCache(""); err == nil {
+		t.Fatal("NewIndexCache() error = nil, want error")
+	}
+}
+
+func TestIndexCacheNegativeShardLen(t *testing.T) {
+	t.Parallel()
+
+	if _, err := NewIndexCache(t.TempDir(), WithShardPrefixLen(-1)); err == nil {
+		t.Fatal("NewIndexCache() error = nil, want error for negative shard len")
+	}
+}
+
+func TestIndexCacheRejectsInvalidDigest(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	c, err := NewIndexCache(dir, WithShardPrefixLen(0))
+	if err != nil {
+		t.Fatalf("NewIndexCache() error = %v", err)
+	}
+
+	dgst := "sha256:../escape"
+	indexData := []byte("index data")
+
+	if err := c.PutIndex(dgst, indexData); err == nil {
+		t.Fatal("PutIndex() error = nil, want error for invalid digest")
+	}
+
+	if _, ok := c.GetIndex(dgst); ok {
+		t.Fatal("GetIndex() ok = true, want false for invalid digest")
+	}
+
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		t.Fatalf("ReadDir() error = %v", err)
+	}
+	if len(entries) != 0 {
+		t.Fatalf("expected empty cache dir, got %d entries", len(entries))
+	}
+}
+
+func TestIndexCacheCorruptedDeleted(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	c, err := NewIndexCache(dir, WithShardPrefixLen(0))
+	if err != nil {
+		t.Fatalf("NewIndexCache() error = %v", err)
+	}
+
+	clean := []byte("index data")
+	dgst := digest.FromBytes(clean)
+	path := filepath.Join(dir, dgst.Encoded())
+	if err := os.WriteFile(path, []byte("corrupt"), 0o600); err != nil {
+		t.Fatalf("WriteFile() error = %v", err)
+	}
+
+	_, ok := c.GetIndex(dgst.String())
+	if ok {
+		t.Fatal("GetIndex() ok = true, want false for corrupted data")
+	}
+
+	if _, err := os.Stat(path); !os.IsNotExist(err) {
+		t.Fatal("expected corrupted cache file to be deleted")
+	}
+}
+
+func TestIndexCacheSizeTracking(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	c, err := NewIndexCache(dir)
+	if err != nil {
+		t.Fatalf("NewIndexCache() error = %v", err)
+	}
+
+	if c.SizeBytes() != 0 {
+		t.Fatalf("SizeBytes() = %d, want 0 for empty cache", c.SizeBytes())
+	}
+
+	indexData := []byte("index data")
+	dgst := digest.FromBytes(indexData)
+
+	if err := c.PutIndex(dgst.String(), indexData); err != nil {
+		t.Fatalf("PutIndex() error = %v", err)
+	}
+
+	expectedSize := int64(len(indexData))
+	if c.SizeBytes() != expectedSize {
+		t.Fatalf("SizeBytes() = %d, want %d", c.SizeBytes(), expectedSize)
+	}
+
+	if err := c.Delete(dgst.String()); err != nil {
+		t.Fatalf("Delete() error = %v", err)
+	}
+
+	if c.SizeBytes() != 0 {
+		t.Fatalf("SizeBytes() = %d, want 0 after delete", c.SizeBytes())
+	}
+}
+
+func TestIndexCachePrune(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	c, err := NewIndexCache(dir)
+	if err != nil {
+		t.Fatalf("NewIndexCache() error = %v", err)
+	}
+
+	for i := range 3 {
+		indexData := []byte{byte('a' + i), byte('b' + i), byte('c' + i)}
+		dgst := digest.FromBytes(indexData)
+		if err := c.PutIndex(dgst.String(), indexData); err != nil {
+			t.Fatalf("PutIndex() error = %v", err)
+		}
+	}
+
+	sizeBefore := c.SizeBytes()
+	if sizeBefore == 0 {
+		t.Fatal("SizeBytes() = 0, expected > 0")
+	}
+
+	freed, err := c.Prune(sizeBefore / 2)
+	if err != nil {
+		t.Fatalf("Prune() error = %v", err)
+	}
+	if freed == 0 {
+		t.Fatal("Prune() freed = 0, expected > 0")
+	}
+	if c.SizeBytes() >= sizeBefore {
+		t.Fatalf("SizeBytes() = %d, want < %d after prune", c.SizeBytes(), sizeBefore)
+	}
+}
+
+func TestIndexCacheMaxBytes(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	c, err := NewIndexCache(dir, WithMaxBytes(100))
+	if err != nil {
+		t.Fatalf("NewIndexCache() error = %v", err)
+	}
+
+	if c.MaxBytes() != 100 {
+		t.Fatalf("MaxBytes() = %d, want 100", c.MaxBytes())
+	}
+}
+
 func TestManifestCacheNewEmptyDir(t *testing.T) {
 	t.Parallel()
 
@@ -637,5 +887,13 @@ func TestManifestCacheNegativeMaxBytes(t *testing.T) {
 
 	if _, err := NewManifestCache(t.TempDir(), WithMaxBytes(-1)); err == nil {
 		t.Fatal("NewManifestCache() error = nil, want error for negative max bytes")
+	}
+}
+
+func TestIndexCacheNegativeMaxBytes(t *testing.T) {
+	t.Parallel()
+
+	if _, err := NewIndexCache(t.TempDir(), WithMaxBytes(-1)); err == nil {
+		t.Fatal("NewIndexCache() error = nil, want error for negative max bytes")
 	}
 }
