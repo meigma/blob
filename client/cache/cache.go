@@ -14,6 +14,19 @@ type RefCache interface {
 
 	// PutDigest caches a reference to digest mapping.
 	PutDigest(ref string, digest string) error
+
+	// Delete removes a cached reference.
+	Delete(ref string) error
+
+	// MaxBytes returns the configured cache size limit (0 = unlimited).
+	MaxBytes() int64
+
+	// SizeBytes returns the current cache size in bytes.
+	SizeBytes() int64
+
+	// Prune removes cached entries until the cache is at or below targetBytes.
+	// Returns the number of bytes freed.
+	Prune(targetBytes int64) (int64, error)
 }
 
 // ManifestCache caches digest to manifest mappings.
@@ -23,6 +36,19 @@ type ManifestCache interface {
 	// GetManifest returns the cached manifest for a digest.
 	GetManifest(digest string) (manifest *ocispec.Manifest, ok bool)
 
-	// PutManifest caches a manifest by its digest.
-	PutManifest(digest string, manifest *ocispec.Manifest) error
+	// PutManifest caches raw manifest bytes by digest.
+	PutManifest(digest string, raw []byte) error
+
+	// Delete removes a cached manifest.
+	Delete(digest string) error
+
+	// MaxBytes returns the configured cache size limit (0 = unlimited).
+	MaxBytes() int64
+
+	// SizeBytes returns the current cache size in bytes.
+	SizeBytes() int64
+
+	// Prune removes cached entries until the cache is at or below targetBytes.
+	// Returns the number of bytes freed.
+	Prune(targetBytes int64) (int64, error)
 }

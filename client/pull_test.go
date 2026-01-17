@@ -119,12 +119,14 @@ func TestClient_Pull(t *testing.T) {
 	t.Parallel()
 
 	const testRef = "registry.example.com/repo:v1.0.0"
-	testDigest := "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+	manifest := testManifest()
+	manifestBytes := mustMarshalManifest(t, manifest)
+	testDigest := digest.FromBytes(manifestBytes).String()
 
 	testDesc := ocispec.Descriptor{
 		MediaType: ocispec.MediaTypeImageManifest,
 		Digest:    digest.Digest(testDigest),
-		Size:      500,
+		Size:      int64(len(manifestBytes)),
 	}
 
 	t.Run("successful pull returns lazy blob", func(t *testing.T) {
@@ -137,8 +139,8 @@ func TestClient_Pull(t *testing.T) {
 		mock.ResolveFunc = func(ctx context.Context, repoRef, ref string) (ocispec.Descriptor, error) {
 			return testDesc, nil
 		}
-		mock.FetchManifestFunc = func(ctx context.Context, repoRef string, expected *ocispec.Descriptor) (ocispec.Manifest, error) {
-			return testManifest(), nil
+		mock.FetchManifestFunc = func(ctx context.Context, repoRef string, expected *ocispec.Descriptor) (ocispec.Manifest, []byte, error) {
+			return manifest, manifestBytes, nil
 		}
 		mock.FetchBlobFunc = func(ctx context.Context, repoRef string, desc *ocispec.Descriptor) (io.ReadCloser, error) {
 			// Return the index data
@@ -173,11 +175,12 @@ func TestClient_Pull(t *testing.T) {
 		mock.ResolveFunc = func(ctx context.Context, repoRef, ref string) (ocispec.Descriptor, error) {
 			return testDesc, nil
 		}
-		mock.FetchManifestFunc = func(ctx context.Context, repoRef string, expected *ocispec.Descriptor) (ocispec.Manifest, error) {
-			manifest := testManifest()
-			manifest.Layers[0].Size = int64(len(indexData))
-			manifest.Layers[1].Size = int64(len(dataBytes))
-			return manifest, nil
+		mock.FetchManifestFunc = func(ctx context.Context, repoRef string, expected *ocispec.Descriptor) (ocispec.Manifest, []byte, error) {
+			updatedManifest := testManifest()
+			updatedManifest.Layers[0].Size = int64(len(indexData))
+			updatedManifest.Layers[1].Size = int64(len(dataBytes))
+			raw := mustMarshalManifest(t, updatedManifest)
+			return updatedManifest, raw, nil
 		}
 		mock.FetchBlobFunc = func(ctx context.Context, repoRef string, desc *ocispec.Descriptor) (io.ReadCloser, error) {
 			return io.NopCloser(bytes.NewReader(indexData)), nil
@@ -208,8 +211,8 @@ func TestClient_Pull(t *testing.T) {
 			resolveCalled = true
 			return testDesc, nil
 		}
-		mock.FetchManifestFunc = func(ctx context.Context, repoRef string, expected *ocispec.Descriptor) (ocispec.Manifest, error) {
-			return testManifest(), nil
+		mock.FetchManifestFunc = func(ctx context.Context, repoRef string, expected *ocispec.Descriptor) (ocispec.Manifest, []byte, error) {
+			return manifest, manifestBytes, nil
 		}
 		mock.FetchBlobFunc = func(ctx context.Context, repoRef string, desc *ocispec.Descriptor) (io.ReadCloser, error) {
 			return io.NopCloser(bytes.NewReader(indexData)), nil
@@ -225,14 +228,7 @@ func TestClient_Pull(t *testing.T) {
 		refCache := newMemRefCache()
 		require.NoError(t, refCache.PutDigest(testRef, testDigest))
 		manifestCache := newMemManifestCache()
-		require.NoError(t, manifestCache.PutManifest(testDigest, &ocispec.Manifest{
-			MediaType:    ocispec.MediaTypeImageManifest,
-			ArtifactType: ArtifactType,
-			Layers: []ocispec.Descriptor{
-				{MediaType: MediaTypeIndex, Digest: "sha256:cached", Size: 50},
-				{MediaType: MediaTypeData, Digest: "sha256:cached", Size: 500},
-			},
-		}))
+		require.NoError(t, manifestCache.PutManifest(testDigest, manifestBytes))
 
 		c := &Client{
 			oci:           mock,
@@ -256,8 +252,8 @@ func TestClient_Pull(t *testing.T) {
 		mock.ResolveFunc = func(ctx context.Context, repoRef, ref string) (ocispec.Descriptor, error) {
 			return testDesc, nil
 		}
-		mock.FetchManifestFunc = func(ctx context.Context, repoRef string, expected *ocispec.Descriptor) (ocispec.Manifest, error) {
-			return testManifest(), nil
+		mock.FetchManifestFunc = func(ctx context.Context, repoRef string, expected *ocispec.Descriptor) (ocispec.Manifest, []byte, error) {
+			return manifest, manifestBytes, nil
 		}
 		mock.FetchBlobFunc = func(ctx context.Context, repoRef string, desc *ocispec.Descriptor) (io.ReadCloser, error) {
 			return io.NopCloser(bytes.NewReader(indexData)), nil
@@ -301,8 +297,8 @@ func TestClient_Pull(t *testing.T) {
 		mock.ResolveFunc = func(ctx context.Context, repoRef, ref string) (ocispec.Descriptor, error) {
 			return testDesc, nil
 		}
-		mock.FetchManifestFunc = func(ctx context.Context, repoRef string, expected *ocispec.Descriptor) (ocispec.Manifest, error) {
-			return testManifest(), nil
+		mock.FetchManifestFunc = func(ctx context.Context, repoRef string, expected *ocispec.Descriptor) (ocispec.Manifest, []byte, error) {
+			return manifest, manifestBytes, nil
 		}
 		mock.FetchBlobFunc = func(ctx context.Context, repoRef string, desc *ocispec.Descriptor) (io.ReadCloser, error) {
 			return nil, errors.New("fetch blob failed")
@@ -324,8 +320,8 @@ func TestClient_Pull(t *testing.T) {
 		mock.ResolveFunc = func(ctx context.Context, repoRef, ref string) (ocispec.Descriptor, error) {
 			return testDesc, nil
 		}
-		mock.FetchManifestFunc = func(ctx context.Context, repoRef string, expected *ocispec.Descriptor) (ocispec.Manifest, error) {
-			return testManifest(), nil
+		mock.FetchManifestFunc = func(ctx context.Context, repoRef string, expected *ocispec.Descriptor) (ocispec.Manifest, []byte, error) {
+			return manifest, manifestBytes, nil
 		}
 		mock.FetchBlobFunc = func(ctx context.Context, repoRef string, desc *ocispec.Descriptor) (io.ReadCloser, error) {
 			return io.NopCloser(bytes.NewReader(indexData)), nil
@@ -350,8 +346,8 @@ func TestClient_Pull(t *testing.T) {
 		mock.ResolveFunc = func(ctx context.Context, repoRef, ref string) (ocispec.Descriptor, error) {
 			return testDesc, nil
 		}
-		mock.FetchManifestFunc = func(ctx context.Context, repoRef string, expected *ocispec.Descriptor) (ocispec.Manifest, error) {
-			return testManifest(), nil
+		mock.FetchManifestFunc = func(ctx context.Context, repoRef string, expected *ocispec.Descriptor) (ocispec.Manifest, []byte, error) {
+			return manifest, manifestBytes, nil
 		}
 		mock.FetchBlobFunc = func(ctx context.Context, repoRef string, desc *ocispec.Descriptor) (io.ReadCloser, error) {
 			return io.NopCloser(bytes.NewReader(indexData)), nil
@@ -379,8 +375,8 @@ func TestClient_Pull(t *testing.T) {
 		mock.ResolveFunc = func(ctx context.Context, repoRef, ref string) (ocispec.Descriptor, error) {
 			return testDesc, nil
 		}
-		mock.FetchManifestFunc = func(ctx context.Context, repoRef string, expected *ocispec.Descriptor) (ocispec.Manifest, error) {
-			return testManifest(), nil
+		mock.FetchManifestFunc = func(ctx context.Context, repoRef string, expected *ocispec.Descriptor) (ocispec.Manifest, []byte, error) {
+			return manifest, manifestBytes, nil
 		}
 		mock.FetchBlobFunc = func(ctx context.Context, repoRef string, desc *ocispec.Descriptor) (io.ReadCloser, error) {
 			return io.NopCloser(bytes.NewReader(indexData)), nil

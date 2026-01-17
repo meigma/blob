@@ -2,6 +2,7 @@ package client
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"io"
 	"net/http"
@@ -19,7 +20,7 @@ import (
 // mockOCIClient is a test mock for OCIClient.
 type mockOCIClient struct {
 	ResolveFunc       func(ctx context.Context, repoRef, ref string) (ocispec.Descriptor, error)
-	FetchManifestFunc func(ctx context.Context, repoRef string, expected *ocispec.Descriptor) (ocispec.Manifest, error)
+	FetchManifestFunc func(ctx context.Context, repoRef string, expected *ocispec.Descriptor) (ocispec.Manifest, []byte, error)
 	PushBlobFunc      func(ctx context.Context, repoRef string, desc *ocispec.Descriptor, r io.Reader) error
 	PushManifestFunc  func(ctx context.Context, repoRef, tag string, manifest *ocispec.Manifest) (ocispec.Descriptor, error)
 	TagFunc           func(ctx context.Context, repoRef string, desc *ocispec.Descriptor, tag string) error
@@ -32,11 +33,11 @@ func (m *mockOCIClient) Resolve(ctx context.Context, repoRef, ref string) (ocisp
 	return ocispec.Descriptor{}, errors.New("Resolve not implemented")
 }
 
-func (m *mockOCIClient) FetchManifest(ctx context.Context, repoRef string, expected *ocispec.Descriptor) (ocispec.Manifest, error) {
+func (m *mockOCIClient) FetchManifest(ctx context.Context, repoRef string, expected *ocispec.Descriptor) (ocispec.Manifest, []byte, error) {
 	if m.FetchManifestFunc != nil {
 		return m.FetchManifestFunc(ctx, repoRef, expected)
 	}
-	return ocispec.Manifest{}, errors.New("FetchManifest not implemented")
+	return ocispec.Manifest{}, nil, errors.New("FetchManifest not implemented")
 }
 
 // Unused methods - implement to satisfy interface.
@@ -108,6 +109,14 @@ func testManifest() ocispec.Manifest {
 	}
 }
 
+func mustMarshalManifest(t *testing.T, manifest ocispec.Manifest) []byte {
+	t.Helper()
+
+	raw, err := json.Marshal(manifest)
+	require.NoError(t, err)
+	return raw
+}
+
 // memRefCache is a simple in-memory RefCache for testing.
 type memRefCache struct {
 	data map[string]string
@@ -127,38 +136,63 @@ func (c *memRefCache) PutDigest(ref, dgst string) error {
 	return nil
 }
 
+func (c *memRefCache) Delete(ref string) error {
+	delete(c.data, ref)
+	return nil
+}
+
+func (c *memRefCache) MaxBytes() int64            { return 0 }
+func (c *memRefCache) SizeBytes() int64           { return 0 }
+func (c *memRefCache) Prune(int64) (int64, error) { return 0, nil }
+
 // memManifestCache is a simple in-memory ManifestCache for testing.
 type memManifestCache struct {
-	data map[string]*ocispec.Manifest
+	data map[string][]byte
 }
 
 func newMemManifestCache() *memManifestCache {
-	return &memManifestCache{data: make(map[string]*ocispec.Manifest)}
+	return &memManifestCache{data: make(map[string][]byte)}
 }
 
 func (c *memManifestCache) GetManifest(dgst string) (*ocispec.Manifest, bool) {
-	m, ok := c.data[dgst]
-	return m, ok
+	raw, ok := c.data[dgst]
+	if !ok {
+		return nil, false
+	}
+	var manifest ocispec.Manifest
+	if err := json.Unmarshal(raw, &manifest); err != nil {
+		return nil, false
+	}
+	return &manifest, true
 }
 
-func (c *memManifestCache) PutManifest(dgst string, manifest *ocispec.Manifest) error {
-	c.data[dgst] = manifest
+func (c *memManifestCache) PutManifest(dgst string, raw []byte) error {
+	c.data[dgst] = append([]byte(nil), raw...)
 	return nil
 }
+
+func (c *memManifestCache) Delete(dgst string) error {
+	delete(c.data, dgst)
+	return nil
+}
+
+func (c *memManifestCache) MaxBytes() int64            { return 0 }
+func (c *memManifestCache) SizeBytes() int64           { return 0 }
+func (c *memManifestCache) Prune(int64) (int64, error) { return 0, nil }
 
 func TestClient_Fetch(t *testing.T) {
 	t.Parallel()
 
-	const (
-		testRef       = "registry.example.com/repo:v1.0.0"
-		testDigestRef = "registry.example.com/repo@sha256:abc123"
-		testDigest    = "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
-	)
+	const testRef = "registry.example.com/repo:v1.0.0"
+
+	manifest := testManifest()
+	manifestBytes := mustMarshalManifest(t, manifest)
+	testDigest := digest.FromBytes(manifestBytes).String()
 
 	testDesc := ocispec.Descriptor{
 		MediaType: ocispec.MediaTypeImageManifest,
 		Digest:    digest.Digest(testDigest),
-		Size:      500,
+		Size:      int64(len(manifestBytes)),
 	}
 
 	tests := []struct {
@@ -181,8 +215,8 @@ func TestClient_Fetch(t *testing.T) {
 				m.ResolveFunc = func(ctx context.Context, repoRef, ref string) (ocispec.Descriptor, error) {
 					return testDesc, nil
 				}
-				m.FetchManifestFunc = func(ctx context.Context, repoRef string, expected *ocispec.Descriptor) (ocispec.Manifest, error) {
-					return testManifest(), nil
+				m.FetchManifestFunc = func(ctx context.Context, repoRef string, expected *ocispec.Descriptor) (ocispec.Manifest, []byte, error) {
+					return manifest, manifestBytes, nil
 				}
 			},
 			wantDigest:    testDigest,
@@ -198,8 +232,8 @@ func TestClient_Fetch(t *testing.T) {
 					t.Error("Resolve should not be called for digest reference")
 					return ocispec.Descriptor{}, nil
 				}
-				m.FetchManifestFunc = func(ctx context.Context, repoRef string, expected *ocispec.Descriptor) (ocispec.Manifest, error) {
-					return testManifest(), nil
+				m.FetchManifestFunc = func(ctx context.Context, repoRef string, expected *ocispec.Descriptor) (ocispec.Manifest, []byte, error) {
+					return manifest, manifestBytes, nil
 				}
 			},
 			wantDigest:    testDigest,
@@ -215,8 +249,8 @@ func TestClient_Fetch(t *testing.T) {
 					t.Error("Resolve should not be called when ref is cached")
 					return ocispec.Descriptor{}, nil
 				}
-				m.FetchManifestFunc = func(ctx context.Context, repoRef string, expected *ocispec.Descriptor) (ocispec.Manifest, error) {
-					return testManifest(), nil
+				m.FetchManifestFunc = func(ctx context.Context, repoRef string, expected *ocispec.Descriptor) (ocispec.Manifest, []byte, error) {
+					return manifest, manifestBytes, nil
 				}
 			},
 			wantDigest:    testDigest,
@@ -228,28 +262,21 @@ func TestClient_Fetch(t *testing.T) {
 			ref:  testRef,
 			manifestCache: func() cache.ManifestCache {
 				c := newMemManifestCache()
-				require.NoError(t, c.PutManifest(testDigest, &ocispec.Manifest{
-					MediaType:    ocispec.MediaTypeImageManifest,
-					ArtifactType: ArtifactType,
-					Layers: []ocispec.Descriptor{
-						{MediaType: MediaTypeIndex, Digest: "sha256:cached-index", Size: 50},
-						{MediaType: MediaTypeData, Digest: "sha256:cached-data", Size: 500},
-					},
-				}))
+				require.NoError(t, c.PutManifest(testDigest, manifestBytes))
 				return c
 			}(),
 			setupMock: func(m *mockOCIClient) {
 				m.ResolveFunc = func(ctx context.Context, repoRef, ref string) (ocispec.Descriptor, error) {
 					return testDesc, nil
 				}
-				m.FetchManifestFunc = func(ctx context.Context, repoRef string, expected *ocispec.Descriptor) (ocispec.Manifest, error) {
+				m.FetchManifestFunc = func(ctx context.Context, repoRef string, expected *ocispec.Descriptor) (ocispec.Manifest, []byte, error) {
 					t.Error("FetchManifest should not be called when manifest is cached")
-					return ocispec.Manifest{}, nil
+					return ocispec.Manifest{}, nil, nil
 				}
 			},
 			wantDigest:    testDigest,
-			wantIndexSize: 50,  // from cached manifest
-			wantDataSize:  500, // from cached manifest
+			wantIndexSize: 100,
+			wantDataSize:  1000,
 		},
 		{
 			name:     "both caches hit skips all network calls",
@@ -257,14 +284,7 @@ func TestClient_Fetch(t *testing.T) {
 			refCache: &memRefCache{data: map[string]string{testRef: testDigest}},
 			manifestCache: func() cache.ManifestCache {
 				c := newMemManifestCache()
-				require.NoError(t, c.PutManifest(testDigest, &ocispec.Manifest{
-					MediaType:    ocispec.MediaTypeImageManifest,
-					ArtifactType: ArtifactType,
-					Layers: []ocispec.Descriptor{
-						{MediaType: MediaTypeIndex, Digest: "sha256:cached-index", Size: 50},
-						{MediaType: MediaTypeData, Digest: "sha256:cached-data", Size: 500},
-					},
-				}))
+				require.NoError(t, c.PutManifest(testDigest, manifestBytes))
 				return c
 			}(),
 			setupMock: func(m *mockOCIClient) {
@@ -272,14 +292,14 @@ func TestClient_Fetch(t *testing.T) {
 					t.Error("Resolve should not be called when ref is cached")
 					return ocispec.Descriptor{}, nil
 				}
-				m.FetchManifestFunc = func(ctx context.Context, repoRef string, expected *ocispec.Descriptor) (ocispec.Manifest, error) {
+				m.FetchManifestFunc = func(ctx context.Context, repoRef string, expected *ocispec.Descriptor) (ocispec.Manifest, []byte, error) {
 					t.Error("FetchManifest should not be called when manifest is cached")
-					return ocispec.Manifest{}, nil
+					return ocispec.Manifest{}, nil, nil
 				}
 			},
 			wantDigest:    testDigest,
-			wantIndexSize: 50,
-			wantDataSize:  500,
+			wantIndexSize: 100,
+			wantDataSize:  1000,
 		},
 		{
 			name:     "skip cache option bypasses caches",
@@ -288,22 +308,15 @@ func TestClient_Fetch(t *testing.T) {
 			refCache: &memRefCache{data: map[string]string{testRef: testDigest}},
 			manifestCache: func() cache.ManifestCache {
 				c := newMemManifestCache()
-				require.NoError(t, c.PutManifest(testDigest, &ocispec.Manifest{
-					MediaType:    ocispec.MediaTypeImageManifest,
-					ArtifactType: ArtifactType,
-					Layers: []ocispec.Descriptor{
-						{MediaType: MediaTypeIndex, Digest: "sha256:cached-index", Size: 50},
-						{MediaType: MediaTypeData, Digest: "sha256:cached-data", Size: 500},
-					},
-				}))
+				require.NoError(t, c.PutManifest(testDigest, manifestBytes))
 				return c
 			}(),
 			setupMock: func(m *mockOCIClient) {
 				m.ResolveFunc = func(ctx context.Context, repoRef, ref string) (ocispec.Descriptor, error) {
 					return testDesc, nil
 				}
-				m.FetchManifestFunc = func(ctx context.Context, repoRef string, expected *ocispec.Descriptor) (ocispec.Manifest, error) {
-					return testManifest(), nil
+				m.FetchManifestFunc = func(ctx context.Context, repoRef string, expected *ocispec.Descriptor) (ocispec.Manifest, []byte, error) {
+					return manifest, manifestBytes, nil
 				}
 			},
 			wantDigest:    testDigest,
@@ -332,8 +345,8 @@ func TestClient_Fetch(t *testing.T) {
 				m.ResolveFunc = func(ctx context.Context, repoRef, ref string) (ocispec.Descriptor, error) {
 					return testDesc, nil
 				}
-				m.FetchManifestFunc = func(ctx context.Context, repoRef string, expected *ocispec.Descriptor) (ocispec.Manifest, error) {
-					return ocispec.Manifest{}, errors.New("fetch error")
+				m.FetchManifestFunc = func(ctx context.Context, repoRef string, expected *ocispec.Descriptor) (ocispec.Manifest, []byte, error) {
+					return ocispec.Manifest{}, nil, errors.New("fetch error")
 				}
 			},
 			wantErr: errors.New("fetch error"),
@@ -345,10 +358,11 @@ func TestClient_Fetch(t *testing.T) {
 				m.ResolveFunc = func(ctx context.Context, repoRef, ref string) (ocispec.Descriptor, error) {
 					return testDesc, nil
 				}
-				m.FetchManifestFunc = func(ctx context.Context, repoRef string, expected *ocispec.Descriptor) (ocispec.Manifest, error) {
-					manifest := testManifest()
-					manifest.ArtifactType = "application/vnd.example.wrong"
-					return manifest, nil
+				m.FetchManifestFunc = func(ctx context.Context, repoRef string, expected *ocispec.Descriptor) (ocispec.Manifest, []byte, error) {
+					invalidManifest := testManifest()
+					invalidManifest.ArtifactType = "application/vnd.example.wrong"
+					raw := mustMarshalManifest(t, invalidManifest)
+					return invalidManifest, raw, nil
 				}
 			},
 			wantErr: ErrInvalidManifest,
@@ -360,14 +374,16 @@ func TestClient_Fetch(t *testing.T) {
 				m.ResolveFunc = func(ctx context.Context, repoRef, ref string) (ocispec.Descriptor, error) {
 					return testDesc, nil
 				}
-				m.FetchManifestFunc = func(ctx context.Context, repoRef string, expected *ocispec.Descriptor) (ocispec.Manifest, error) {
-					return ocispec.Manifest{
+				m.FetchManifestFunc = func(ctx context.Context, repoRef string, expected *ocispec.Descriptor) (ocispec.Manifest, []byte, error) {
+					invalidManifest := ocispec.Manifest{
 						MediaType:    ocispec.MediaTypeImageManifest,
 						ArtifactType: ArtifactType,
 						Layers: []ocispec.Descriptor{
 							{MediaType: MediaTypeData, Digest: "sha256:data", Size: 1000},
 						},
-					}, nil
+					}
+					raw := mustMarshalManifest(t, invalidManifest)
+					return invalidManifest, raw, nil
 				}
 			},
 			wantErr: ErrMissingIndex,
@@ -379,14 +395,16 @@ func TestClient_Fetch(t *testing.T) {
 				m.ResolveFunc = func(ctx context.Context, repoRef, ref string) (ocispec.Descriptor, error) {
 					return testDesc, nil
 				}
-				m.FetchManifestFunc = func(ctx context.Context, repoRef string, expected *ocispec.Descriptor) (ocispec.Manifest, error) {
-					return ocispec.Manifest{
+				m.FetchManifestFunc = func(ctx context.Context, repoRef string, expected *ocispec.Descriptor) (ocispec.Manifest, []byte, error) {
+					invalidManifest := ocispec.Manifest{
 						MediaType:    ocispec.MediaTypeImageManifest,
 						ArtifactType: ArtifactType,
 						Layers: []ocispec.Descriptor{
 							{MediaType: MediaTypeIndex, Digest: "sha256:index", Size: 100},
 						},
-					}, nil
+					}
+					raw := mustMarshalManifest(t, invalidManifest)
+					return invalidManifest, raw, nil
 				}
 			},
 			wantErr: ErrMissingData,
@@ -440,23 +458,24 @@ func TestClient_Fetch(t *testing.T) {
 func TestClient_Fetch_PopulatesCaches(t *testing.T) {
 	t.Parallel()
 
-	const (
-		testRef    = "registry.example.com/repo:v1.0.0"
-		testDigest = "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
-	)
+	const testRef = "registry.example.com/repo:v1.0.0"
+
+	manifest := testManifest()
+	manifestBytes := mustMarshalManifest(t, manifest)
+	testDigest := digest.FromBytes(manifestBytes).String()
 
 	testDesc := ocispec.Descriptor{
 		MediaType: ocispec.MediaTypeImageManifest,
 		Digest:    digest.Digest(testDigest),
-		Size:      500,
+		Size:      int64(len(manifestBytes)),
 	}
 
 	mock := &mockOCIClient{
 		ResolveFunc: func(ctx context.Context, repoRef, ref string) (ocispec.Descriptor, error) {
 			return testDesc, nil
 		},
-		FetchManifestFunc: func(ctx context.Context, repoRef string, expected *ocispec.Descriptor) (ocispec.Manifest, error) {
-			return testManifest(), nil
+		FetchManifestFunc: func(ctx context.Context, repoRef string, expected *ocispec.Descriptor) (ocispec.Manifest, []byte, error) {
+			return manifest, manifestBytes, nil
 		},
 	}
 
