@@ -6,6 +6,7 @@ import (
 	nethttp "net/http"
 	"net/http/httptest"
 	"strconv"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -19,7 +20,7 @@ func TestSourceReadAt(t *testing.T) {
 	}))
 	t.Cleanup(server.Close)
 
-	src, err := blobhttp.NewSource(server.URL)
+	src, err := blobhttp.NewSource(server.URL, blobhttp.WithConditionalHeaders())
 	if err != nil {
 		t.Fatalf("NewSource() error = %v", err)
 	}
@@ -66,5 +67,56 @@ func TestSourceRangeUnsupported(t *testing.T) {
 	_, err := blobhttp.NewSource(server.URL)
 	if err == nil {
 		t.Fatal("expected error")
+	}
+}
+
+func TestSourceReadAtRetriesWithoutIfMatchOn412(t *testing.T) {
+	data := []byte("hello world")
+	etag := `"retry-test"`
+	var withIfMatchRange int32
+	var withoutIfMatchRange int32
+
+	server := httptest.NewServer(nethttp.HandlerFunc(func(w nethttp.ResponseWriter, r *nethttp.Request) {
+		switch r.Method {
+		case nethttp.MethodHead:
+			w.Header().Set("Content-Length", strconv.Itoa(len(data)))
+			w.Header().Set("ETag", etag)
+			return
+		case nethttp.MethodGet:
+			if r.Header.Get("Range") == "bytes=6-10" {
+				if r.Header.Get("If-Match") != "" {
+					atomic.AddInt32(&withIfMatchRange, 1)
+					w.WriteHeader(nethttp.StatusPreconditionFailed)
+					return
+				}
+				atomic.AddInt32(&withoutIfMatchRange, 1)
+			}
+			w.Header().Set("ETag", etag)
+			nethttp.ServeContent(w, r, "data", time.Time{}, bytes.NewReader(data))
+			return
+		default:
+			w.WriteHeader(nethttp.StatusMethodNotAllowed)
+		}
+	}))
+	t.Cleanup(server.Close)
+
+	src, err := blobhttp.NewSource(server.URL, blobhttp.WithConditionalHeaders())
+	if err != nil {
+		t.Fatalf("NewSource() error = %v", err)
+	}
+
+	buf := make([]byte, 5)
+	n, err := src.ReadAt(buf, 6)
+	if err != nil {
+		t.Fatalf("ReadAt() error = %v", err)
+	}
+	if got := string(buf[:n]); got != "world" {
+		t.Fatalf("ReadAt() got %q, want %q", got, "world")
+	}
+	if atomic.LoadInt32(&withIfMatchRange) != 1 {
+		t.Fatalf("expected one range request with If-Match, got %d", withIfMatchRange)
+	}
+	if atomic.LoadInt32(&withoutIfMatchRange) != 1 {
+		t.Fatalf("expected one range retry without If-Match, got %d", withoutIfMatchRange)
 	}
 }

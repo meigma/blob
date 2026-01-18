@@ -15,13 +15,14 @@ import (
 // Source implements random access reads via HTTP range requests.
 // It satisfies blob.ByteSource (io.ReaderAt plus Size).
 type Source struct {
-	url          string
-	client       *nethttp.Client
-	headers      nethttp.Header
-	size         int64
-	etag         string
-	lastModified string
-	sourceID     string
+	url                   string
+	client                *nethttp.Client
+	headers               nethttp.Header
+	size                  int64
+	etag                  string
+	lastModified          string
+	sourceID              string
+	useConditionalHeaders bool
 }
 
 // Option configures a Source.
@@ -58,6 +59,14 @@ func WithHeader(key, value string) Option {
 func WithSourceID(id string) Option {
 	return func(s *Source) {
 		s.sourceID = id
+	}
+}
+
+// WithConditionalHeaders enables conditional range reads using ETag or Last-Modified.
+// This is disabled by default because some registries reject conditional range requests.
+func WithConditionalHeaders() Option {
+	return func(s *Source) {
+		s.useConditionalHeaders = true
 	}
 }
 
@@ -117,15 +126,16 @@ func (s *Source) ReadRange(off, length int64) (io.ReadCloser, error) {
 	}
 
 	end := off + length - 1
-	req, err := s.newRequest(nethttp.MethodGet)
+	resp, err := s.rangeRequest(off, end, true)
 	if err != nil {
 		return nil, err
 	}
-	req.Header.Set("Range", fmt.Sprintf("bytes=%d-%d", off, end))
-
-	resp, err := s.client.Do(req)
-	if err != nil {
-		return nil, err
+	if resp.StatusCode == nethttp.StatusPreconditionFailed && s.hasConditionalHeaders() {
+		resp.Body.Close()
+		resp, err = s.rangeRequest(off, end, false)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	switch resp.StatusCode {
@@ -167,15 +177,16 @@ func (s *Source) ReadAt(p []byte, off int64) (int, error) {
 		expected = int(end - off + 1)
 	}
 
-	req, err := s.newRequest(nethttp.MethodGet)
+	resp, err := s.rangeRequest(off, end, true)
 	if err != nil {
 		return 0, err
 	}
-	req.Header.Set("Range", fmt.Sprintf("bytes=%d-%d", off, end))
-
-	resp, err := s.client.Do(req)
-	if err != nil {
-		return 0, err
+	if resp.StatusCode == nethttp.StatusPreconditionFailed && s.hasConditionalHeaders() {
+		resp.Body.Close()
+		resp, err = s.rangeRequest(off, end, false)
+		if err != nil {
+			return 0, err
+		}
 	}
 	defer func() {
 		_, _ = io.Copy(io.Discard, resp.Body) //nolint:errcheck // best-effort drain for connection reuse
@@ -240,7 +251,7 @@ func (s *Source) fetchMetadata() (size int64, etag, lastModified string, err err
 }
 
 func (s *Source) rangeProbe() (size int64, etag, lastModified string, err error) {
-	req, err := s.newRequest(nethttp.MethodGet)
+	req, err := s.newRequest(nethttp.MethodGet, false)
 	if err != nil {
 		return 0, "", "", err
 	}
@@ -275,14 +286,14 @@ func (s *Source) rangeProbe() (size int64, etag, lastModified string, err error)
 }
 
 func (s *Source) doHead() (*nethttp.Response, error) {
-	req, err := s.newRequest(nethttp.MethodHead)
+	req, err := s.newRequest(nethttp.MethodHead, false)
 	if err != nil {
 		return nil, err
 	}
 	return s.client.Do(req)
 }
 
-func (s *Source) newRequest(method string) (*nethttp.Request, error) {
+func (s *Source) newRequest(method string, withConditions bool) (*nethttp.Request, error) {
 	req, err := nethttp.NewRequestWithContext(context.Background(), method, s.url, nethttp.NoBody)
 	if err != nil {
 		return nil, err
@@ -295,7 +306,7 @@ func (s *Source) newRequest(method string) (*nethttp.Request, error) {
 	if req.Header.Get("Accept-Encoding") == "" {
 		req.Header.Set("Accept-Encoding", "identity")
 	}
-	if method == nethttp.MethodGet {
+	if method == nethttp.MethodGet && withConditions && s.useConditionalHeaders {
 		if s.etag != "" && req.Header.Get("If-Match") == "" {
 			req.Header.Set("If-Match", s.etag)
 		}
@@ -304,6 +315,22 @@ func (s *Source) newRequest(method string) (*nethttp.Request, error) {
 		}
 	}
 	return req, nil
+}
+
+func (s *Source) rangeRequest(off, end int64, withConditions bool) (*nethttp.Response, error) {
+	req, err := s.newRequest(nethttp.MethodGet, withConditions)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Range", fmt.Sprintf("bytes=%d-%d", off, end))
+	return s.client.Do(req)
+}
+
+func (s *Source) hasConditionalHeaders() bool {
+	if !s.useConditionalHeaders {
+		return false
+	}
+	return s.etag != "" || s.lastModified != ""
 }
 
 type rangeReadCloser struct {
