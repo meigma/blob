@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"slices"
 
+	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/secure-systems-lab/go-securesystemslib/dsse"
 )
 
@@ -103,4 +104,24 @@ func matchesPredicateType(att *AttestationInput, acceptedTypes []string) bool {
 		return true
 	}
 	return slices.Contains(acceptedTypes, att.PredicateType)
+}
+
+// ociManifest is a minimal OCI image manifest structure for parsing attestation layers.
+type ociManifest struct {
+	SchemaVersion int                  `json:"schemaVersion"`
+	MediaType     string               `json:"mediaType"`
+	Layers        []ocispec.Descriptor `json:"layers"`
+}
+
+// parseOCIManifest parses an OCI image manifest to extract layer descriptors.
+func parseOCIManifest(data []byte) (*ociManifest, error) {
+	var manifest ociManifest
+	if err := json.Unmarshal(data, &manifest); err != nil {
+		return nil, err
+	}
+	// Validate it looks like an OCI manifest
+	if manifest.SchemaVersion != 2 {
+		return nil, fmt.Errorf("unexpected schema version: %d", manifest.SchemaVersion)
+	}
+	return &manifest, nil
 }

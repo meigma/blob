@@ -86,31 +86,79 @@ func (p *Policy) Evaluate(ctx context.Context, req client.PolicyRequest) error {
 }
 
 // fetchAttestations retrieves and parses attestations from referrers.
+// For OCI image manifests (like Sigstore bundles), it fetches the layers containing
+// the actual attestation content.
 //
 //nolint:gocritic // req passed by value per client.Policy interface contract
 func (p *Policy) fetchAttestations(ctx context.Context, req client.PolicyRequest, referrers []ocispec.Descriptor) []AttestationInput {
 	attestations := make([]AttestationInput, 0, len(referrers))
 
 	for _, ref := range referrers {
-		data, err := req.Client.FetchDescriptor(ctx, req.Ref, ref)
+		atts := p.fetchAttestationFromReferrer(ctx, req, ref)
+		for _, att := range atts {
+			if !matchesPredicateType(&att, p.predicateTypes) {
+				p.logger.Debug("skipping attestation with non-matching predicate type",
+					slog.String("predicate_type", att.PredicateType))
+				continue
+			}
+			attestations = append(attestations, att)
+		}
+	}
+
+	return attestations
+}
+
+// fetchAttestationFromReferrer fetches attestation content from a referrer descriptor.
+// If the referrer is an OCI image manifest, it fetches the layers containing the attestation.
+//
+//nolint:gocritic // req passed by value per client.Policy interface contract
+func (p *Policy) fetchAttestationFromReferrer(ctx context.Context, req client.PolicyRequest, ref ocispec.Descriptor) []AttestationInput {
+	data, err := req.Client.FetchDescriptor(ctx, req.Ref, ref)
+	if err != nil {
+		p.logger.Warn("failed to fetch attestation descriptor",
+			slog.String("digest", ref.Digest.String()),
+			slog.Any("error", err))
+		return nil
+	}
+
+	// Try to parse as an OCI manifest (for Sigstore bundles stored as OCI artifacts)
+	manifest, err := parseOCIManifest(data)
+	if err == nil && len(manifest.Layers) > 0 {
+		return p.fetchAttestationsFromLayers(ctx, req, manifest.Layers)
+	}
+
+	// Fall back to parsing as direct attestation content
+	att, err := parseAttestation(data)
+	if err != nil {
+		p.logger.Warn("failed to parse attestation",
+			slog.String("digest", ref.Digest.String()),
+			slog.Any("error", err))
+		return nil
+	}
+
+	return []AttestationInput{*att}
+}
+
+// fetchAttestationsFromLayers fetches and parses attestations from OCI manifest layers.
+//
+//nolint:gocritic // req passed by value per client.Policy interface contract
+func (p *Policy) fetchAttestationsFromLayers(ctx context.Context, req client.PolicyRequest, layers []ocispec.Descriptor) []AttestationInput {
+	var attestations []AttestationInput
+
+	for _, layer := range layers {
+		data, err := req.Client.FetchDescriptor(ctx, req.Ref, layer)
 		if err != nil {
-			p.logger.Warn("failed to fetch attestation",
-				slog.String("digest", ref.Digest.String()),
+			p.logger.Warn("failed to fetch attestation layer",
+				slog.String("digest", layer.Digest.String()),
 				slog.Any("error", err))
 			continue
 		}
 
 		att, err := parseAttestation(data)
 		if err != nil {
-			p.logger.Warn("failed to parse attestation",
-				slog.String("digest", ref.Digest.String()),
+			p.logger.Warn("failed to parse attestation layer",
+				slog.String("digest", layer.Digest.String()),
 				slog.Any("error", err))
-			continue
-		}
-
-		if !matchesPredicateType(att, p.predicateTypes) {
-			p.logger.Debug("skipping attestation with non-matching predicate type",
-				slog.String("predicate_type", att.PredicateType))
 			continue
 		}
 
