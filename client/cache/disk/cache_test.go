@@ -4,9 +4,11 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/opencontainers/go-digest"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
@@ -112,6 +114,70 @@ func TestRefCacheAlreadyCached(t *testing.T) {
 	}
 }
 
+func TestRefCacheTTLExpiresEntry(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	ttl := 2 * time.Second
+	c, err := NewRefCache(dir, WithRefCacheTTL(ttl))
+	if err != nil {
+		t.Fatalf("NewRefCache() error = %v", err)
+	}
+
+	ref := "registry.example.com/repo:v1.0.1"
+	digest := "sha256:deadbeef"
+
+	if err := c.PutDigest(ref, digest); err != nil {
+		t.Fatalf("PutDigest() error = %v", err)
+	}
+
+	path := filepath.Join(c.dir, c.path(ref))
+	expired := time.Now().Add(-2 * ttl)
+	if err := os.Chtimes(path, expired, expired); err != nil {
+		t.Fatalf("Chtimes() error = %v", err)
+	}
+
+	if _, ok := c.GetDigest(ref); ok {
+		t.Fatal("GetDigest() ok = true, want false for expired entry")
+	}
+
+	if _, err := os.Stat(path); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("expected cache file to be deleted, got err=%v", err)
+	}
+}
+
+func TestRefCacheTTLWithinWindow(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	ttl := time.Minute
+	c, err := NewRefCache(dir, WithRefCacheTTL(ttl))
+	if err != nil {
+		t.Fatalf("NewRefCache() error = %v", err)
+	}
+
+	ref := "registry.example.com/repo:v1.0.2"
+	digest := "sha256:cafebabe"
+
+	if err := c.PutDigest(ref, digest); err != nil {
+		t.Fatalf("PutDigest() error = %v", err)
+	}
+
+	path := filepath.Join(c.dir, c.path(ref))
+	recent := time.Now().Add(-ttl / 2)
+	if err := os.Chtimes(path, recent, recent); err != nil {
+		t.Fatalf("Chtimes() error = %v", err)
+	}
+
+	got, ok := c.GetDigest(ref)
+	if !ok {
+		t.Fatal("GetDigest() ok = false, want true for unexpired entry")
+	}
+	if got != digest {
+		t.Fatalf("GetDigest() = %q, want %q", got, digest)
+	}
+}
+
 func TestRefCacheNewEmptyDir(t *testing.T) {
 	t.Parallel()
 
@@ -125,6 +191,14 @@ func TestRefCacheNegativeShardLen(t *testing.T) {
 
 	if _, err := NewRefCache(t.TempDir(), WithShardPrefixLen(-1)); err == nil {
 		t.Fatal("NewRefCache() error = nil, want error for negative shard len")
+	}
+}
+
+func TestRefCacheNegativeTTL(t *testing.T) {
+	t.Parallel()
+
+	if _, err := NewRefCache(t.TempDir(), WithRefCacheTTL(-time.Second)); err == nil {
+		t.Fatal("NewRefCache() error = nil, want error for negative ttl")
 	}
 }
 
