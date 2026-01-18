@@ -1,0 +1,9 @@
+{
+  "name": "provenance-example",
+  "version": "1.0.0",
+  "description": "Example static assets for provenance demonstration",
+  "settings": {
+    "enabled": true,
+    "timeout": 30
+  }
+}

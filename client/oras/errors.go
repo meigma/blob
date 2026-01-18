@@ -27,4 +27,7 @@ var (
 
 	// ErrSizeMismatch is returned when content size does not match expected size.
 	ErrSizeMismatch = errors.New("oci: size mismatch")
+
+	// ErrReferrersUnsupported is returned when the registry does not support referrers.
+	ErrReferrersUnsupported = errors.New("oci: referrers unsupported")
 )

@@ -17,6 +17,7 @@ type Client struct {
 	refCache      cache.RefCache
 	manifestCache cache.ManifestCache
 	indexCache    cache.IndexCache
+	policies      []Policy
 
 	// orasOpts are options passed through to the ORAS client when
 	// no custom OCIClient is provided.

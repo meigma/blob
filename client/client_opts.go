@@ -63,3 +63,25 @@ func WithIndexCache(ic cache.IndexCache) Option {
 		c.indexCache = ic
 	}
 }
+
+// WithPolicy adds a policy that must pass for Fetch and Pull operations.
+func WithPolicy(policy Policy) Option {
+	return func(c *Client) {
+		if policy == nil {
+			return
+		}
+		c.policies = append(c.policies, policy)
+	}
+}
+
+// WithPolicies adds policies that must pass for Fetch and Pull operations.
+func WithPolicies(policies ...Policy) Option {
+	return func(c *Client) {
+		for _, policy := range policies {
+			if policy == nil {
+				continue
+			}
+			c.policies = append(c.policies, policy)
+		}
+	}
+}
