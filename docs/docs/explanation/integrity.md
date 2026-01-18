@@ -60,21 +60,15 @@ This is an inherent limitation of whole-file hashing. Partial verification would
 
 ## Cache Hit Semantics
 
-Content-addressed caching fundamentally changes verification semantics. When the cache returns content for a given hash, that content is implicitly verified.
+Content-addressed caching uses the content hash as the lookup key. In theory, if the cache returns content for hash X, that content must have hash X by definition—re-computing the hash would produce the same answer.
 
-### Why Cache Hits Skip Verification
+### Defense in Depth
 
-The cache lookup key is the hash itself. If the cache returns content for hash X, that content must have hash X by definition. Re-computing the hash would produce the same answer because the lookup already established what the content is.
+Despite the theoretical guarantee of content-addressed storage, blob does not blindly trust cached content. The default implementation validates file content on every read, including cache hits. As bytes are read from a cached file, blob computes the SHA256 hash incrementally and verifies it against the expected hash when the read completes.
 
-This is not merely an optimization. It reflects the semantics of content-addressed storage: the address (hash) defines the content. Asking "does this content match its hash?" is equivalent to asking "is X equal to X?" The answer is yes by definition.
+If a cached file has been corrupted—whether by filesystem errors, bitrot, or tampering—the hash verification fails and blob returns `ErrHashMismatch`. Additionally, blob automatically deletes the corrupted cache entry, allowing subsequent reads to re-fetch and re-cache the correct content. This self-healing behavior means transient cache corruption does not require manual intervention.
 
-### Trust in the Cache
-
-This reasoning depends on trusting the cache implementation. A cache that returns incorrect content for a given hash would violate the invariant that enables skipping verification. Blob's cache interface does not mandate any particular implementation, so the trust assumption falls on whichever cache is configured.
-
-The disk cache implementation stores files named by their hash, so filesystem integrity protects cache integrity. If the filesystem corrupts a cached file, subsequent reads may return incorrect content, but this would require filesystem-level failures that are rare on modern systems.
-
-For deployments with strict integrity requirements, caches could implement additional safeguards like checksums in metadata or periodic validation. These are not required by the interface but could be added by specific implementations.
+This verification-on-read approach ensures that even if the filesystem corrupts a cached file, blob detects and recovers from the corruption transparently.
 
 ### Cache Population
 
