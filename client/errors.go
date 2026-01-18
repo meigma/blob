@@ -18,4 +18,7 @@ var (
 
 	// ErrMissingData is returned when the manifest does not contain a data blob.
 	ErrMissingData = errors.New("client: missing data blob")
+
+	// ErrDigestMismatch is returned when content does not match its expected digest.
+	ErrDigestMismatch = errors.New("client: digest mismatch")
 )

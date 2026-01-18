@@ -1,10 +1,37 @@
 ---
-sidebar_position: 4
+sidebar_position: 6
 ---
 
 # Extracting Files
 
 How to extract archive contents to the local filesystem.
+
+## Extracting from OCI Registry
+
+Pull an archive from an OCI registry and extract its contents:
+
+```go
+import (
+	"context"
+
+	"github.com/meigma/blob/client"
+)
+
+func extractFromRegistry(ref, destDir string) error {
+	c := client.New(client.WithDockerConfig())
+
+	// Pull the archive
+	archive, err := c.Pull(context.Background(), ref)
+	if err != nil {
+		return err
+	}
+
+	// Extract all files
+	return archive.CopyDir(destDir, ".")
+}
+```
+
+The pulled archive fetches file data lazily. For extraction, data is streamed via range requests as needed.
 
 ## Working with BlobFile
 
@@ -255,5 +282,6 @@ err := extractArchive(archive, "/app/deploy", ExtractOptions{
 
 ## See Also
 
+- [OCI Client](oci-client) - Pull archives from registries
 - [Performance Tuning](performance-tuning) - Advanced extraction optimization
 - [Caching](caching) - Cache content for faster repeated extraction

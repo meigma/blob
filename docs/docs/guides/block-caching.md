@@ -1,17 +1,19 @@
 ---
-sidebar_position: 4
+sidebar_position: 5
 ---
 
 # Block Caching
 
-How to use block-level caching to optimize random access reads from remote sources.
+How to use block-level caching to optimize random access reads from OCI registries.
+
+Block caching operates at the data blob level, caching fixed-size blocks of raw data to reduce HTTP range requests to the registry.
 
 ## When to Use Block Caching
 
 Block caching improves performance in these scenarios:
 
 - **Scattered random reads**: Accessing individual files spread across the archive
-- **Remote sources with latency**: HTTP sources where each range request has overhead
+- **OCI registries with latency**: Each range request has network overhead
 - **Partial file reads**: Reading portions of large files multiple times
 
 Block caching is NOT recommended for:
@@ -171,43 +173,56 @@ go archive.ReadFile("large-file.bin") // Also needs block 42 - shares fetch
 
 ## Complete Example
 
-A complete setup with block caching for a remote archive:
+Block caching integrates with the OCI client's data source. When using the OCI client, the pulled archive already uses HTTP range requests to the registry. To add block caching, wrap the underlying source:
 
 ```go
+import (
+	"os"
+	"path/filepath"
+
+	"github.com/meigma/blob"
+	"github.com/meigma/blob/cache"
+	"github.com/meigma/blob/cache/disk"
+	"github.com/meigma/blob/http"
+)
+
 func setupBlockCachedArchive(indexData []byte, dataURL, token string) (*blob.Blob, error) {
-    // Create HTTP source with authentication
-    source, err := http.NewSource(dataURL,
-        http.WithHeader("Authorization", "Bearer "+token),
-    )
-    if err != nil {
-        return nil, fmt.Errorf("create source: %w", err)
-    }
+	// Create HTTP source with authentication
+	source, err := http.NewSource(dataURL,
+		http.WithHeader("Authorization", "Bearer "+token),
+	)
+	if err != nil {
+		return nil, err
+	}
 
-    // Create block cache with size limit
-    cacheDir, _ := os.UserCacheDir()
-    blockCache, err := disk.NewBlockCache(
-        filepath.Join(cacheDir, "blob-blocks"),
-        disk.WithBlockMaxBytes(256 << 20), // 256 MB limit
-    )
-    if err != nil {
-        return nil, fmt.Errorf("create block cache: %w", err)
-    }
+	// Create block cache with size limit
+	cacheDir, _ := os.UserCacheDir()
+	blockCache, err := disk.NewBlockCache(
+		filepath.Join(cacheDir, "blob-blocks"),
+		disk.WithBlockMaxBytes(256<<20), // 256 MB limit
+	)
+	if err != nil {
+		return nil, err
+	}
 
-    // Wrap source with block caching
-    cachedSource, err := blockCache.Wrap(source,
-        cache.WithBlockSize(64 << 10),   // 64 KB blocks
-        cache.WithMaxBlocksPerRead(4),   // Bypass large sequential reads
-    )
-    if err != nil {
-        return nil, fmt.Errorf("wrap source: %w", err)
-    }
+	// Wrap source with block caching
+	cachedSource, err := blockCache.Wrap(source,
+		cache.WithBlockSize(64<<10),  // 64 KB blocks
+		cache.WithMaxBlocksPerRead(4), // Bypass large sequential reads
+	)
+	if err != nil {
+		return nil, err
+	}
 
-    return blob.New(indexData, cachedSource)
+	return blob.New(indexData, cachedSource)
 }
 ```
 
+For most use cases with OCI registries, the OCI client caches (RefCache, ManifestCache, IndexCache) combined with content caching provide sufficient performance. Block caching is useful when you need fine-grained control over data blob access patterns.
+
 ## See Also
 
+- [OCI Client](oci-client) - Push and pull archives
+- [OCI Client Caching](oci-client-caching) - Configure client caches
 - [Caching](caching) - Content-addressed caching for deduplication
-- [Working with Remote Archives](remote-archives) - Set up HTTP sources
 - [Performance Tuning](performance-tuning) - Optimize read patterns

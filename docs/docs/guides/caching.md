@@ -1,18 +1,33 @@
 ---
-sidebar_position: 3
+sidebar_position: 4
 ---
 
-# Caching
+# Content Caching
 
-How to use content-addressed caching for improved performance.
+How to use content-addressed caching for file deduplication.
 
-## When to Use Caching
+Content caching stores file contents by their SHA256 hash, enabling deduplication across archives and avoiding repeated network transfers.
 
-Caching improves performance in these scenarios:
+## Relationship to OCI Client Caches
+
+Blob supports two levels of caching:
+
+| Cache Level | Purpose | What It Caches |
+|-------------|---------|----------------|
+| **OCI Client Caches** | Minimize registry API calls | Refs, manifests, index blobs |
+| **Content Cache** | Deduplicate file content | Actual file bytes by hash |
+
+Configure OCI client caches via `client.WithRefCache()`, `client.WithManifestCache()`, and `client.WithIndexCache()`. See [OCI Client Caching](oci-client-caching) for details.
+
+Content caching (this guide) operates at a different level: it caches the actual file contents after they're fetched from the data blob.
+
+## When to Use Content Caching
+
+Content caching improves performance in these scenarios:
 
 - **Repeated access**: Reading the same files multiple times (e.g., rebuilding a project)
 - **Shared content**: Multiple archives containing identical files (automatic deduplication via content hashing)
-- **Remote archives**: Avoiding repeated network round trips to OCI registries
+- **Remote archives**: Avoiding repeated network round trips for file data
 
 The cache uses SHA256 hashes of uncompressed file content as keys. This provides:
 - Automatic deduplication across archives
@@ -124,57 +139,56 @@ fmt.Printf("Cache: %d / %d bytes (%.1f%%)\n",
 
 The optimal size depends on your access patterns. Monitor cache hit rates and adjust accordingly.
 
-## Wrapping a Blob with Caching
+## Enabling Content Caching
 
-To add caching to an existing blob:
+Content caching is enabled by passing a cache to `blob.New()` or `client.Pull()`:
 
 ```go
 import (
 	"github.com/meigma/blob"
-	"github.com/meigma/blob/cache"
 	"github.com/meigma/blob/cache/disk"
 )
 
-func openCachedArchive(indexData []byte, source blob.ByteSource) (*cache.Blob, error) {
-	// Create the base blob
-	base, err := blob.New(indexData, source)
-	if err != nil {
-		return nil, err
-	}
-
+func openCachedArchive(indexData []byte, source blob.ByteSource) (*blob.Blob, error) {
 	// Create disk cache
 	diskCache, err := disk.New("/var/cache/blob")
 	if err != nil {
 		return nil, err
 	}
 
-	// Wrap with caching
-	return cache.New(base, diskCache), nil
+	// Create blob with caching enabled
+	return blob.New(indexData, source, blob.WithCache(diskCache))
 }
 ```
 
-### Using BlobFile with Caching
+### With OCI Client
 
-When using `OpenFile`, extract the embedded `*Blob` for caching:
+When pulling from an OCI registry, pass the cache as a blob option:
 
 ```go
-blobFile, err := blob.OpenFile("index.blob", "data.blob")
-if err != nil {
-	return nil, err
-}
-// Note: caller is responsible for closing blobFile when done
+import (
+	"context"
 
-diskCache, err := disk.New("/var/cache/blob")
-if err != nil {
-	blobFile.Close()
-	return nil, err
-}
+	"github.com/meigma/blob"
+	"github.com/meigma/blob/cache/disk"
+	"github.com/meigma/blob/client"
+)
 
-// Wrap the embedded Blob with caching
-cached := cache.New(blobFile.Blob, diskCache)
+func pullWithCache(c *client.Client, ref string) (*blob.Blob, error) {
+	// Create disk cache
+	diskCache, err := disk.New("/var/cache/blob")
+	if err != nil {
+		return nil, err
+	}
+
+	// Pull with content caching enabled
+	return c.Pull(context.Background(), ref,
+		client.WithBlobOptions(blob.WithCache(diskCache)),
+	)
+}
 ```
 
-The cached blob implements the same `fs.FS` interfaces as the base blob, so you can use it as a drop-in replacement.
+The blob returned by `Pull` will use the cache for all file reads.
 
 ## Reading Files
 
@@ -182,158 +196,107 @@ The cached blob automatically handles cache lookups:
 
 ```go
 // First read: fetches from source, caches result
-content, err := cachedBlob.ReadFile("lib/utils.go")
+content, err := archive.ReadFile("lib/utils.go")
 
 // Second read: returns from cache, no network request
-content, err = cachedBlob.ReadFile("lib/utils.go")
+content, err = archive.ReadFile("lib/utils.go")
 ```
 
-For streaming reads via `Open()`, behavior depends on the cache type:
-- **Disk cache (StreamingCache)**: Content streams directly to cache during read
-- **Basic cache**: Content is buffered in memory, then cached on Close
+Concurrent reads for the same content are deduplicated using singleflight, preventing redundant network requests when multiple goroutines request the same file simultaneously.
 
-## Prefetching
-
-To warm the cache with files you will access soon, use prefetch:
-
-```go
-// Prefetch specific files
-err := cachedBlob.Prefetch("go.mod", "go.sum", "main.go")
-
-// Prefetch an entire directory
-err = cachedBlob.PrefetchDir("pkg")
-```
-
-Prefetching is especially useful for remote archives because:
-- Adjacent files are fetched with batched range requests
-- Content is cached for subsequent access
-- You can prefetch during idle time
-
-### Prefetch Concurrency
-
-By default, prefetch runs serially. To parallelize:
-
-```go
-cachedBlob := cache.New(base, diskCache,
-	cache.WithPrefetchConcurrency(4), // Use 4 workers
-)
-```
+For streaming reads via `Open()`, content is cached when the file is read to completion or closed.
 
 ## Custom Cache Implementations
 
 To implement a custom cache, satisfy the `cache.Cache` interface:
 
 ```go
+import "io/fs"
+
 type Cache interface {
-	// Get retrieves content by its SHA256 hash.
-	// Returns nil, false if the content is not cached.
-	Get(hash []byte) ([]byte, bool)
+	// Get returns an fs.File for reading cached content.
+	// Returns nil, false if content is not cached.
+	Get(hash []byte) (fs.File, bool)
 
-	// Put stores content indexed by its SHA256 hash.
-	Put(hash []byte, content []byte) error
+	// Put stores content by reading from the provided fs.File.
+	// The cache reads the file to completion; caller still owns/closes the file.
+	Put(hash []byte, f fs.File) error
+
+	// Delete removes cached content for the given hash.
+	Delete(hash []byte) error
+
+	// MaxBytes returns the configured cache size limit (0 = unlimited).
+	MaxBytes() int64
+
+	// SizeBytes returns the current cache size in bytes.
+	SizeBytes() int64
+
+	// Prune removes cached entries until the cache is at or below targetBytes.
+	Prune(targetBytes int64) (int64, error)
 }
 ```
 
-Example in-memory cache:
-
-```go
-type MemoryCache struct {
-	mu   sync.RWMutex
-	data map[string][]byte
-}
-
-func NewMemoryCache() *MemoryCache {
-	return &MemoryCache{data: make(map[string][]byte)}
-}
-
-func (c *MemoryCache) Get(hash []byte) ([]byte, bool) {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-	content, ok := c.data[string(hash)]
-	return content, ok
-}
-
-func (c *MemoryCache) Put(hash, content []byte) error {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	c.data[string(hash)] = content
-	return nil
-}
-```
-
-### Streaming Cache Interface
-
-For large files, implement `cache.StreamingCache` to avoid buffering entire files in memory:
-
-```go
-type StreamingCache interface {
-	Cache
-
-	// Writer returns a Writer for streaming content into the cache.
-	// The hash is the expected SHA256 of the content being written.
-	Writer(hash []byte) (Writer, error)
-}
-
-type Writer interface {
-	io.Writer
-
-	// Commit finalizes the cache entry after successful verification.
-	Commit() error
-
-	// Discard aborts the write and cleans up temporary data.
-	Discard() error
-}
-```
-
-The disk cache implements this interface, writing to a temporary file and atomically renaming on commit.
+The disk cache (`github.com/meigma/blob/cache/disk`) implements this interface and handles:
+- Atomic writes using temporary files and renames
+- Sharded directory structure for filesystem performance
+- Automatic size tracking and pruning
 
 ## Complete Example
 
-A complete setup with disk caching and prefetch:
+A complete setup with OCI client and content caching:
 
 ```go
-func setupCachedArchive(indexData []byte, dataURL string) (*cache.Blob, error) {
-	// Create HTTP source
-	source, err := http.NewSource(dataURL,
-		http.WithHeader("Authorization", "Bearer "+token),
+import (
+	"context"
+	"os"
+	"path/filepath"
+
+	"github.com/meigma/blob"
+	"github.com/meigma/blob/cache/disk"
+	"github.com/meigma/blob/client"
+	clientdisk "github.com/meigma/blob/client/cache/disk"
+)
+
+func setupCachedArchive(ref string) (*blob.Blob, error) {
+	ctx := context.Background()
+
+	// Create OCI client caches
+	refCache, _ := clientdisk.NewRefCache("/var/cache/blob/refs")
+	manifestCache, _ := clientdisk.NewManifestCache("/var/cache/blob/manifests")
+	indexCache, _ := clientdisk.NewIndexCache("/var/cache/blob/indexes")
+
+	c := client.New(
+		client.WithDockerConfig(),
+		client.WithRefCache(refCache),
+		client.WithManifestCache(manifestCache),
+		client.WithIndexCache(indexCache),
 	)
-	if err != nil {
-		return nil, fmt.Errorf("create source: %w", err)
-	}
 
-	// Create base blob
-	base, err := blob.New(indexData, source)
-	if err != nil {
-		return nil, fmt.Errorf("open archive: %w", err)
-	}
-
-	// Create disk cache in user cache directory
+	// Create content cache in user cache directory
 	cacheDir, err := os.UserCacheDir()
 	if err != nil {
 		cacheDir = "/tmp"
 	}
-	diskCache, err := disk.New(filepath.Join(cacheDir, "blob"))
+	contentCache, err := disk.New(filepath.Join(cacheDir, "blob", "content"))
 	if err != nil {
-		return nil, fmt.Errorf("create cache: %w", err)
+		return nil, err
 	}
 
-	// Wrap with caching
-	cached := cache.New(base, diskCache,
-		cache.WithPrefetchConcurrency(4),
+	// Pull with content caching enabled
+	archive, err := c.Pull(ctx, ref,
+		client.WithBlobOptions(blob.WithCache(contentCache)),
 	)
-
-	// Prefetch commonly accessed directories
-	if err := cached.PrefetchDir("src"); err != nil {
-		// Non-fatal: prefetch is opportunistic
-		log.Printf("prefetch warning: %v", err)
+	if err != nil {
+		return nil, err
 	}
 
-	return cached, nil
+	return archive, nil
 }
 ```
 
 ## See Also
 
+- [OCI Client Caching](oci-client-caching) - Configure OCI client caches
 - [Block Caching](block-caching) - Block-level caching for random access
-- [Working with Remote Archives](remote-archives) - Set up HTTP sources
+- [OCI Client](oci-client) - Push and pull archives
 - [Performance Tuning](performance-tuning) - Optimize prefetch and read concurrency

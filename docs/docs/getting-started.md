@@ -4,75 +4,25 @@ sidebar_position: 2
 
 # Getting Started
 
-This tutorial walks through the complete workflow of creating a blob archive, reading files from it, and extracting content. We will build a working example from scratch.
+This tutorial walks through the complete workflow of creating a blob archive, pushing it to an OCI registry, and reading files lazily via HTTP range requests.
 
 ## Prerequisites
 
 - Go 1.21 or later
-- A directory with files to archive
+- Access to an OCI registry (Docker Hub, ghcr.io, or a local registry)
+- Docker configured with registry credentials (for `WithDockerConfig()`)
 
 ## What We Will Build
 
 We will create a simple program that:
 1. Creates an archive from a source directory
-2. Opens the archive and reads individual files
-3. Lists directory contents
-4. Extracts files to a destination
-
-## Quick Start with Files
-
-For working directly with local files, blob provides convenient helper functions that handle file I/O automatically:
-
-```go
-package main
-
-import (
-	"context"
-	"fmt"
-	"log"
-
-	"github.com/meigma/blob"
-)
-
-func main() {
-	// Create an archive from a directory
-	blobFile, err := blob.CreateBlob(context.Background(), "./src", "./archive",
-		blob.CreateBlobWithCompression(blob.CompressionZstd),
-	)
-	if err != nil {
-		log.Fatal(err)
-	}
-	defer blobFile.Close()
-
-	// Read a file
-	content, err := blobFile.ReadFile("main.go")
-	if err != nil {
-		log.Fatal(err)
-	}
-	fmt.Printf("Content: %s\n", content)
-}
-```
-
-To open an existing archive:
-
-```go
-blobFile, err := blob.OpenFile("./archive/index.blob", "./archive/data.blob")
-if err != nil {
-	log.Fatal(err)
-}
-defer blobFile.Close()
-
-// Use like any Blob
-content, _ := blobFile.ReadFile("config.json")
-```
-
-The rest of this tutorial shows the lower-level API for more control over archive creation and data sources.
-
----
+2. Pushes the archive to an OCI registry
+3. Pulls the archive and reads files lazily
+4. Adds client caching for improved performance
 
 ## Step 1: Create a Project
 
-First, create a new directory and initialize a Go module:
+Create a new directory and initialize a Go module:
 
 ```bash
 mkdir blob-demo && cd blob-demo
@@ -86,15 +36,14 @@ Create a `main.go` file:
 package main
 
 import (
-	"bytes"
 	"context"
 	"fmt"
-	"io"
 	"log"
 	"os"
 	"path/filepath"
 
 	"github.com/meigma/blob"
+	"github.com/meigma/blob/client"
 )
 
 func main() {
@@ -111,7 +60,7 @@ func run() error {
 
 ## Step 2: Create Test Files
 
-Let's create some files to archive. Add this to your `run()` function:
+Create some files to archive. Add this to your `run()` function:
 
 ```go
 // Create a temporary source directory with test files
@@ -145,66 +94,78 @@ fmt.Printf("Created %d test files in %s\n", len(files), srcDir)
 
 ## Step 3: Create the Archive
 
-Now we will create an archive from the source directory. The archive has two parts: an index (metadata) and data (file contents).
+Create an archive from the source directory using `CreateBlob`:
 
 ```go
-// Create buffers for the archive
-var indexBuf, dataBuf bytes.Buffer
+// Create a temporary directory for the archive
+archiveDir, err := os.MkdirTemp("", "blob-archive-*")
+if err != nil {
+	return err
+}
+defer os.RemoveAll(archiveDir)
 
-// Create the archive
-err = blob.Create(context.Background(), srcDir, &indexBuf, &dataBuf)
+// Create the archive with zstd compression
+blobFile, err := blob.CreateBlob(context.Background(), srcDir, archiveDir,
+	blob.CreateBlobWithCompression(blob.CompressionZstd),
+)
 if err != nil {
 	return fmt.Errorf("create archive: %w", err)
 }
+defer blobFile.Close()
 
-fmt.Printf("Archive created: index=%d bytes, data=%d bytes\n",
-	indexBuf.Len(), dataBuf.Len())
+fmt.Printf("Archive created: %d files\n", blobFile.Len())
 ```
 
-## Step 4: Open the Archive
+## Step 4: Push to OCI Registry
 
-To read the archive, we need a ByteSource that provides random access to the data. For this tutorial, we will use an in-memory implementation:
+Push the archive to a registry. Replace the reference with your own registry:
 
 ```go
-// memSource wraps a byte slice with random access
-type memSource struct {
-	data []byte
+// Create the OCI client
+c := client.New(client.WithDockerConfig())
+
+// Push to registry
+// Replace with your registry: docker.io/username/demo:v1, ghcr.io/org/demo:v1, etc.
+ref := "localhost:5000/blob-demo:v1"  // Use a local registry for testing
+if err := c.Push(context.Background(), ref, blobFile.Blob); err != nil {
+	return fmt.Errorf("push archive: %w", err)
 }
 
-func (m *memSource) ReadAt(p []byte, off int64) (int, error) {
-	if off >= int64(len(m.data)) {
-		return 0, io.EOF
-	}
-	n := copy(p, m.data[off:])
-	return n, nil
-}
-
-func (m *memSource) Size() int64 {
-	return int64(len(m.data))
-}
+fmt.Printf("Pushed to %s\n", ref)
 ```
 
-Add this to your `run()` function:
+For local testing without a real registry, you can run a local registry:
+
+```bash
+docker run -d -p 5000:5000 --name registry registry:2
+```
+
+> **Note (macOS):** Port 5000 may conflict with AirPlay Receiver. Use port 5001 instead:
+> `docker run -d -p 5001:5000 --name registry registry:2` and update references to `localhost:5001`.
+
+And configure the client to use plain HTTP:
 
 ```go
-// Create a byte source from our data buffer
-source := &memSource{data: dataBuf.Bytes()}
+c := client.New(
+	client.WithDockerConfig(),
+	client.WithPlainHTTP(true),  // For local registries without TLS
+)
+```
 
-// Open the archive
-archive, err := blob.New(indexBuf.Bytes(), source)
+## Step 5: Pull and Read Files Lazily
+
+Pull the archive and read files. Data is fetched on demand via HTTP range requests:
+
+```go
+// Pull the archive (downloads only the small index blob)
+archive, err := c.Pull(context.Background(), ref)
 if err != nil {
-	return fmt.Errorf("open archive: %w", err)
+	return fmt.Errorf("pull archive: %w", err)
 }
 
-fmt.Printf("Archive contains %d files\n", archive.Len())
-```
+fmt.Printf("Pulled archive with %d files\n", archive.Len())
 
-## Step 5: Read Individual Files
-
-Use `ReadFile()` to read file contents:
-
-```go
-// Read a specific file
+// Read a specific file (fetches only this file's bytes via range request)
 content, err := archive.ReadFile("readme.txt")
 if err != nil {
 	return fmt.Errorf("read file: %w", err)
@@ -217,66 +178,95 @@ if err != nil {
 	return fmt.Errorf("read config: %w", err)
 }
 fmt.Printf("config/app.json: %s\n", configContent)
-```
 
-## Step 6: List Directory Contents
-
-Use `ReadDir()` to list files in a directory:
-
-```go
-// List root directory
-entries, err := archive.ReadDir(".")
+// List directory contents
+entries, err := archive.ReadDir("config")
 if err != nil {
 	return fmt.Errorf("read dir: %w", err)
 }
-
-fmt.Println("\nRoot directory:")
-for _, entry := range entries {
-	typeStr := "file"
-	if entry.IsDir() {
-		typeStr = "dir "
-	}
-	fmt.Printf("  [%s] %s\n", typeStr, entry.Name())
-}
-
-// List a subdirectory
-configEntries, err := archive.ReadDir("config")
-if err != nil {
-	return fmt.Errorf("read config dir: %w", err)
-}
-
 fmt.Println("\nconfig/ directory:")
-for _, entry := range configEntries {
+for _, entry := range entries {
 	fmt.Printf("  %s\n", entry.Name())
 }
 ```
 
-## Step 7: Extract Files
+## Step 6: Add Client Caching
 
-Use `CopyDir()` to extract files to a destination directory:
+Add OCI client caches to avoid redundant registry requests:
 
 ```go
-// Create a destination directory
-destDir, err := os.MkdirTemp("", "blob-dest-*")
+import "github.com/meigma/blob/client/cache/disk"
+
+// Create caches
+refCache, err := disk.NewRefCache("/tmp/blob-cache/refs")
 if err != nil {
 	return err
 }
-defer os.RemoveAll(destDir)
 
-// Extract all files
-err = archive.CopyDir(destDir, ".")
+manifestCache, err := disk.NewManifestCache("/tmp/blob-cache/manifests")
 if err != nil {
-	return fmt.Errorf("extract: %w", err)
+	return err
 }
 
-fmt.Printf("\nExtracted files to %s\n", destDir)
-
-// Verify extraction
-extractedContent, err := os.ReadFile(filepath.Join(destDir, "readme.txt"))
+indexCache, err := disk.NewIndexCache("/tmp/blob-cache/indexes")
 if err != nil {
-	return fmt.Errorf("read extracted: %w", err)
+	return err
 }
-fmt.Printf("Verified readme.txt: %s\n", extractedContent)
+
+// Create client with caching
+c := client.New(
+	client.WithDockerConfig(),
+	client.WithPlainHTTP(true),
+	client.WithRefCache(refCache),
+	client.WithManifestCache(manifestCache),
+	client.WithIndexCache(indexCache),
+)
+
+// Second pull will use cached data
+archive, err := c.Pull(context.Background(), ref)
+if err != nil {
+	return err
+}
+fmt.Printf("Pulled (cached): %d files\n", archive.Len())
+```
+
+## Step 7: Add Content Caching (Optional)
+
+For repeated file access, add content-level caching. Pass the cache when pulling the archive:
+
+```go
+import (
+	"github.com/meigma/blob"
+	"github.com/meigma/blob/cache/disk"
+)
+
+// Create content cache
+contentCache, err := disk.New("/tmp/blob-cache/content")
+if err != nil {
+	return err
+}
+
+// Pull with content caching enabled
+archive, err := c.Pull(context.Background(), ref,
+	client.WithBlobOptions(blob.WithCache(contentCache)),
+)
+if err != nil {
+	return err
+}
+
+// First read: fetches via network, caches result
+content, err := archive.ReadFile("src/main.go")
+if err != nil {
+	return err
+}
+fmt.Printf("First read: %s\n", content)
+
+// Second read: returns from cache, no network request
+content, err = archive.ReadFile("src/main.go")
+if err != nil {
+	return err
+}
+fmt.Printf("Second read (cached): %s\n", content)
 ```
 
 ## Complete Example
@@ -287,13 +277,186 @@ Here is the complete program:
 package main
 
 import (
-	"bytes"
 	"context"
 	"fmt"
-	"io"
 	"log"
 	"os"
 	"path/filepath"
+
+	"github.com/meigma/blob"
+	contentdisk "github.com/meigma/blob/cache/disk"
+	"github.com/meigma/blob/client"
+	"github.com/meigma/blob/client/cache/disk"
+)
+
+func main() {
+	if err := run(); err != nil {
+		log.Fatal(err)
+	}
+}
+
+func run() error {
+	ctx := context.Background()
+
+	// Step 1: Create test files
+	srcDir, err := os.MkdirTemp("", "blob-src-*")
+	if err != nil {
+		return err
+	}
+	defer os.RemoveAll(srcDir)
+
+	files := map[string]string{
+		"readme.txt":       "Welcome to the blob demo!",
+		"config/app.json":  `{"name": "demo", "version": "1.0"}`,
+		"config/db.json":   `{"host": "localhost", "port": 5432}`,
+		"src/main.go":      "package main\n\nfunc main() {}\n",
+		"src/utils/log.go": "package utils\n\nfunc Log(msg string) {}\n",
+	}
+
+	for path, content := range files {
+		fullPath := filepath.Join(srcDir, path)
+		if err := os.MkdirAll(filepath.Dir(fullPath), 0o755); err != nil {
+			return err
+		}
+		if err := os.WriteFile(fullPath, []byte(content), 0o644); err != nil {
+			return err
+		}
+	}
+	fmt.Printf("Created %d test files\n", len(files))
+
+	// Step 2: Create the archive
+	archiveDir, err := os.MkdirTemp("", "blob-archive-*")
+	if err != nil {
+		return err
+	}
+	defer os.RemoveAll(archiveDir)
+
+	blobFile, err := blob.CreateBlob(ctx, srcDir, archiveDir,
+		blob.CreateBlobWithCompression(blob.CompressionZstd),
+	)
+	if err != nil {
+		return fmt.Errorf("create archive: %w", err)
+	}
+	defer blobFile.Close()
+	fmt.Printf("Archive created: %d files\n", blobFile.Len())
+
+	// Step 3: Create cached client with content caching
+	refCache, _ := disk.NewRefCache("/tmp/blob-cache/refs")
+	manifestCache, _ := disk.NewManifestCache("/tmp/blob-cache/manifests")
+	indexCache, _ := disk.NewIndexCache("/tmp/blob-cache/indexes")
+	contentCache, _ := contentdisk.New("/tmp/blob-cache/content")
+
+	c := client.New(
+		client.WithDockerConfig(),
+		client.WithPlainHTTP(true), // For local registry
+		client.WithRefCache(refCache),
+		client.WithManifestCache(manifestCache),
+		client.WithIndexCache(indexCache),
+	)
+
+	// Step 4: Push to registry
+	ref := "localhost:5000/blob-demo:v1"
+	if err := c.Push(ctx, ref, blobFile.Blob); err != nil {
+		return fmt.Errorf("push: %w", err)
+	}
+	fmt.Printf("Pushed to %s\n", ref)
+
+	// Step 5: Pull with content caching enabled
+	archive, err := c.Pull(ctx, ref,
+		client.WithBlobOptions(blob.WithCache(contentCache)),
+	)
+	if err != nil {
+		return fmt.Errorf("pull: %w", err)
+	}
+	fmt.Printf("Pulled: %d files\n", archive.Len())
+
+	// Step 6: Read files (uses content cache automatically)
+	content, _ := archive.ReadFile("readme.txt")
+	fmt.Printf("\nreadme.txt: %s\n", content)
+
+	entries, _ := archive.ReadDir("config")
+	fmt.Println("\nconfig/ directory:")
+	for _, entry := range entries {
+		fmt.Printf("  %s\n", entry.Name())
+	}
+
+	return nil
+}
+```
+
+Run the program (with a local registry running):
+
+```bash
+# Start local registry
+docker run -d -p 5000:5000 --name registry registry:2
+
+# Run the demo
+go run main.go
+```
+
+Expected output:
+
+```
+Created 5 test files
+Archive created: 5 files
+Pushed to localhost:5000/blob-demo:v1
+Pulled: 5 files
+
+readme.txt: Welcome to the blob demo!
+
+config/ directory:
+  app.json
+  db.json
+```
+
+## Next Steps
+
+Now that you have the basics, explore these guides:
+
+- [OCI Client](guides/oci-client) - Authentication options and advanced client usage
+- [OCI Client Caching](guides/oci-client-caching) - Configure client cache tiers
+- [Creating Archives](guides/creating-archives) - Compression, change detection, and file limits
+- [Caching](guides/caching) - Content caching for file deduplication
+- [Extracting Files](guides/extraction) - Advanced extraction options
+- [Performance Tuning](guides/performance-tuning) - Optimize for your workload
+
+---
+
+## Lower-Level API
+
+For more control over archive creation and data sources, use the lower-level APIs:
+
+### Create API
+
+Write index and data to separate writers:
+
+```go
+import (
+	"bytes"
+	"context"
+
+	"github.com/meigma/blob"
+)
+
+var indexBuf, dataBuf bytes.Buffer
+
+err := blob.Create(context.Background(), srcDir, &indexBuf, &dataBuf,
+	blob.CreateWithCompression(blob.CompressionZstd),
+)
+if err != nil {
+	return err
+}
+
+fmt.Printf("Index: %d bytes, Data: %d bytes\n", indexBuf.Len(), dataBuf.Len())
+```
+
+### New API
+
+Create a Blob from index data and a ByteSource:
+
+```go
+import (
+	"io"
 
 	"github.com/meigma/blob"
 )
@@ -315,164 +478,28 @@ func (m *memSource) Size() int64 {
 	return int64(len(m.data))
 }
 
-func main() {
-	if err := run(); err != nil {
-		log.Fatal(err)
-	}
+func (m *memSource) SourceID() string {
+	return "memory"
 }
 
-func run() error {
-	// Create a temporary source directory with test files
-	srcDir, err := os.MkdirTemp("", "blob-src-*")
-	if err != nil {
-		return err
-	}
-	defer os.RemoveAll(srcDir)
-
-	// Create some test files
-	files := map[string]string{
-		"readme.txt":       "Welcome to the blob demo!",
-		"config/app.json":  `{"name": "demo", "version": "1.0"}`,
-		"config/db.json":   `{"host": "localhost", "port": 5432}`,
-		"src/main.go":      "package main\n\nfunc main() {}\n",
-		"src/utils/log.go": "package utils\n\nfunc Log(msg string) {}\n",
-	}
-
-	for path, content := range files {
-		fullPath := filepath.Join(srcDir, path)
-		if err := os.MkdirAll(filepath.Dir(fullPath), 0o755); err != nil {
-			return err
-		}
-		if err := os.WriteFile(fullPath, []byte(content), 0o644); err != nil {
-			return err
-		}
-	}
-
-	fmt.Printf("Created %d test files in %s\n", len(files), srcDir)
-
-	// Create buffers for the archive
-	var indexBuf, dataBuf bytes.Buffer
-
-	// Create the archive
-	err = blob.Create(context.Background(), srcDir, &indexBuf, &dataBuf)
-	if err != nil {
-		return fmt.Errorf("create archive: %w", err)
-	}
-
-	fmt.Printf("Archive created: index=%d bytes, data=%d bytes\n",
-		indexBuf.Len(), dataBuf.Len())
-
-	// Create a byte source from our data buffer
-	source := &memSource{data: dataBuf.Bytes()}
-
-	// Open the archive
-	archive, err := blob.New(indexBuf.Bytes(), source)
-	if err != nil {
-		return fmt.Errorf("open archive: %w", err)
-	}
-
-	fmt.Printf("Archive contains %d files\n", archive.Len())
-
-	// Read a specific file
-	content, err := archive.ReadFile("readme.txt")
-	if err != nil {
-		return fmt.Errorf("read file: %w", err)
-	}
-	fmt.Printf("readme.txt: %s\n", content)
-
-	// Read another file
-	configContent, err := archive.ReadFile("config/app.json")
-	if err != nil {
-		return fmt.Errorf("read config: %w", err)
-	}
-	fmt.Printf("config/app.json: %s\n", configContent)
-
-	// List root directory
-	entries, err := archive.ReadDir(".")
-	if err != nil {
-		return fmt.Errorf("read dir: %w", err)
-	}
-
-	fmt.Println("\nRoot directory:")
-	for _, entry := range entries {
-		typeStr := "file"
-		if entry.IsDir() {
-			typeStr = "dir "
-		}
-		fmt.Printf("  [%s] %s\n", typeStr, entry.Name())
-	}
-
-	// List a subdirectory
-	configEntries, err := archive.ReadDir("config")
-	if err != nil {
-		return fmt.Errorf("read config dir: %w", err)
-	}
-
-	fmt.Println("\nconfig/ directory:")
-	for _, entry := range configEntries {
-		fmt.Printf("  %s\n", entry.Name())
-	}
-
-	// Create a destination directory
-	destDir, err := os.MkdirTemp("", "blob-dest-*")
-	if err != nil {
-		return err
-	}
-	defer os.RemoveAll(destDir)
-
-	// Extract all files
-	err = archive.CopyDir(destDir, ".")
-	if err != nil {
-		return fmt.Errorf("extract: %w", err)
-	}
-
-	fmt.Printf("\nExtracted files to %s\n", destDir)
-
-	// Verify extraction
-	extractedContent, err := os.ReadFile(filepath.Join(destDir, "readme.txt"))
-	if err != nil {
-		return fmt.Errorf("read extracted: %w", err)
-	}
-	fmt.Printf("Verified readme.txt: %s\n", extractedContent)
-
-	return nil
+// Create blob from index and data
+source := &memSource{data: dataBuf.Bytes()}
+archive, err := blob.New(indexBuf.Bytes(), source)
+if err != nil {
+	return err
 }
 ```
 
-Run the program:
+### OpenFile API
 
-```bash
-go run main.go
+Open local archive files directly:
+
+```go
+blobFile, err := blob.OpenFile("./archive/index.blob", "./archive/data.blob")
+if err != nil {
+	return err
+}
+defer blobFile.Close()
+
+content, _ := blobFile.ReadFile("config.json")
 ```
-
-Expected output:
-
-```
-Created 5 test files in /tmp/blob-src-123456
-Archive created: index=680 bytes, data=162 bytes
-Archive contains 5 files
-readme.txt: Welcome to the blob demo!
-config/app.json: {"name": "demo", "version": "1.0"}
-
-Root directory:
-  [dir ] config
-  [file] readme.txt
-  [dir ] src
-
-config/ directory:
-  app.json
-  db.json
-
-Extracted files to /tmp/blob-dest-789012
-Verified readme.txt: Welcome to the blob demo!
-```
-
-## Next Steps
-
-Now that you have the basics, explore these guides:
-
-- [Creating Archives](guides/creating-archives) - Compression, change detection, and file limits
-- [Working with Remote Archives](guides/remote-archives) - Access archives via HTTP range requests
-- [Caching](guides/caching) - Speed up repeated access with content-addressed caching
-- [Extracting Files](guides/extraction) - Advanced extraction options
-- [Performance Tuning](guides/performance-tuning) - Optimize for your workload
