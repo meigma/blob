@@ -33,22 +33,17 @@ import rego.v1
 # Default: deny unless explicitly allowed
 default allow := false
 
-# Trusted GitHub-hosted runner builder IDs
-trusted_builders := {
-	"https://github.com/actions/runner/github-hosted",
-}
-
 # Allowed repository organizations (customize for your org)
 # Set to empty to allow any repository
 allowed_orgs := {
 	"meigma",
 }
 
-# Allow if we have a valid SLSA provenance from a trusted builder
+# Allow if we have a valid SLSA provenance from a GitHub Actions workflow
 allow if {
 	some att in input.attestations
 	is_slsa_provenance(att)
-	is_trusted_builder(att)
+	is_github_actions_builder(att)
 	is_allowed_repository(att)
 }
 
@@ -61,10 +56,13 @@ is_slsa_provenance(att) if {
 	att.predicateType == "https://slsa.dev/provenance/v0.2"
 }
 
-# Check if the builder is trusted
-is_trusted_builder(att) if {
+# Check if the builder is a GitHub Actions workflow
+# GitHub attestations use the workflow path as the builder ID:
+# e.g., "https://github.com/org/repo/.github/workflows/name.yml@refs/..."
+is_github_actions_builder(att) if {
 	builder_id := att.predicate.runDetails.builder.id
-	builder_id in trusted_builders
+	startswith(builder_id, "https://github.com/")
+	contains(builder_id, "/.github/workflows/")
 }
 
 # Check if the source repository is from an allowed organization
@@ -102,16 +100,16 @@ deny contains msg if {
 deny contains msg if {
 	some att in input.attestations
 	is_slsa_provenance(att)
-	not is_trusted_builder(att)
+	not is_github_actions_builder(att)
 	builder_id := att.predicate.runDetails.builder.id
-	msg := sprintf("untrusted builder: %s", [builder_id])
+	msg := sprintf("not a GitHub Actions builder: %s", [builder_id])
 }
 
 deny contains msg if {
 	count(allowed_orgs) > 0
 	some att in input.attestations
 	is_slsa_provenance(att)
-	is_trusted_builder(att)
+	is_github_actions_builder(att)
 	not is_allowed_repository(att)
 	repo := get_repository(att)
 	msg := sprintf("repository not in allowed organizations: %s", [repo])

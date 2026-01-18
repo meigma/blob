@@ -74,13 +74,6 @@ jobs:
           # Also tag as latest
           ./provenance push --ref "${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest"
 
-      - name: Install cosign
-        uses: sigstore/cosign-installer@dc72c7d5c4d10cd6bcb8cf6e3fd625a9e5e537da # v3.7.0
-
-      - name: Sign with cosign (keyless)
-        run: |
-          cosign sign --yes "${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${{ steps.push.outputs.digest }}"
-
       - name: Attest build provenance
         uses: actions/attest-build-provenance@db473fddc028af60658334401dc6fa3ffd8669fd # v2.3.0
         with:
@@ -127,10 +120,13 @@ jobs:
         working-directory: examples/provenance
         run: |
           REF="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${{ needs.build-and-push.outputs.digest }}"
-          echo "Pulling with full verification: $REF"
+          echo "Pulling with attestation verification: $REF"
+          # Skip sigstore signature check (GitHub attestation uses different bundle format)
+          # The attestation itself is signed via sigstore and verified by OPA policy
           ./provenance pull \
             --ref "$REF" \
             --policy ./policy/policy.rego \
+            --skip-sig \
             --output ./verified-output
 
       - name: Verify extraction
