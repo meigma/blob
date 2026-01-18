@@ -435,6 +435,41 @@ func TestParseAttestation_ValidDSSE(t *testing.T) {
 	assert.NotNil(t, att.Predicate)
 }
 
+func TestParseAttestation_SigstoreBundle(t *testing.T) {
+	t.Parallel()
+
+	statement := createSLSAStatement("https://github.com/myorg/myrepo/.github/workflows/ci.yml@refs/heads/main")
+	payload, _ := json.Marshal(statement)
+
+	// Create a Sigstore bundle that wraps the DSSE envelope
+	bundle := map[string]any{
+		"mediaType": SigstoreBundleArtifactType,
+		"verificationMaterial": map[string]any{
+			"timestampVerificationData": map[string]any{},
+		},
+		"dsseEnvelope": map[string]any{
+			"payloadType": "application/vnd.in-toto+json",
+			"payload":     base64.StdEncoding.EncodeToString(payload),
+			"signatures":  []any{},
+		},
+	}
+	data, _ := json.Marshal(bundle)
+
+	att, err := parseAttestation(data)
+	require.NoError(t, err)
+	assert.Equal(t, "https://in-toto.io/Statement/v1", att.Type)
+	assert.Equal(t, "https://slsa.dev/provenance/v1", att.PredicateType)
+	assert.Len(t, att.Subject, 1)
+	require.NotNil(t, att.Predicate)
+
+	// Verify the builder ID is extracted correctly
+	runDetails, ok := att.Predicate["runDetails"].(map[string]any)
+	require.True(t, ok)
+	builder, ok := runDetails["builder"].(map[string]any)
+	require.True(t, ok)
+	assert.Equal(t, "https://github.com/myorg/myrepo/.github/workflows/ci.yml@refs/heads/main", builder["id"])
+}
+
 func TestParseAttestation_InvalidJSON(t *testing.T) {
 	t.Parallel()
 

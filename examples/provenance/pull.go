@@ -139,7 +139,11 @@ func buildOPAPolicy(policyPath string) (*opa.Policy, error) {
 	}
 
 	fmt.Printf("Loading attestation policy from %s\n", policyPath)
-	policy, err := opa.NewPolicy(opa.WithPolicyFile(policyPath))
+	// Use Sigstore bundle artifact type for GitHub attestations
+	policy, err := opa.NewPolicy(
+		opa.WithPolicyFile(policyPath),
+		opa.WithArtifactType(opa.SigstoreBundleArtifactType),
+	)
 	if err != nil {
 		return nil, fmt.Errorf("create OPA policy: %w", err)
 	}

@@ -4,12 +4,16 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"slices"
 
 	"github.com/secure-systems-lab/go-securesystemslib/dsse"
 )
 
 // DSSEPayloadType is the expected payload type for in-toto statements.
 const DSSEPayloadType = "application/vnd.in-toto+json"
+
+// SigstoreBundleArtifactType is the OCI artifact type for Sigstore bundles.
+const SigstoreBundleArtifactType = "application/vnd.dev.sigstore.bundle.v0.3+json"
 
 // inTotoStatement represents an in-toto statement structure.
 type inTotoStatement struct {
@@ -25,15 +29,34 @@ type inTotoSubject struct {
 	Digest map[string]string `json:"digest"`
 }
 
-// parseAttestation extracts an in-toto statement from a DSSE envelope.
+// sigstoreBundle represents a Sigstore bundle that wraps a DSSE envelope.
+// This is the format used by GitHub's actions/attest-build-provenance action.
+type sigstoreBundle struct {
+	MediaType    string        `json:"mediaType"`
+	DSSEEnvelope dsse.Envelope `json:"dsseEnvelope"`
+}
+
+// parseAttestation extracts an in-toto statement from either a DSSE envelope
+// or a Sigstore bundle (which wraps a DSSE envelope).
 // Returns the parsed attestation input or an error if parsing fails.
 func parseAttestation(data []byte) (*AttestationInput, error) {
-	// Try to parse as DSSE envelope first
+	// Try to parse as Sigstore bundle first
+	var bundle sigstoreBundle
+	if err := json.Unmarshal(data, &bundle); err == nil && bundle.DSSEEnvelope.Payload != "" {
+		return parseDSSEEnvelope(&bundle.DSSEEnvelope)
+	}
+
+	// Fall back to plain DSSE envelope
 	var envelope dsse.Envelope
 	if err := json.Unmarshal(data, &envelope); err != nil {
 		return nil, fmt.Errorf("%w: failed to parse DSSE envelope: %v", ErrInvalidAttestation, err)
 	}
 
+	return parseDSSEEnvelope(&envelope)
+}
+
+// parseDSSEEnvelope extracts an in-toto statement from a DSSE envelope.
+func parseDSSEEnvelope(envelope *dsse.Envelope) (*AttestationInput, error) {
 	// Validate payload type
 	if envelope.PayloadType != DSSEPayloadType {
 		return nil, fmt.Errorf("%w: unexpected payload type %q, expected %q",
@@ -79,10 +102,5 @@ func matchesPredicateType(att *AttestationInput, acceptedTypes []string) bool {
 	if len(acceptedTypes) == 0 {
 		return true
 	}
-	for _, t := range acceptedTypes {
-		if att.PredicateType == t {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(acceptedTypes, att.PredicateType)
 }
