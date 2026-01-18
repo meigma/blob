@@ -60,21 +60,15 @@ This is an inherent limitation of whole-file hashing. Partial verification would
 
 ## Cache Hit Semantics
 
-Content-addressed caching fundamentally changes verification semantics. When the cache returns content for a given hash, that content is implicitly verified.
+Content-addressed caching uses the content hash as the lookup key. In theory, if the cache returns content for hash X, that content must have hash X by definition—re-computing the hash would produce the same answer.
 
-### Why Cache Hits Skip Verification
+### Defense in Depth
 
-The cache lookup key is the hash itself. If the cache returns content for hash X, that content must have hash X by definition. Re-computing the hash would produce the same answer because the lookup already established what the content is.
+Despite the theoretical guarantee of content-addressed storage, blob does not blindly trust cached content. The default implementation validates file content on every read, including cache hits. As bytes are read from a cached file, blob computes the SHA256 hash incrementally and verifies it against the expected hash when the read completes.
 
-This is not merely an optimization. It reflects the semantics of content-addressed storage: the address (hash) defines the content. Asking "does this content match its hash?" is equivalent to asking "is X equal to X?" The answer is yes by definition.
+If a cached file has been corrupted—whether by filesystem errors, bitrot, or tampering—the hash verification fails and blob returns `ErrHashMismatch`. Additionally, blob automatically deletes the corrupted cache entry, allowing subsequent reads to re-fetch and re-cache the correct content. This self-healing behavior means transient cache corruption does not require manual intervention.
 
-### Trust in the Cache
-
-This reasoning depends on trusting the cache implementation. A cache that returns incorrect content for a given hash would violate the invariant that enables skipping verification. Blob's cache interface does not mandate any particular implementation, so the trust assumption falls on whichever cache is configured.
-
-The disk cache implementation stores files named by their hash, so filesystem integrity protects cache integrity. If the filesystem corrupts a cached file, subsequent reads may return incorrect content, but this would require filesystem-level failures that are rare on modern systems.
-
-For deployments with strict integrity requirements, caches could implement additional safeguards like checksums in metadata or periodic validation. These are not required by the interface but could be added by specific implementations.
+This verification-on-read approach ensures that even if the filesystem corrupts a cached file, blob detects and recovers from the corruption transparently.
 
 ### Cache Population
 
@@ -85,6 +79,10 @@ The verification-before-caching guarantee means cache entries are trustworthy as
 ## OCI Integration
 
 Blob's integrity model integrates with OCI's existing infrastructure to provide a complete chain of trust from source to consumption.
+
+:::tip Practical Guide
+For step-by-step instructions on implementing signature verification and provenance policies, see the [Provenance & Signing](../guides/provenance) guide.
+:::
 
 ### The Integrity Chain
 
@@ -101,9 +99,28 @@ The index blob contains per-file hashes. Anyone who trusts the index (via the ma
 
 This chain means tampering at any level invalidates the entire chain. Modifying a file changes its hash, which breaks verification against the index. Modifying the index changes its digest, which breaks verification against the manifest. Modifying the manifest invalidates its signature.
 
+### Sigstore Signing
+
+Blob includes built-in support for Sigstore signature verification via the `policy/sigstore` package. Sigstore provides keyless signing using OIDC identity tokens, which is particularly useful for CI/CD pipelines like GitHub Actions.
+
+When pulling an archive with a Sigstore policy configured, the client:
+
+1. Fetches the manifest from the registry
+2. Queries for Sigstore bundle referrers attached to the manifest
+3. Verifies the bundle against the Sigstore public good instance (or a custom trusted root)
+4. Optionally validates that the signer matches an expected identity (issuer + subject)
+
+If verification fails, the pull is rejected before any file content is fetched.
+
 ### SLSA Provenance
 
 The OCI referrers API allows attaching attestations to artifacts. SLSA provenance attestations can describe how an archive was built: what inputs went in, what build system produced it, and what controls were in place. These attestations attach to the manifest as referrers.
+
+Blob includes an OPA-based policy engine (`policy/opa`) for validating these attestations. Policies are written in Rego and can enforce requirements such as:
+
+- Builds must come from specific GitHub organizations
+- Only certain CI/CD workflows are trusted
+- Specific builder identities are required
 
 Consumers can query referrers to discover attestations and verify that an archive meets their provenance requirements. The integrity chain ensures that verified provenance applies to the actual content received, not just to some abstract artifact identity.
 

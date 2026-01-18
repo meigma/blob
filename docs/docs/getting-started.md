@@ -420,6 +420,45 @@ Now that you have the basics, explore these guides:
 - [Extracting Files](guides/extraction) - Advanced extraction options
 - [Performance Tuning](guides/performance-tuning) - Optimize for your workload
 
+## Production Security
+
+For production deployments, add supply chain security to verify archive provenance:
+
+```go
+import (
+    "github.com/meigma/blob/client"
+    "github.com/meigma/blob/policy/sigstore"
+    "github.com/meigma/blob/policy/opa"
+)
+
+// Verify Sigstore signatures
+sigPolicy, _ := sigstore.NewPolicy(
+    sigstore.WithIdentity(
+        "https://token.actions.githubusercontent.com",
+        "https://github.com/myorg/myrepo/.github/workflows/release.yml@refs/heads/main",
+    ),
+)
+
+// Validate SLSA provenance with OPA
+opaPolicy, _ := opa.NewPolicy(
+    opa.WithPolicyFile("./policy.rego"),
+)
+
+// Create client with both policies
+c := client.New(
+    client.WithDockerConfig(),
+    client.WithPolicy(sigPolicy),
+    client.WithPolicy(opaPolicy),
+)
+
+// Pull rejects archives that fail verification
+archive, err := c.Pull(ctx, ref)
+```
+
+This ensures archives are signed by trusted identities and built through authorized CI/CD pipelines.
+
+See the [Provenance & Signing](guides/provenance) guide for complete implementation details, including OPA policy examples and CI/CD integration.
+
 ---
 
 ## Lower-Level API
