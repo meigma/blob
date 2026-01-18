@@ -86,6 +86,10 @@ The verification-before-caching guarantee means cache entries are trustworthy as
 
 Blob's integrity model integrates with OCI's existing infrastructure to provide a complete chain of trust from source to consumption.
 
+:::tip Practical Guide
+For step-by-step instructions on implementing signature verification and provenance policies, see the [Provenance & Signing](../guides/provenance) guide.
+:::
+
 ### The Integrity Chain
 
 ```
@@ -101,9 +105,28 @@ The index blob contains per-file hashes. Anyone who trusts the index (via the ma
 
 This chain means tampering at any level invalidates the entire chain. Modifying a file changes its hash, which breaks verification against the index. Modifying the index changes its digest, which breaks verification against the manifest. Modifying the manifest invalidates its signature.
 
+### Sigstore Signing
+
+Blob includes built-in support for Sigstore signature verification via the `policy/sigstore` package. Sigstore provides keyless signing using OIDC identity tokens, which is particularly useful for CI/CD pipelines like GitHub Actions.
+
+When pulling an archive with a Sigstore policy configured, the client:
+
+1. Fetches the manifest from the registry
+2. Queries for Sigstore bundle referrers attached to the manifest
+3. Verifies the bundle against the Sigstore public good instance (or a custom trusted root)
+4. Optionally validates that the signer matches an expected identity (issuer + subject)
+
+If verification fails, the pull is rejected before any file content is fetched.
+
 ### SLSA Provenance
 
 The OCI referrers API allows attaching attestations to artifacts. SLSA provenance attestations can describe how an archive was built: what inputs went in, what build system produced it, and what controls were in place. These attestations attach to the manifest as referrers.
+
+Blob includes an OPA-based policy engine (`policy/opa`) for validating these attestations. Policies are written in Rego and can enforce requirements such as:
+
+- Builds must come from specific GitHub organizations
+- Only certain CI/CD workflows are trusted
+- Specific builder identities are required
 
 Consumers can query referrers to discover attestations and verify that an archive meets their provenance requirements. The integrity chain ensures that verified provenance applies to the actual content received, not just to some abstract artifact identity.
 
