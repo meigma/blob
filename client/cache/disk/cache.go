@@ -14,6 +14,7 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	digest "github.com/opencontainers/go-digest"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
@@ -29,6 +30,7 @@ type config struct {
 	shardPrefixLen int
 	dirPerm        os.FileMode
 	maxBytes       int64
+	refTTL         time.Duration
 }
 
 // Option configures a disk cache.
@@ -57,6 +59,14 @@ func WithMaxBytes(n int64) Option {
 	}
 }
 
+// WithRefCacheTTL sets the time-to-live for ref cache entries.
+// Use 0 to disable TTL expiration.
+func WithRefCacheTTL(ttl time.Duration) Option {
+	return func(c *config) {
+		c.refTTL = ttl
+	}
+}
+
 func defaultConfig() config {
 	return config{
 		shardPrefixLen: defaultShardPrefixLen,
@@ -73,11 +83,13 @@ type RefCache struct {
 	shardPrefixLen int
 	dirPerm        os.FileMode
 	maxBytes       int64
+	ttl            time.Duration
 	bytes          atomic.Int64
 	pruneMu        sync.Mutex
 }
 
 // NewRefCache creates a disk-backed ref cache rooted at dir.
+// Use WithRefCacheTTL to set a maximum age for cached entries.
 func NewRefCache(dir string, opts ...Option) (*RefCache, error) {
 	if dir == "" {
 		return nil, errors.New("cache dir is empty")
@@ -92,6 +104,9 @@ func NewRefCache(dir string, opts ...Option) (*RefCache, error) {
 	if cfg.maxBytes < 0 {
 		return nil, errors.New("max bytes must be >= 0")
 	}
+	if cfg.refTTL < 0 {
+		return nil, errors.New("ref cache ttl must be >= 0")
+	}
 	if err := os.MkdirAll(dir, cfg.dirPerm); err != nil {
 		return nil, err
 	}
@@ -100,6 +115,7 @@ func NewRefCache(dir string, opts ...Option) (*RefCache, error) {
 		shardPrefixLen: cfg.shardPrefixLen,
 		dirPerm:        cfg.dirPerm,
 		maxBytes:       cfg.maxBytes,
+		ttl:            cfg.refTTL,
 	}
 	if size, err := dirSize(dir); err == nil {
 		c.bytes.Store(size)
@@ -113,6 +129,7 @@ func NewRefCache(dir string, opts ...Option) (*RefCache, error) {
 //
 // The cached digest is validated to match the expected algorithm:hex format.
 // Invalid entries are automatically deleted to prevent cache poisoning.
+// Entries older than the configured TTL are treated as cache misses.
 func (c *RefCache) GetDigest(ref string) (digest string, ok bool) {
 	path := c.path(ref)
 	root, err := os.OpenRoot(c.dir)
@@ -120,6 +137,17 @@ func (c *RefCache) GetDigest(ref string) (digest string, ok bool) {
 		return "", false
 	}
 	defer root.Close()
+
+	if c.ttl > 0 {
+		info, err := root.Stat(path)
+		if err != nil {
+			return "", false
+		}
+		if time.Since(info.ModTime()) > c.ttl {
+			_ = c.deleteByPath(root, path)
+			return "", false
+		}
+	}
 
 	data, err := root.ReadFile(path)
 	if err != nil {
