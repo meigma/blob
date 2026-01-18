@@ -1,0 +1,9 @@
+This is sample data for the provenance example.
+
+It demonstrates that blob archives can contain arbitrary file hierarchies
+that are compressed and stored efficiently in OCI registries.
+
+When pulled with provenance verification, these files are guaranteed to:
+1. Come from a signed and verified source
+2. Have valid SLSA provenance attestations
+3. Match the expected builder and repository policies
