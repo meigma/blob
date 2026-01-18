@@ -47,6 +47,24 @@ BLOB_BENCH_HTTP=1 go test -run='^$' -bench=BenchmarkBlobReadFileHTTPMatrix -benc
 BLOB_BENCH_HTTP=1 go test -run='^$' -bench=BenchmarkBlobCopyDirHTTPMatrix -benchmem
 ```
 
+## OCI registry benchmarks (client module)
+
+The client module includes an end-to-end OCI flow benchmark that spins up
+`registry:2` via testcontainers. It is gated by `BLOB_BENCH_OCI=1` and requires
+Docker.
+
+```bash
+cd client
+BLOB_BENCH_OCI=1 go test -run='^$' -bench=BenchmarkOCIFlow -benchmem ./...
+```
+
+Cache impact on pull + read:
+
+```bash
+cd client
+BLOB_BENCH_OCI=1 go test -run='^$' -bench=BenchmarkOCIPullCache -benchmem ./...
+```
+
 ## Benchmark -> regression -> profiler flow
 
 1) Capture a baseline and a change run, then compare with benchstat:

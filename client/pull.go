@@ -54,8 +54,23 @@ func (c *Client) Pull(ctx context.Context, ref string, opts ...PullOption) (*blo
 			if cfg.maxIndexSize > 0 && int64(len(cached)) > cfg.maxIndexSize {
 				return nil, fmt.Errorf("read index blob: %w", fmt.Errorf("index blob too large: %d > %d", len(cached), cfg.maxIndexSize))
 			}
-			indexData = cached
-			fromCache = true
+			cacheValid := true
+			if indexDesc.Size > 0 && int64(len(cached)) != indexDesc.Size {
+				cacheValid = false
+			}
+			if cacheValid {
+				if err := indexDesc.Digest.Validate(); err != nil {
+					cacheValid = false
+				} else if indexDesc.Digest.Algorithm().FromBytes(cached) != indexDesc.Digest {
+					cacheValid = false
+				}
+			}
+			if cacheValid {
+				indexData = cached
+				fromCache = true
+			} else {
+				_ = c.indexCache.Delete(indexDigest)
+			}
 		}
 	}
 
