@@ -6,11 +6,6 @@ on:
       - main
     paths:
       - 'examples/provenance/**'
-  pull_request:
-    paths:
-      - 'examples/provenance/**'
-      - 'policy/**'
-      - '.github/workflows/provenance.yml'
   workflow_dispatch:
 
 permissions:

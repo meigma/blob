@@ -3,11 +3,13 @@ package sigstore
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
 
 	"github.com/meigma/blob/client"
+	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/sigstore/sigstore-go/pkg/bundle"
 	"github.com/sigstore/sigstore-go/pkg/root"
 	"github.com/sigstore/sigstore-go/pkg/verify"
@@ -84,7 +86,7 @@ func (p *Policy) Evaluate(ctx context.Context, req client.PolicyRequest) error {
 			continue
 		}
 
-		if err := p.verifyBundle(bundleData, payload); err != nil {
+		if err := p.verifyBundleData(ctx, req, bundleData, payload); err != nil {
 			lastErr = err
 			continue
 		}
@@ -97,6 +99,64 @@ func (p *Policy) Evaluate(ctx context.Context, req client.PolicyRequest) error {
 		return fmt.Errorf("sigstore: verification failed: %w", lastErr)
 	}
 	return errors.New("sigstore: no valid signatures found")
+}
+
+type ociArtifactManifest struct {
+	SchemaVersion int                  `json:"schemaVersion"`
+	MediaType     string               `json:"mediaType,omitempty"`
+	Layers        []ocispec.Descriptor `json:"layers,omitempty"`
+	Blobs         []ocispec.Descriptor `json:"blobs,omitempty"`
+}
+
+func parseOCIArtifactLayers(data []byte) ([]ocispec.Descriptor, bool, error) {
+	var manifest ociArtifactManifest
+	if err := json.Unmarshal(data, &manifest); err != nil {
+		return nil, false, nil
+	}
+	if manifest.SchemaVersion != 2 {
+		return nil, false, nil
+	}
+
+	layers := manifest.Layers
+	if len(layers) == 0 {
+		layers = manifest.Blobs
+	}
+	if len(layers) == 0 {
+		return nil, true, errors.New("sigstore: manifest contains no layers")
+	}
+
+	return layers, true, nil
+}
+
+func (p *Policy) verifyBundleData(ctx context.Context, req client.PolicyRequest, data, payload []byte) error {
+	layers, ok, err := parseOCIArtifactLayers(data)
+	if err != nil {
+		return err
+	}
+	if ok {
+		var lastErr error
+		for _, layer := range layers {
+			layerData, err := req.Client.FetchDescriptor(ctx, req.Ref, layer)
+			if err != nil {
+				lastErr = fmt.Errorf("sigstore: fetch bundle layer: %w", err)
+				continue
+			}
+
+			if err := p.verifyBundle(layerData, payload); err != nil {
+				lastErr = err
+				continue
+			}
+
+			return nil
+		}
+
+		if lastErr != nil {
+			return lastErr
+		}
+		return errors.New("sigstore: no valid bundle layers found")
+	}
+
+	return p.verifyBundle(data, payload)
 }
 
 // verifyBundle verifies a sigstore bundle against the payload.
