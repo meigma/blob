@@ -21,4 +21,10 @@ var (
 
 	// ErrDigestMismatch is returned when content does not match its expected digest.
 	ErrDigestMismatch = errors.New("client: digest mismatch")
+
+	// ErrPolicyViolation is returned when a policy rejects a manifest.
+	ErrPolicyViolation = errors.New("client: policy violation")
+
+	// ErrReferrersUnsupported is returned when referrers are not supported by the OCI client.
+	ErrReferrersUnsupported = errors.New("client: referrers unsupported")
 )

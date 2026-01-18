@@ -30,7 +30,25 @@ func (c *Client) Fetch(ctx context.Context, ref string, opts ...FetchOption) (*B
 	}
 
 	// Step 2: Get manifest by digest (cache or network)
-	return c.fetchManifestByDigest(ctx, ref, digestStr, cfg.skipCache)
+	manifest, raw, fromCache, err := c.fetchManifestByDigest(ctx, ref, digestStr, cfg.skipCache)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := c.evaluatePolicies(ctx, ref, digestStr, manifest, raw); err != nil {
+		if fromCache && c.manifestCache != nil {
+			_ = c.manifestCache.Delete(digestStr)
+		}
+		return nil, err
+	}
+
+	if !fromCache && c.manifestCache != nil && !cfg.skipCache {
+		if err := c.manifestCache.PutManifest(digestStr, raw); err != nil {
+			return nil, fmt.Errorf("cache manifest: %w", err)
+		}
+	}
+
+	return manifest, nil
 }
 
 // resolveDigest resolves a reference to a digest string.
@@ -68,31 +86,29 @@ func (c *Client) resolveDigest(ctx context.Context, ref, reference string, skipC
 
 // fetchManifestByDigest fetches a manifest by digest.
 // Uses manifest cache if available, otherwise calls FetchManifest().
-func (c *Client) fetchManifestByDigest(ctx context.Context, ref, digest string, skipCache bool) (*BlobManifest, error) {
+func (c *Client) fetchManifestByDigest(ctx context.Context, ref, digest string, skipCache bool) (*BlobManifest, []byte, bool, error) {
 	// Try manifest cache
 	if !skipCache && c.manifestCache != nil {
 		if cached, ok := c.manifestCache.GetManifest(digest); ok {
-			return parseBlobManifest(cached, digest)
+			manifest, err := parseBlobManifest(cached, digest)
+			return manifest, nil, true, err
 		}
 	}
 
 	// Fetch via network
 	desc, err := descriptorFromDigest(digest)
 	if err != nil {
-		return nil, err
+		return nil, nil, false, err
 	}
 
 	rawManifest, rawBytes, err := c.oci.FetchManifest(ctx, ref, &desc)
 	if err != nil {
-		return nil, mapOCIError(err)
+		return nil, nil, false, mapOCIError(err)
 	}
 
-	// Cache the raw manifest
-	if c.manifestCache != nil {
-		if err := c.manifestCache.PutManifest(digest, rawBytes); err != nil {
-			return nil, fmt.Errorf("cache manifest: %w", err)
-		}
+	manifest, err := parseBlobManifest(&rawManifest, digest)
+	if err != nil {
+		return nil, nil, false, err
 	}
-
-	return parseBlobManifest(&rawManifest, digest)
+	return manifest, rawBytes, false, nil
 }

@@ -17,5 +17,8 @@ func mapOCIError(err error) error {
 	if errors.Is(err, oras.ErrNotFound) {
 		return fmt.Errorf("%w: %v", ErrNotFound, err)
 	}
+	if errors.Is(err, oras.ErrReferrersUnsupported) {
+		return fmt.Errorf("%w: %v", ErrReferrersUnsupported, err)
+	}
 	return err
 }

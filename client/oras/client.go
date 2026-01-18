@@ -260,6 +260,31 @@ func (c *Client) Tag(ctx context.Context, repoRef string, desc *ocispec.Descript
 	return nil
 }
 
+// Referrers lists referrer descriptors for the given subject manifest.
+func (c *Client) Referrers(ctx context.Context, repoRef string, subject ocispec.Descriptor, artifactType string) ([]ocispec.Descriptor, error) {
+	if subject.MediaType == "" {
+		return nil, fmt.Errorf("%w: missing media type", ErrInvalidDescriptor)
+	}
+	if err := validateDescriptor(&subject); err != nil {
+		return nil, err
+	}
+
+	repo, err := c.repository(repoRef)
+	if err != nil {
+		return nil, err
+	}
+
+	referrers, err := registry.Referrers(ctx, repo, subject, artifactType)
+	if err != nil {
+		if errors.Is(err, errdef.ErrUnsupported) {
+			return nil, ErrReferrersUnsupported
+		}
+		return nil, mapError(err)
+	}
+
+	return referrers, nil
+}
+
 // BlobURL returns the URL for direct blob access.
 //
 // This is used for lazy blob access via HTTP range requests.
