@@ -1,5 +1,5 @@
 ---
-sidebar_position: 5
+sidebar_position: 7
 ---
 
 # Performance Tuning
@@ -149,23 +149,6 @@ Set to 0 to disable the budget (unlimited). Useful when:
 - Running on memory-constrained systems
 - You need predictable memory usage
 
-## Cache Prefetch Concurrency
-
-Controls parallel prefetch workers for cached blobs:
-
-```go
-import "github.com/meigma/blob/cache"
-
-cached := cache.New(base, diskCache,
-	cache.WithPrefetchConcurrency(8),
-)
-```
-
-The default is serial (1 worker). Higher values:
-- Reduce prefetch time for many small files
-- Increase concurrent network requests
-- May saturate network or storage bandwidth
-
 ## Block Cache Tuning
 
 For remote sources with scattered random reads, block caching can significantly reduce latency.
@@ -206,6 +189,76 @@ cachedSource, err := blockCache.Wrap(source,
 )
 ```
 
+## OCI Client Cache Tuning
+
+When using the OCI client, configure cache tiers for optimal performance.
+
+### RefCache TTL
+
+For mutable tags like `latest` that change frequently:
+
+```go
+import "github.com/meigma/blob/client/cache/disk"
+
+// Short TTL for frequently-changing tags
+refCache, err := disk.NewRefCache("/var/cache/blob/refs",
+    disk.WithRefCacheTTL(1 * time.Minute),  // Refresh every minute
+)
+
+// Longer TTL for stable environments
+refCache, err := disk.NewRefCache("/var/cache/blob/refs",
+    disk.WithRefCacheTTL(1 * time.Hour),  // Refresh hourly
+)
+
+// No TTL for immutable references (digests only)
+refCache, err := disk.NewRefCache("/var/cache/blob/refs",
+    disk.WithRefCacheTTL(0),  // Never expire (manual refresh only)
+)
+```
+
+### ManifestCache and IndexCache Sizing
+
+These caches store content-addressed data that never becomes stale:
+
+```go
+// Small deployment: few archives, limited disk
+manifestCache, _ := disk.NewManifestCache("/var/cache/blob/manifests",
+    disk.WithMaxBytes(10 << 20),  // 10 MB
+)
+indexCache, _ := disk.NewIndexCache("/var/cache/blob/indexes",
+    disk.WithMaxBytes(50 << 20),  // 50 MB
+)
+
+// Large deployment: many archives, ample disk
+manifestCache, _ := disk.NewManifestCache("/var/cache/blob/manifests",
+    disk.WithMaxBytes(100 << 20),  // 100 MB
+)
+indexCache, _ := disk.NewIndexCache("/var/cache/blob/indexes",
+    disk.WithMaxBytes(1 << 30),  // 1 GB
+)
+```
+
+Sizing guidelines:
+- Manifests are 1-5 KB each, so 10 MB holds 2,000-10,000 manifests
+- Index blobs vary by file count: ~100 KB for 1,000 files, ~1 MB for 10,000 files
+- Err on the side of larger caches if disk space permits
+
+### Cache Sharding
+
+For large caches, increase sharding to avoid filesystem performance issues:
+
+```go
+// Default: 256 subdirectories (00-ff)
+indexCache, _ := disk.NewIndexCache(dir,
+    disk.WithShardPrefixLen(2),
+)
+
+// Large cache: 4096 subdirectories (000-fff)
+indexCache, _ := disk.NewIndexCache(dir,
+    disk.WithShardPrefixLen(3),
+)
+```
+
 ## Tuning Scenarios
 
 ### Memory-Constrained Environment
@@ -226,18 +279,47 @@ err = archive.CopyDir("/dest", ".",
 )
 ```
 
-### High-Latency Remote Source
+### High-Latency OCI Registry
 
-For archives on slow networks (> 200ms RTT):
+For archives on slow networks or distant registries (> 200ms RTT):
 
 ```go
-archive, err := blob.New(indexData, source,
-	blob.WithDecoderConcurrency(0),       // Max decoder parallelism
+import (
+	"time"
+
+	"github.com/meigma/blob"
+	"github.com/meigma/blob/client"
+	"github.com/meigma/blob/client/cache/disk"
+)
+
+// Aggressive caching to minimize round trips
+refCache, _ := disk.NewRefCache("/var/cache/blob/refs",
+	disk.WithRefCacheTTL(30 * time.Minute),
+	disk.WithMaxBytes(20 << 20),
+)
+manifestCache, _ := disk.NewManifestCache("/var/cache/blob/manifests",
+	disk.WithMaxBytes(100 << 20),
+)
+indexCache, _ := disk.NewIndexCache("/var/cache/blob/indexes",
+	disk.WithMaxBytes(500 << 20),
+)
+
+c := client.New(
+	client.WithDockerConfig(),
+	client.WithRefCache(refCache),
+	client.WithManifestCache(manifestCache),
+	client.WithIndexCache(indexCache),
+)
+
+archive, err := c.Pull(ctx, ref,
+	client.WithBlobOptions(
+		blob.WithDecoderConcurrency(0),  // Max decoder parallelism
+	),
 )
 
 err = archive.CopyDir("/dest", ".",
-	blob.CopyWithWorkers(4),              // Parallel file writing
-	blob.CopyWithReadConcurrency(16),     // Many concurrent requests
+	blob.CopyWithWorkers(4),           // Parallel file writing
+	blob.CopyWithReadConcurrency(16),  // Many concurrent requests
 )
 ```
 
@@ -311,6 +393,8 @@ log.Printf("extraction took %v", time.Since(start))
 
 ## See Also
 
+- [OCI Client](oci-client) - Push and pull archives
+- [OCI Client Caching](oci-client-caching) - Client cache configuration
 - [Architecture](../explanation/architecture) - Understand how the format affects performance
 - [Creating Archives](creating-archives) - Options that affect read performance
 - [Caching](caching) - Improve repeated read performance

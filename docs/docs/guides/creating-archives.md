@@ -265,7 +265,43 @@ func createProductionArchive(srcDir, indexPath, dataPath string) error {
 }
 ```
 
+## Pushing to OCI Registry
+
+After creating an archive, push it to an OCI registry for remote access:
+
+```go
+import (
+	"context"
+
+	"github.com/meigma/blob"
+	"github.com/meigma/blob/client"
+)
+
+func createAndPush(srcDir, destDir, ref string) error {
+	ctx := context.Background()
+
+	// Create the archive
+	blobFile, err := blob.CreateBlob(ctx, srcDir, destDir,
+		blob.CreateBlobWithCompression(blob.CompressionZstd),
+		blob.CreateBlobWithChangeDetection(blob.ChangeDetectionStrict),
+	)
+	if err != nil {
+		return err
+	}
+	defer blobFile.Close()
+
+	// Push to registry
+	c := client.New(client.WithDockerConfig())
+	return c.Push(ctx, ref, blobFile.Blob,
+		client.WithTags("latest"),
+	)
+}
+```
+
+See [OCI Client](oci-client) for more push options and authentication methods.
+
 ## See Also
 
+- [OCI Client](oci-client) - Push archives to OCI registries
 - [Architecture](../explanation/architecture) - How the archive format works
 - [Integrity](../explanation/integrity) - How content verification works

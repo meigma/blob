@@ -1059,3 +1059,304 @@ type BlockCacheOption func(*BlockCache)
 | `WithBlockMaxBytes(n int64)` | Maximum cache size in bytes. 0 disables the limit. | 0 (unlimited) |
 | `WithBlockShardPrefixLen(n int)` | Number of hex characters for directory sharding. 0 disables sharding. | 2 |
 | `WithBlockDirPerm(mode os.FileMode)` | Directory permissions for cache directories. | 0700 |
+
+---
+
+## Package blob/client
+
+```
+import "github.com/meigma/blob/client"
+```
+
+Package client provides a high-level API for working with blob archives in OCI registries.
+
+### Types
+
+#### Client
+
+```go
+type Client struct {
+    // contains filtered or unexported fields
+}
+```
+
+Client provides operations for pushing and pulling blob archives to/from OCI registries.
+
+### Functions
+
+#### New
+
+```go
+func New(opts ...Option) *Client
+```
+
+New creates a new OCI client with the given options.
+
+**Parameters:**
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| opts | `...Option` | Configuration options |
+
+**Returns:**
+
+| Return | Type | Description |
+|--------|------|-------------|
+| client | `*Client` | The created client |
+
+### Client Methods
+
+#### Push
+
+```go
+func (c *Client) Push(ctx context.Context, ref string, b *blob.Blob, opts ...PushOption) error
+```
+
+Push pushes a blob archive to an OCI registry.
+
+**Parameters:**
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| ctx | `context.Context` | Context for cancellation |
+| ref | `string` | OCI reference (e.g., "ghcr.io/org/repo:tag") |
+| b | `*blob.Blob` | The blob archive to push |
+| opts | `...PushOption` | Push configuration options |
+
+#### Pull
+
+```go
+func (c *Client) Pull(ctx context.Context, ref string, opts ...PullOption) (*blob.Blob, error)
+```
+
+Pull pulls a blob archive from an OCI registry. The returned Blob uses lazy loading via HTTP range requests.
+
+**Parameters:**
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| ctx | `context.Context` | Context for cancellation |
+| ref | `string` | OCI reference (e.g., "ghcr.io/org/repo:tag") |
+| opts | `...PullOption` | Pull configuration options |
+
+**Returns:**
+
+| Return | Type | Description |
+|--------|------|-------------|
+| blob | `*blob.Blob` | The pulled archive with lazy data loading |
+| err | `error` | Non-nil if pull fails |
+
+#### Fetch
+
+```go
+func (c *Client) Fetch(ctx context.Context, ref string, opts ...FetchOption) (*BlobManifest, error)
+```
+
+Fetch retrieves manifest metadata without downloading data. Use this to check if an archive exists or inspect its metadata.
+
+**Parameters:**
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| ctx | `context.Context` | Context for cancellation |
+| ref | `string` | OCI reference |
+| opts | `...FetchOption` | Fetch configuration options |
+
+**Returns:**
+
+| Return | Type | Description |
+|--------|------|-------------|
+| manifest | `*BlobManifest` | Manifest metadata |
+| err | `error` | Non-nil if fetch fails |
+
+#### Tag
+
+```go
+func (c *Client) Tag(ctx context.Context, ref string, digest string) error
+```
+
+Tag creates or updates a tag pointing to an existing manifest digest.
+
+**Parameters:**
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| ctx | `context.Context` | Context for cancellation |
+| ref | `string` | OCI reference with new tag |
+| digest | `string` | Digest of existing manifest |
+
+### Client Options
+
+```go
+type Option func(*Client)
+```
+
+| Option | Description | Default |
+|--------|-------------|---------|
+| `WithDockerConfig()` | Read credentials from ~/.docker/config.json | none |
+| `WithPlainHTTP(bool)` | Use plain HTTP instead of HTTPS | false |
+| `WithRefCache(cache.RefCache)` | Cache for tag to digest mappings | none |
+| `WithManifestCache(cache.ManifestCache)` | Cache for manifests | none |
+| `WithIndexCache(cache.IndexCache)` | Cache for index blobs | none |
+| `WithOCIClient(*oras.Client)` | Use custom ORAS client | default |
+
+### Push Options
+
+```go
+type PushOption func(*pushConfig)
+```
+
+| Option | Description | Default |
+|--------|-------------|---------|
+| `WithTags(tags ...string)` | Apply additional tags to the pushed manifest | none |
+| `WithAnnotations(map[string]string)` | Set custom manifest annotations | auto-generated |
+
+### Pull Options
+
+```go
+type PullOption func(*pullConfig)
+```
+
+| Option | Description | Default |
+|--------|-------------|---------|
+| `WithBlobOptions(opts ...blob.Option)` | Pass options to the created Blob | none |
+| `WithMaxIndexSize(maxBytes int64)` | Limit index blob size | 8 MB |
+| `WithPullSkipCache()` | Bypass ref and manifest caches | false |
+
+### Fetch Options
+
+```go
+type FetchOption func(*fetchConfig)
+```
+
+| Option | Description | Default |
+|--------|-------------|---------|
+| `WithSkipCache()` | Bypass manifest cache | false |
+
+### Errors
+
+| Error | Description |
+|-------|-------------|
+| `ErrNotFound` | Archive does not exist at the reference |
+| `ErrInvalidReference` | Reference string is malformed |
+| `ErrInvalidManifest` | Manifest is not a valid blob archive manifest |
+| `ErrMissingIndex` | Manifest does not contain an index blob |
+| `ErrMissingData` | Manifest does not contain a data blob |
+
+---
+
+## Package blob/client/cache
+
+```
+import "github.com/meigma/blob/client/cache"
+```
+
+Package cache provides caching interfaces for the blob client.
+
+### Interfaces
+
+#### RefCache
+
+```go
+type RefCache interface {
+    GetDigest(ref string) (digest string, ok bool)
+    PutDigest(ref string, digest string) error
+    Delete(ref string) error
+    MaxBytes() int64
+    SizeBytes() int64
+    Prune(targetBytes int64) (int64, error)
+}
+```
+
+RefCache caches reference to digest mappings to avoid redundant HEAD requests for tag resolution.
+
+| Method | Description |
+|--------|-------------|
+| `GetDigest` | Returns the cached digest for a reference |
+| `PutDigest` | Caches a reference to digest mapping |
+| `Delete` | Removes a cached reference |
+| `MaxBytes` | Returns configured cache size limit |
+| `SizeBytes` | Returns current cache size |
+| `Prune` | Removes entries until cache is at or below target |
+
+#### ManifestCache
+
+```go
+type ManifestCache interface {
+    GetManifest(digest string) (manifest *ocispec.Manifest, ok bool)
+    PutManifest(digest string, raw []byte) error
+    Delete(digest string) error
+    MaxBytes() int64
+    SizeBytes() int64
+    Prune(targetBytes int64) (int64, error)
+}
+```
+
+ManifestCache caches digest to manifest mappings to avoid redundant manifest fetches.
+
+#### IndexCache
+
+```go
+type IndexCache interface {
+    GetIndex(digest string) (index []byte, ok bool)
+    PutIndex(digest string, raw []byte) error
+    Delete(digest string) error
+    MaxBytes() int64
+    SizeBytes() int64
+    Prune(targetBytes int64) (int64, error)
+}
+```
+
+IndexCache caches digest to index blob mappings to avoid redundant index downloads.
+
+---
+
+## Package blob/client/cache/disk
+
+```
+import "github.com/meigma/blob/client/cache/disk"
+```
+
+Package disk provides disk-backed cache implementations for the OCI client.
+
+### Functions
+
+#### NewRefCache
+
+```go
+func NewRefCache(dir string, opts ...RefCacheOption) (*RefCache, error)
+```
+
+NewRefCache creates a disk-backed cache for reference to digest mappings.
+
+#### NewManifestCache
+
+```go
+func NewManifestCache(dir string, opts ...ManifestCacheOption) (*ManifestCache, error)
+```
+
+NewManifestCache creates a disk-backed cache for manifests with integrity validation.
+
+#### NewIndexCache
+
+```go
+func NewIndexCache(dir string, opts ...IndexCacheOption) (*IndexCache, error)
+```
+
+NewIndexCache creates a disk-backed cache for index blobs with integrity validation.
+
+### Common Options
+
+All cache types support these options:
+
+| Option | Description | Default |
+|--------|-------------|---------|
+| `WithShardPrefixLen(n int)` | Hex characters for directory sharding | 2 |
+| `WithDirPerm(mode os.FileMode)` | Directory permissions | 0700 |
+| `WithMaxBytes(n int64)` | Maximum cache size in bytes | 0 (unlimited) |
+
+### RefCache Options
+
+| Option | Description | Default |
+|--------|-------------|---------|
+| `WithRefCacheTTL(ttl time.Duration)` | Time-to-live for cached entries | 0 (no expiration) |

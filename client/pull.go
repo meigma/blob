@@ -93,6 +93,13 @@ func (c *Client) Pull(ctx context.Context, ref string, opts ...PullOption) (*blo
 		}
 	}
 
+	if err := indexDesc.Digest.Validate(); err != nil {
+		return nil, fmt.Errorf("read index blob: %w: invalid digest %q: %v", ErrInvalidManifest, indexDesc.Digest, err)
+	}
+	if computed := indexDesc.Digest.Algorithm().FromBytes(indexData); computed != indexDesc.Digest {
+		return nil, fmt.Errorf("read index blob: %w: expected %s, got %s", ErrDigestMismatch, indexDesc.Digest, computed)
+	}
+
 	// Step 3: Build data blob URL for range requests
 	dataDesc := manifest.DataDescriptor()
 	dataURL, err := c.oci.BlobURL(ref, dataDesc.Digest.String())
