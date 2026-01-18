@@ -6,6 +6,11 @@ on:
       - main
     paths:
       - 'examples/provenance/**'
+  pull_request:
+    paths:
+      - 'examples/provenance/**'
+      - 'policy/**'
+      - '.github/workflows/provenance.yml'
   workflow_dispatch:
 
 permissions:
@@ -117,12 +122,9 @@ jobs:
         run: |
           REF="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${{ needs.build-and-push.outputs.digest }}"
           echo "Pulling with attestation verification: $REF"
-          # Skip sigstore signature check (GitHub attestation uses different bundle format)
-          # The attestation itself is signed via sigstore and verified by OPA policy
           ./provenance pull \
             --ref "$REF" \
             --policy ./policy/policy.rego \
-            --skip-sig \
             --output ./verified-output
 
       - name: Verify extraction
