@@ -41,7 +41,7 @@ The `policy/sigstore` package verifies Sigstore signatures attached to OCI manif
 
 ```go
 import (
-    "github.com/meigma/blob/client"
+    "github.com/meigma/blob"
     "github.com/meigma/blob/policy/sigstore"
 )
 
@@ -52,10 +52,13 @@ if err != nil {
 }
 
 // Create client with policy
-c := client.New(
-    client.WithDockerConfig(),
-    client.WithPolicy(sigPolicy),
+c, err := blob.NewClient(
+    blob.WithDockerConfig(),
+    blob.WithPolicy(sigPolicy),
 )
+if err != nil {
+    return err
+}
 
 // Pull verifies the signature automatically
 archive, err := c.Pull(ctx, "ghcr.io/myorg/myarchive:v1")
@@ -88,7 +91,7 @@ The `policy/opa` package validates SLSA provenance attestations using Open Polic
 
 ```go
 import (
-    "github.com/meigma/blob/client"
+    "github.com/meigma/blob"
     "github.com/meigma/blob/policy/opa"
 )
 
@@ -101,10 +104,13 @@ if err != nil {
 }
 
 // Create client with policy
-c := client.New(
-    client.WithDockerConfig(),
-    client.WithPolicy(opaPolicy),
+c, err := blob.NewClient(
+    blob.WithDockerConfig(),
+    blob.WithPolicy(opaPolicy),
 )
+if err != nil {
+    return err
+}
 
 // Pull evaluates the policy against attestations
 archive, err := c.Pull(ctx, "ghcr.io/myorg/myarchive:v1")
@@ -115,10 +121,10 @@ archive, err := c.Pull(ctx, "ghcr.io/myorg/myarchive:v1")
 Use both signature and attestation verification together:
 
 ```go
-c := client.New(
-    client.WithDockerConfig(),
-    client.WithPolicy(sigPolicy),   // Verify signature first
-    client.WithPolicy(opaPolicy),   // Then check attestations
+c, _ := blob.NewClient(
+    blob.WithDockerConfig(),
+    blob.WithPolicy(sigPolicy),   // Verify signature first
+    blob.WithPolicy(opaPolicy),   // Then check attestations
 )
 ```
 
@@ -325,7 +331,7 @@ For local development or testing, verification can be skipped:
 
 ```go
 // No policies = no verification
-c := client.New(client.WithDockerConfig())
+c, _ := blob.NewClient(blob.WithDockerConfig())
 archive, err := c.Pull(ctx, ref)
 ```
 

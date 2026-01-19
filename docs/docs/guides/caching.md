@@ -1,302 +1,280 @@
 ---
-sidebar_position: 4
+sidebar_position: 3
 ---
 
-# Content Caching
+# Caching
 
-How to use content-addressed caching for file deduplication.
+How to configure caching for blob archives to minimize network requests and improve performance.
 
-Content caching stores file contents by their SHA256 hash, enabling deduplication across archives and avoiding repeated network transfers.
+## Quick Setup (Recommended)
 
-## Relationship to OCI Client Caches
-
-Blob supports two levels of caching:
-
-| Cache Level | Purpose | What It Caches |
-|-------------|---------|----------------|
-| **OCI Client Caches** | Minimize registry API calls | Refs, manifests, index blobs |
-| **Content Cache** | Deduplicate file content | Actual file bytes by hash |
-
-Configure OCI client caches via `client.WithRefCache()`, `client.WithManifestCache()`, and `client.WithIndexCache()`. See [OCI Client Caching](oci-client-caching) for details.
-
-Content caching (this guide) operates at a different level: it caches the actual file contents after they're fetched from the data blob.
-
-## When to Use Content Caching
-
-Content caching improves performance in these scenarios:
-
-- **Repeated access**: Reading the same files multiple times (e.g., rebuilding a project)
-- **Shared content**: Multiple archives containing identical files (automatic deduplication via content hashing)
-- **Remote archives**: Avoiding repeated network round trips for file data
-
-The cache uses SHA256 hashes of uncompressed file content as keys. This provides:
-- Automatic deduplication across archives
-- Implicit integrity verification on cache hits
-- Efficient storage of shared dependencies
-
-## Disk Cache
-
-To create a disk-backed cache:
+For most users, a single option enables all cache layers:
 
 ```go
-import (
-	"github.com/meigma/blob/core/cache"
-	"github.com/meigma/blob/core/cache/disk"
-)
-
-diskCache, err := disk.New("/path/to/cache")
-if err != nil {
-	return err
-}
-```
-
-The disk cache automatically creates the directory if it does not exist and uses a sharded directory structure to avoid filesystem performance issues with many files.
-
-### Cache Options
-
-Configure the disk cache with options:
-
-```go
-diskCache, err := disk.New("/path/to/cache",
-	disk.WithShardPrefixLen(3),   // Use 3-character prefix for sharding (default: 2)
-	disk.WithDirPerm(0o750),      // Set directory permissions (default: 0o700)
+c, err := blob.NewClient(
+	blob.WithDockerConfig(),
+	blob.WithCacheDir("/var/cache/blob"),
 )
 ```
 
-The shard prefix length determines directory distribution:
-- `2` (default): Creates 256 subdirectories (00-ff)
-- `3`: Creates 4096 subdirectories (000-fff)
-- `0`: Disables sharding (all files in one directory)
+This creates a complete caching hierarchy under the specified directory with sensible defaults. The cache directory structure is:
 
-## Managing Cache Size
+```
+/var/cache/blob/
+├── refs/        # Tag → digest mappings (TTL-based)
+├── manifests/   # Digest → manifest (content-addressed)
+├── indexes/     # Digest → index blob (content-addressed)
+├── content/     # Hash → file content (deduplication)
+└── blocks/      # Block-level cache (HTTP optimization)
+```
 
-Both disk caches (content cache and block cache) support size limits and automatic pruning.
+## Cache Architecture
 
-### Setting Size Limits
+Blob supports five cache layers that work together:
 
-Specify a maximum cache size when creating the cache:
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                         Cache Layers                             │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                 │
+│  ┌───────────────────────────────────────────────────────────┐  │
+│  │              OCI Metadata Caches (3 layers)               │  │
+│  │  ┌──────────┐   ┌───────────────┐   ┌──────────────────┐  │  │
+│  │  │ RefCache │ → │ ManifestCache │ → │    IndexCache    │  │  │
+│  │  │ tag→dgst │   │ dgst→manifest │   │    dgst→index    │  │  │
+│  │  └──────────┘   └───────────────┘   └──────────────────┘  │  │
+│  └───────────────────────────────────────────────────────────┘  │
+│                                                                 │
+│  ┌───────────────────────────────────────────────────────────┐  │
+│  │               Data Caches (2 layers)                      │  │
+│  │  ┌─────────────────────┐   ┌────────────────────────────┐ │  │
+│  │  │    ContentCache     │   │        BlockCache          │ │  │
+│  │  │  hash→file content  │   │   range→data blocks        │ │  │
+│  │  └─────────────────────┘   └────────────────────────────┘ │  │
+│  └───────────────────────────────────────────────────────────┘  │
+│                                                                 │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+| Cache | Purpose | Key | When to Use |
+|-------|---------|-----|-------------|
+| **RefCache** | Avoid tag resolution requests | tag → digest | Always (default 15 min TTL) |
+| **ManifestCache** | Avoid manifest fetches | digest → manifest | Always (content-addressed) |
+| **IndexCache** | Avoid index blob downloads | digest → bytes | Always (content-addressed) |
+| **ContentCache** | Deduplicate file content | SHA256 → content | Repeated file access |
+| **BlockCache** | Optimize HTTP range requests | source+offset → block | Random access patterns |
+
+## Configuration Options
+
+### RefCache TTL
+
+Control how long tag→digest mappings are cached:
 
 ```go
-// Content cache with 1 GB limit
-diskCache, err := disk.New("/path/to/cache",
-    disk.WithMaxBytes(1 << 30),  // 1 GB
+c, _ := blob.NewClient(
+	blob.WithDockerConfig(),
+	blob.WithCacheDir("/var/cache/blob"),
+	blob.WithRefCacheTTL(5 * time.Minute),  // Refresh tags every 5 minutes
 )
+```
 
-// Block cache with 256 MB limit
-blockCache, err := disk.NewBlockCache("/path/to/blocks",
-    disk.WithBlockMaxBytes(256 << 20),  // 256 MB
+For mutable tags like `latest` that change frequently, use shorter TTLs. For immutable tags (semver releases), use longer TTLs or `0` to disable expiration.
+
+### Individual Cache Directories
+
+Place caches on different storage:
+
+```go
+c, _ := blob.NewClient(
+	blob.WithDockerConfig(),
+	blob.WithContentCacheDir("/fast-ssd/content"),  // SSD for content
+	blob.WithBlockCacheDir("/fast-ssd/blocks"),     // SSD for blocks
+	blob.WithRefCacheDir("/hdd/refs"),              // HDD for metadata
+	blob.WithManifestCacheDir("/hdd/manifests"),
+	blob.WithIndexCacheDir("/hdd/indexes"),
 )
 ```
 
-When the cache exceeds its limit, it automatically prunes old entries before adding new ones.
+### Disabling Specific Caches
 
-### How Pruning Works
-
-Pruning removes entries by modification time (LRU-style eviction):
-
-1. Entries are sorted by modification time (oldest first)
-2. Oldest entries are removed until the cache is under the target size
-3. The cache tracks its size in memory for fast capacity checks
-
-### Manual Pruning
-
-To manually prune a cache to a specific size:
+Omit specific cache directories to disable them:
 
 ```go
-// Prune to 100 MB
-freed, err := diskCache.Prune(100 << 20)
-if err != nil {
-    return err
-}
-fmt.Printf("Freed %d bytes\n", freed)
-```
-
-### Monitoring Cache Size
-
-Check the current cache size:
-
-```go
-// Get configured limit (0 = unlimited)
-maxBytes := diskCache.MaxBytes()
-
-// Get current size
-currentBytes := diskCache.SizeBytes()
-
-fmt.Printf("Cache: %d / %d bytes (%.1f%%)\n",
-    currentBytes, maxBytes,
-    float64(currentBytes)/float64(maxBytes)*100,
+// Only enable metadata caches, no content caching
+c, _ := blob.NewClient(
+	blob.WithDockerConfig(),
+	blob.WithRefCacheDir("/var/cache/blob/refs"),
+	blob.WithManifestCacheDir("/var/cache/blob/manifests"),
+	blob.WithIndexCacheDir("/var/cache/blob/indexes"),
 )
 ```
+
+## How Caching Works
+
+### Pull Operation Flow
+
+```
+Pull("ghcr.io/org/repo:v1")
+    │
+    ▼
+RefCache hit? ─Yes─▶ Use cached digest
+    │ No
+    ▼
+HEAD request → Get digest → Cache in RefCache
+    │
+    ▼
+ManifestCache hit? ─Yes─▶ Use cached manifest
+    │ No
+    ▼
+GET manifest → Parse → Cache in ManifestCache
+    │
+    ▼
+IndexCache hit? ─Yes─▶ Use cached index
+    │ No
+    ▼
+GET index blob → Cache in IndexCache
+    │
+    ▼
+Return *Blob (data loaded lazily)
+```
+
+### File Read Flow
+
+```
+archive.ReadFile("config.json")
+    │
+    ▼
+ContentCache hit? ─Yes─▶ Return cached content
+    │ No
+    ▼
+BlockCache hit for range? ─Yes─▶ Use cached blocks
+    │ No
+    ▼
+HTTP Range Request → Cache in BlockCache
+    │
+    ▼
+Decompress → Verify hash → Cache in ContentCache
+    │
+    ▼
+Return content
+```
+
+## Cache Sizing
 
 ### Sizing Guidelines
 
-| Use Case | Recommended Size | Rationale |
-|----------|-----------------|-----------|
-| Development workstation | 256 MB - 1 GB | Balance performance with disk usage |
-| CI/CD ephemeral | 0 (unlimited) | Disk is reclaimed after job |
-| Production server | 2-10 GB | Based on working set size |
+| Use Case | Recommended Size | Notes |
+|----------|-----------------|-------|
+| Development | 256 MB - 1 GB | Balance performance with disk |
+| CI/CD (ephemeral) | Unlimited | Disk reclaimed after job |
+| Production server | 2-10 GB | Based on working set |
 | Memory-constrained | 64-128 MB | Minimum useful size |
 
-The optimal size depends on your access patterns. Monitor cache hit rates and adjust accordingly.
+### Sizing by Cache Type
 
-## Enabling Content Caching
+| Cache | Typical Entry Size | Sizing Notes |
+|-------|-------------------|--------------|
+| RefCache | ~100 bytes | Small; 10 MB holds 100K+ refs |
+| ManifestCache | 1-5 KB | 50 MB holds 10K-50K manifests |
+| IndexCache | 100 KB - 5 MB | Varies by file count |
+| ContentCache | File sizes | Most disk usage |
+| BlockCache | 64 KB blocks | Temporary; auto-prunes |
 
-Content caching is enabled by passing a cache to `blob.New()` or `client.Pull()`:
+## Cache Integrity
+
+All caches validate entries on read:
+
+| Cache | Validation | On Failure |
+|-------|------------|------------|
+| RefCache | Format check | Delete, return miss |
+| ManifestCache | Digest + JSON parse | Delete, return miss |
+| IndexCache | Digest verification | Delete, return miss |
+| ContentCache | SHA256 verification | Delete, return miss |
+| BlockCache | No verification | Re-fetch |
+
+This prevents cache poisoning and handles filesystem corruption gracefully.
+
+## Bypassing Cache
+
+Force fresh fetches when needed:
 
 ```go
-import (
-	"github.com/meigma/blob/core"
-	"github.com/meigma/blob/core/cache/disk"
+// Pull without using any caches
+archive, err := c.Pull(ctx, ref,
+	blob.PullWithSkipCache(),
 )
 
-func openCachedArchive(indexData []byte, source blob.ByteSource) (*blob.Blob, error) {
-	// Create disk cache
-	diskCache, err := disk.New("/var/cache/blob")
-	if err != nil {
-		return nil, err
-	}
-
-	// Create blob with caching enabled
-	return blob.New(indexData, source, blob.WithCache(diskCache))
-}
-```
-
-### With OCI Client
-
-When pulling from an OCI registry, pass the cache as a blob option:
-
-```go
-import (
-	"context"
-
-	"github.com/meigma/blob/core"
-	"github.com/meigma/blob/core/cache/disk"
-	"github.com/meigma/blob/client"
+// Fetch manifest without cache
+manifest, err := c.Fetch(ctx, ref,
+	blob.FetchWithSkipCache(),
 )
-
-func pullWithCache(c *client.Client, ref string) (*blob.Blob, error) {
-	// Create disk cache
-	diskCache, err := disk.New("/var/cache/blob")
-	if err != nil {
-		return nil, err
-	}
-
-	// Pull with content caching enabled
-	return c.Pull(context.Background(), ref,
-		client.WithBlobOptions(blob.WithCache(diskCache)),
-	)
-}
 ```
 
-The blob returned by `Pull` will use the cache for all file reads.
+## Cache Lifecycle
 
-## Reading Files
+### Automatic Pruning
 
-The cached blob automatically handles cache lookups:
+When caches exceed their limits, old entries are automatically removed using LRU-style eviction (oldest entries removed first based on modification time).
 
-```go
-// First read: fetches from source, caches result
-content, err := archive.ReadFile("lib/utils.go")
+### Sharing Across Processes
 
-// Second read: returns from cache, no network request
-content, err = archive.ReadFile("lib/utils.go")
-```
+All disk caches are safe for concurrent access from multiple processes. They use atomic file operations and handle race conditions correctly.
 
-Concurrent reads for the same content are deduplicated using singleflight, preventing redundant network requests when multiple goroutines request the same file simultaneously.
+### Persistence
 
-For streaming reads via `Open()`, content is cached when the file is read to completion or closed.
-
-## Custom Cache Implementations
-
-To implement a custom cache, satisfy the `cache.Cache` interface:
-
-```go
-import "io/fs"
-
-type Cache interface {
-	// Get returns an fs.File for reading cached content.
-	// Returns nil, false if content is not cached.
-	Get(hash []byte) (fs.File, bool)
-
-	// Put stores content by reading from the provided fs.File.
-	// The cache reads the file to completion; caller still owns/closes the file.
-	Put(hash []byte, f fs.File) error
-
-	// Delete removes cached content for the given hash.
-	Delete(hash []byte) error
-
-	// MaxBytes returns the configured cache size limit (0 = unlimited).
-	MaxBytes() int64
-
-	// SizeBytes returns the current cache size in bytes.
-	SizeBytes() int64
-
-	// Prune removes cached entries until the cache is at or below targetBytes.
-	Prune(targetBytes int64) (int64, error)
-}
-```
-
-The disk cache (`github.com/meigma/blob/core/cache/disk`) implements this interface and handles:
-- Atomic writes using temporary files and renames
-- Sharded directory structure for filesystem performance
-- Automatic size tracking and pruning
+Caches persist across program restarts. Content-addressed caches (ManifestCache, IndexCache, ContentCache) never become stale. RefCache entries expire based on TTL.
 
 ## Complete Example
 
-A complete setup with OCI client and content caching:
+A production setup with all caches and custom TTL:
 
 ```go
+package main
+
 import (
 	"context"
-	"os"
-	"path/filepath"
+	"fmt"
+	"log"
+	"time"
 
-	"github.com/meigma/blob/core"
-	"github.com/meigma/blob/core/cache/disk"
-	"github.com/meigma/blob/client"
-	clientdisk "github.com/meigma/blob/client/cache/disk"
+	"github.com/meigma/blob"
 )
 
-func setupCachedArchive(ref string) (*blob.Blob, error) {
+func main() {
 	ctx := context.Background()
 
-	// Create OCI client caches
-	refCache, _ := clientdisk.NewRefCache("/var/cache/blob/refs")
-	manifestCache, _ := clientdisk.NewManifestCache("/var/cache/blob/manifests")
-	indexCache, _ := clientdisk.NewIndexCache("/var/cache/blob/indexes")
-
-	c := client.New(
-		client.WithDockerConfig(),
-		client.WithRefCache(refCache),
-		client.WithManifestCache(manifestCache),
-		client.WithIndexCache(indexCache),
-	)
-
-	// Create content cache in user cache directory
-	cacheDir, err := os.UserCacheDir()
-	if err != nil {
-		cacheDir = "/tmp"
-	}
-	contentCache, err := disk.New(filepath.Join(cacheDir, "blob", "content"))
-	if err != nil {
-		return nil, err
-	}
-
-	// Pull with content caching enabled
-	archive, err := c.Pull(ctx, ref,
-		client.WithBlobOptions(blob.WithCache(contentCache)),
+	// Create client with full caching
+	c, err := blob.NewClient(
+		blob.WithDockerConfig(),
+		blob.WithCacheDir("/var/cache/blob"),
+		blob.WithRefCacheTTL(5 * time.Minute),
 	)
 	if err != nil {
-		return nil, err
+		log.Fatal(err)
 	}
 
-	return archive, nil
+	// First pull: fetches from registry, populates caches
+	archive, err := c.Pull(ctx, "ghcr.io/myorg/myarchive:v1")
+	if err != nil {
+		log.Fatal(err)
+	}
+	fmt.Printf("Pulled: %d files\n", archive.Len())
+
+	// Second pull: uses all caches, minimal network
+	archive2, err := c.Pull(ctx, "ghcr.io/myorg/myarchive:v1")
+	if err != nil {
+		log.Fatal(err)
+	}
+	fmt.Printf("Cached pull: %d files\n", archive2.Len())
+
+	// File reads use content cache
+	content, _ := archive.ReadFile("config.json")
+	fmt.Printf("config.json: %s\n", content)
 }
 ```
 
 ## See Also
 
-- [OCI Client Caching](oci-client-caching) - Configure OCI client caches
-- [Block Caching](block-caching) - Block-level caching for random access
-- [OCI Client](oci-client) - Push and pull archives
-- [Performance Tuning](performance-tuning) - Optimize prefetch and read concurrency
+- [OCI Client](oci-client) - Client configuration and authentication
+- [Performance Tuning](performance-tuning) - Cache tuning for specific scenarios
+- [Advanced Usage](advanced) - Custom cache implementations

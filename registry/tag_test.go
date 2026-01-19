@@ -18,6 +18,17 @@ func TestClient_Tag(t *testing.T) {
 		testDigest = "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
 	)
 
+	// Helper to create a ResolveFunc that returns a valid descriptor
+	resolveSuccess := func(m *mockOCIClient) {
+		m.ResolveFunc = func(ctx context.Context, repoRef, ref string) (ocispec.Descriptor, error) {
+			return ocispec.Descriptor{
+				MediaType: "application/vnd.oci.image.manifest.v1+json",
+				Digest:    "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+				Size:      1234,
+			}, nil
+		}
+	}
+
 	tests := []struct {
 		name      string
 		ref       string
@@ -30,10 +41,13 @@ func TestClient_Tag(t *testing.T) {
 			ref:    testRef,
 			digest: testDigest,
 			setupMock: func(m *mockOCIClient) {
+				resolveSuccess(m)
 				m.TagFunc = func(ctx context.Context, repoRef string, desc *ocispec.Descriptor, tag string) error {
 					assert.Equal(t, testRef, repoRef)
 					assert.Equal(t, testDigest, desc.Digest.String())
 					assert.Equal(t, "latest", tag)
+					// Verify that the descriptor has a media type (the fix)
+					assert.NotEmpty(t, desc.MediaType)
 					return nil
 				}
 			},
@@ -57,16 +71,22 @@ func TestClient_Tag(t *testing.T) {
 			wantErr: ErrInvalidReference,
 		},
 		{
-			name:    "invalid digest format",
-			ref:     testRef,
-			digest:  "not-a-valid-digest",
-			wantErr: ErrInvalidReference,
-		},
-		{
-			name:   "oci client error propagates",
+			name:   "resolve error propagates",
 			ref:    testRef,
 			digest: testDigest,
 			setupMock: func(m *mockOCIClient) {
+				m.ResolveFunc = func(ctx context.Context, repoRef, ref string) (ocispec.Descriptor, error) {
+					return ocispec.Descriptor{}, errors.New("resolve failed")
+				}
+			},
+			wantErr: errors.New("resolve failed"),
+		},
+		{
+			name:   "oci client tag error propagates",
+			ref:    testRef,
+			digest: testDigest,
+			setupMock: func(m *mockOCIClient) {
+				resolveSuccess(m)
 				m.TagFunc = func(ctx context.Context, repoRef string, desc *ocispec.Descriptor, tag string) error {
 					return errors.New("tag failed")
 				}
@@ -110,6 +130,13 @@ func TestClient_Tag_PassesCorrectDescriptor(t *testing.T) {
 
 	var capturedDesc *ocispec.Descriptor
 	mock := &mockOCIClient{
+		ResolveFunc: func(ctx context.Context, repoRef, ref string) (ocispec.Descriptor, error) {
+			return ocispec.Descriptor{
+				MediaType: "application/vnd.oci.image.manifest.v1+json",
+				Digest:    "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+				Size:      1234,
+			}, nil
+		},
 		TagFunc: func(ctx context.Context, repoRef string, desc *ocispec.Descriptor, tag string) error {
 			capturedDesc = desc
 			return nil
@@ -122,4 +149,7 @@ func TestClient_Tag_PassesCorrectDescriptor(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, capturedDesc)
 	assert.Equal(t, testDigest, capturedDesc.Digest.String())
+	// Verify the descriptor has a media type (the fix for the Tag bug)
+	assert.Equal(t, "application/vnd.oci.image.manifest.v1+json", capturedDesc.MediaType)
+	assert.Equal(t, int64(1234), capturedDesc.Size)
 }

@@ -4,40 +4,290 @@ sidebar_position: 1
 
 # API Reference
 
-Complete reference for all public types, functions, and options in the blob library.
+Complete reference for the blob library. The primary API is `github.com/meigma/blob`, which provides everything most users need. Internal packages are documented at the end for advanced use cases.
 
-## Package blob
+## Package blob (Primary API)
 
 ```
-import "github.com/meigma/blob/core"
+import "github.com/meigma/blob"
 ```
 
-The blob package provides a file archive format optimized for random access via HTTP range requests against OCI registries.
+The blob package provides a high-level API for pushing and pulling file archives to/from OCI registries.
+
+---
+
+### Client
+
+```go
+type Client struct {
+    // contains filtered or unexported fields
+}
+```
+
+Client provides operations for pushing and pulling blob archives to/from OCI registries.
+
+#### NewClient
+
+```go
+func NewClient(opts ...Option) (*Client, error)
+```
+
+NewClient creates a new blob archive client with the given options.
+
+**Parameters:**
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| opts | `...Option` | Configuration options |
+
+**Returns:**
+
+| Return | Type | Description |
+|--------|------|-------------|
+| client | `*Client` | The created client |
+| err | `error` | Non-nil if option application fails |
+
+---
+
+### Client Methods
+
+#### Push
+
+```go
+func (c *Client) Push(ctx context.Context, ref, srcDir string, opts ...PushOption) error
+```
+
+Push creates an archive from srcDir and pushes it to the registry. This is the primary workflow for pushing archives.
+
+**Parameters:**
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| ctx | `context.Context` | Context for cancellation |
+| ref | `string` | OCI reference with tag (e.g., "ghcr.io/org/repo:v1") |
+| srcDir | `string` | Source directory to archive |
+| opts | `...PushOption` | Push configuration options |
+
+#### PushArchive
+
+```go
+func (c *Client) PushArchive(ctx context.Context, ref string, archive *blobcore.Blob, opts ...PushOption) error
+```
+
+PushArchive pushes an existing archive to the registry. Use when you have a pre-created archive from `blobcore.CreateBlob`.
+
+**Parameters:**
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| ctx | `context.Context` | Context for cancellation |
+| ref | `string` | OCI reference with tag |
+| archive | `*blobcore.Blob` | Pre-created archive (from core package) |
+| opts | `...PushOption` | Push configuration options |
+
+#### Pull
+
+```go
+func (c *Client) Pull(ctx context.Context, ref string, opts ...PullOption) (*Archive, error)
+```
+
+Pull retrieves an archive from the registry with lazy data loading. File data is fetched on demand via HTTP range requests.
+
+**Parameters:**
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| ctx | `context.Context` | Context for cancellation |
+| ref | `string` | OCI reference (e.g., "ghcr.io/org/repo:v1") |
+| opts | `...PullOption` | Pull configuration options |
+
+**Returns:**
+
+| Return | Type | Description |
+|--------|------|-------------|
+| archive | `*Archive` | The pulled archive with lazy data loading |
+| err | `error` | Non-nil if pull fails |
+
+#### Fetch
+
+```go
+func (c *Client) Fetch(ctx context.Context, ref string, opts ...FetchOption) (*Manifest, error)
+```
+
+Fetch retrieves manifest metadata without downloading data. Use to check if an archive exists or inspect its metadata.
+
+**Parameters:**
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| ctx | `context.Context` | Context for cancellation |
+| ref | `string` | OCI reference |
+| opts | `...FetchOption` | Fetch configuration options |
+
+**Returns:**
+
+| Return | Type | Description |
+|--------|------|-------------|
+| manifest | `*Manifest` | Manifest metadata |
+| err | `error` | Non-nil if fetch fails |
+
+#### Tag
+
+```go
+func (c *Client) Tag(ctx context.Context, ref, digest string) error
+```
+
+Tag creates or updates a tag pointing to an existing manifest.
+
+**Parameters:**
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| ctx | `context.Context` | Context for cancellation |
+| ref | `string` | OCI reference with new tag |
+| digest | `string` | Digest of existing manifest |
+
+---
+
+### Archive
+
+```go
+type Archive struct {
+    *blobcore.Blob
+}
+```
+
+Archive wraps a pulled blob archive with integrated caching. It embeds `*core.Blob`, so all Blob methods are directly accessible (Open, Stat, ReadFile, ReadDir, CopyTo, CopyDir, Entry, Entries, etc.).
+
+Archive implements `fs.FS`, `fs.StatFS`, `fs.ReadFileFS`, and `fs.ReadDirFS` for compatibility with the standard library.
+
+See [Blob Methods](#blob-methods) for the complete method list.
+
+---
+
+### Manifest
+
+```go
+type Manifest = registry.BlobManifest
+```
+
+Manifest represents a blob archive manifest from an OCI registry. This is an alias for `registry.BlobManifest`.
+
+---
+
+### Client Options
+
+```go
+type Option func(*Client) error
+```
+
+#### Authentication Options
+
+| Option | Description |
+|--------|-------------|
+| `WithDockerConfig()` | Read credentials from ~/.docker/config.json (recommended) |
+| `WithStaticCredentials(registry, username, password string)` | Set static username/password for a registry |
+| `WithStaticToken(registry, token string)` | Set static bearer token for a registry |
+| `WithAnonymous()` | Force anonymous access, ignoring any configured credentials |
+
+#### Transport Options
+
+| Option | Description | Default |
+|--------|-------------|---------|
+| `WithPlainHTTP(bool)` | Use plain HTTP instead of HTTPS | false |
+| `WithUserAgent(ua string)` | Set User-Agent header for registry requests | none |
+
+#### Caching Options (Simple)
+
+| Option | Description |
+|--------|-------------|
+| `WithCacheDir(dir string)` | Enable all caches with default sizes in subdirectories of dir |
+| `WithContentCacheDir(dir string)` | Enable file content cache (100 MB default) |
+| `WithBlockCacheDir(dir string)` | Enable HTTP range block cache (50 MB default) |
+| `WithRefCacheDir(dir string)` | Enable tag→digest cache (5 MB default) |
+| `WithManifestCacheDir(dir string)` | Enable manifest cache (10 MB default) |
+| `WithIndexCacheDir(dir string)` | Enable index blob cache (50 MB default) |
+| `WithRefCacheTTL(ttl time.Duration)` | Set TTL for reference cache entries (default: 5 min) |
+
+#### Caching Options (Advanced)
+
+For custom cache implementations, use these options with implementations from `core/cache` or `registry/cache`:
+
+| Option | Description |
+|--------|-------------|
+| `WithContentCache(cache)` | Set custom content cache implementation |
+| `WithBlockCache(cache)` | Set custom block cache implementation |
+| `WithRefCache(cache)` | Set custom reference cache implementation |
+| `WithManifestCache(cache)` | Set custom manifest cache implementation |
+| `WithIndexCache(cache)` | Set custom index cache implementation |
+
+#### Policy Options
+
+| Option | Description |
+|--------|-------------|
+| `WithPolicy(policy Policy)` | Add a policy that must pass for Fetch and Pull |
+| `WithPolicies(policies ...Policy)` | Add multiple policies |
+
+#### Cache Size Constants
+
+| Constant | Value | Description |
+|----------|-------|-------------|
+| `DefaultContentCacheSize` | 100 MB | Default content cache size |
+| `DefaultBlockCacheSize` | 50 MB | Default block cache size |
+| `DefaultIndexCacheSize` | 50 MB | Default index cache size |
+| `DefaultManifestCacheSize` | 10 MB | Default manifest cache size |
+| `DefaultRefCacheSize` | 5 MB | Default ref cache size |
+| `DefaultRefCacheTTL` | 5 min | Default ref cache TTL |
+
+---
+
+### Push Options
+
+```go
+type PushOption func(*pushConfig)
+```
+
+| Option | Description | Default |
+|--------|-------------|---------|
+| `PushWithTags(tags ...string)` | Apply additional tags to the pushed manifest | none |
+| `PushWithAnnotations(map[string]string)` | Set custom manifest annotations | auto-generated |
+| `PushWithCompression(Compression)` | Set compression algorithm | CompressionNone |
+| `PushWithSkipCompression(fns ...SkipCompressionFunc)` | Predicates to skip compression for specific files | none |
+| `PushWithChangeDetection(ChangeDetection)` | Verify files didn't change during creation | ChangeDetectionNone |
+| `PushWithMaxFiles(n int)` | Limit number of files (0 = default, negative = unlimited) | 200,000 |
+
+---
+
+### Pull Options
+
+```go
+type PullOption func(*pullConfig)
+```
+
+| Option | Description | Default |
+|--------|-------------|---------|
+| `PullWithSkipCache()` | Bypass ref and manifest caches | false |
+| `PullWithMaxIndexSize(maxBytes int64)` | Limit index blob size | 8 MB |
+| `PullWithMaxFileSize(limit uint64)` | Per-file size limit (0 = unlimited) | 256 MB |
+| `PullWithDecoderConcurrency(n int)` | Zstd decoder thread count (negative uses GOMAXPROCS) | 1 |
+| `PullWithDecoderLowmem(bool)` | Zstd low-memory mode | false |
+| `PullWithVerifyOnClose(bool)` | Hash verification on Close | true |
+
+---
+
+### Fetch Options
+
+```go
+type FetchOption func(*fetchConfig)
+```
+
+| Option | Description | Default |
+|--------|-------------|---------|
+| `FetchWithSkipCache()` | Bypass ref and manifest caches | false |
+
+---
 
 ### Types
-
-#### Blob
-
-```go
-type Blob struct {
-    // contains filtered or unexported fields
-}
-```
-
-Blob provides random access to archive files. Blob implements `fs.FS`, `fs.StatFS`, `fs.ReadFileFS`, and `fs.ReadDirFS` for compatibility with the standard library.
-
-#### BlobFile
-
-```go
-type BlobFile struct {
-    *Blob
-    // contains filtered or unexported fields
-}
-```
-
-BlobFile wraps a `*Blob` with an underlying data file handle. It embeds `*Blob`, so all Blob methods are directly accessible. BlobFile must be closed to release file resources.
-
-BlobFile implements `fs.FS`, `fs.StatFS`, `fs.ReadFileFS`, and `fs.ReadDirFS` for compatibility with the standard library.
 
 #### Entry
 
@@ -60,16 +310,16 @@ Entry represents a file in the archive.
 
 | Field | Type | Description |
 |-------|------|-------------|
-| Path | `string` | File path relative to archive root (e.g., "src/main.go") |
-| DataOffset | `uint64` | Byte offset in data blob where file content begins |
-| DataSize | `uint64` | Size in bytes of file content in data blob (compressed size for compressed files) |
-| OriginalSize | `uint64` | Uncompressed size in bytes (equals DataSize for uncompressed files) |
-| Hash | `[]byte` | SHA256 hash of uncompressed file content |
+| Path | `string` | File path relative to archive root |
+| DataOffset | `uint64` | Byte offset in data blob |
+| DataSize | `uint64` | Size in data blob (compressed if applicable) |
+| OriginalSize | `uint64` | Uncompressed size |
+| Hash | `[]byte` | SHA256 hash of uncompressed content |
 | Mode | `fs.FileMode` | File permission bits |
 | UID | `uint32` | File owner's user ID |
 | GID | `uint32` | File owner's group ID |
 | ModTime | `time.Time` | File modification time |
-| Compression | `Compression` | Compression algorithm used for this file |
+| Compression | `Compression` | Compression algorithm used |
 
 #### EntryView
 
@@ -79,24 +329,24 @@ type EntryView struct {
 }
 ```
 
-EntryView provides a read-only view of an index entry. The byte slices returned by `PathBytes` and `HashBytes` alias the index buffer and must be treated as immutable. The view is only valid while the Blob that produced it remains alive.
+EntryView provides a read-only view of an index entry. Views alias the index buffer and are only valid while the Blob remains alive.
 
 **Methods:**
 
-| Method | Signature | Description |
-|--------|-----------|-------------|
-| Path | `func (ev EntryView) Path() string` | Returns the path as a string |
-| PathBytes | `func (ev EntryView) PathBytes() []byte` | Returns the path bytes from the index buffer |
-| HashBytes | `func (ev EntryView) HashBytes() []byte` | Returns the SHA256 hash bytes from the index buffer |
-| DataOffset | `func (ev EntryView) DataOffset() uint64` | Returns the data blob offset |
-| DataSize | `func (ev EntryView) DataSize() uint64` | Returns the stored (possibly compressed) size |
-| OriginalSize | `func (ev EntryView) OriginalSize() uint64` | Returns the uncompressed size |
-| Mode | `func (ev EntryView) Mode() fs.FileMode` | Returns the file mode bits |
-| UID | `func (ev EntryView) UID() uint32` | Returns the file owner's user ID |
-| GID | `func (ev EntryView) GID() uint32` | Returns the file owner's group ID |
-| ModTime | `func (ev EntryView) ModTime() time.Time` | Returns the modification time |
-| Compression | `func (ev EntryView) Compression() Compression` | Returns the compression algorithm used |
-| Entry | `func (ev EntryView) Entry() Entry` | Returns a fully copied Entry |
+| Method | Description |
+|--------|-------------|
+| `Path() string` | Returns the path as a string |
+| `PathBytes() []byte` | Returns the path bytes from the index buffer |
+| `HashBytes() []byte` | Returns the SHA256 hash bytes |
+| `DataOffset() uint64` | Returns the data blob offset |
+| `DataSize() uint64` | Returns the stored size |
+| `OriginalSize() uint64` | Returns the uncompressed size |
+| `Mode() fs.FileMode` | Returns the file mode bits |
+| `UID() uint32` | Returns the user ID |
+| `GID() uint32` | Returns the group ID |
+| `ModTime() time.Time` | Returns the modification time |
+| `Compression() Compression` | Returns the compression algorithm |
+| `Entry() Entry` | Returns a fully copied Entry |
 
 #### Compression
 
@@ -105,24 +355,6 @@ type Compression uint8
 ```
 
 Compression identifies the compression algorithm used for a file.
-
-#### ByteSource
-
-```go
-type ByteSource interface {
-    io.ReaderAt
-    Size() int64
-    SourceID() string
-}
-```
-
-ByteSource provides random access to the data blob. Implementations exist for local files (`*os.File`) and HTTP range requests (`http.Source`).
-
-| Method | Signature | Description |
-|--------|-----------|-------------|
-| ReadAt | `ReadAt(p []byte, off int64) (int, error)` | Reads bytes at the given offset (from io.ReaderAt). |
-| Size | `Size() int64` | Returns the total size of the data blob. |
-| SourceID | `SourceID() string` | Returns a stable identifier for the underlying content, used by block cache for cache keys. |
 
 #### ChangeDetection
 
@@ -138,135 +370,33 @@ ChangeDetection controls how strictly file changes are detected during archive c
 type SkipCompressionFunc func(path string, info fs.FileInfo) bool
 ```
 
-SkipCompressionFunc returns true when a file should be stored uncompressed. It is called once per file and should be inexpensive.
+SkipCompressionFunc returns true when a file should be stored uncompressed.
 
-### Functions
-
-#### New
+#### ByteSource
 
 ```go
-func New(indexData []byte, source ByteSource, opts ...Option) (*Blob, error)
+type ByteSource interface {
+    io.ReaderAt
+    Size() int64
+    SourceID() string
+}
 ```
 
-New creates a Blob for accessing files in the archive.
+ByteSource provides random access to the data blob.
 
-**Parameters:**
-
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| indexData | `[]byte` | FlatBuffers-encoded index blob |
-| source | `ByteSource` | Provides access to file content |
-| opts | `...Option` | Configuration options |
-
-**Returns:**
-
-| Return | Type | Description |
-|--------|------|-------------|
-| blob | `*Blob` | The created Blob accessor |
-| err | `error` | Non-nil if index parsing fails |
-
-#### OpenFile
+#### Policy
 
 ```go
-func OpenFile(indexPath, dataPath string, opts ...Option) (*BlobFile, error)
+type Policy = registry.Policy
 ```
 
-OpenFile opens a blob archive from local index and data files. The index file is read into memory; the data file is opened for random access. The returned BlobFile must be closed to release file resources.
+Policy evaluates whether a manifest is trusted.
 
-**Parameters:**
-
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| indexPath | `string` | Path to the index blob file |
-| dataPath | `string` | Path to the data blob file |
-| opts | `...Option` | Configuration options (same as New) |
-
-**Returns:**
-
-| Return | Type | Description |
-|--------|------|-------------|
-| blobFile | `*BlobFile` | The opened archive with file handle |
-| err | `error` | Non-nil if file opening or index parsing fails |
-
-#### Create
-
-```go
-func Create(ctx context.Context, dir string, indexW, dataW io.Writer, opts ...CreateOption) error
-```
-
-Create builds an archive from the contents of a directory.
-
-Files are written to the data writer in path-sorted order, enabling efficient directory fetches via single range requests. The index is written as a FlatBuffers-encoded blob to the index writer.
-
-Create builds the entire index in memory; memory use scales with entry count and path length. Rough guide: ~30-50MB for 100k files with ~60B average paths.
-
-Create walks dir recursively, including all regular files. Empty directories are not preserved. Symbolic links are not followed.
-
-**Parameters:**
-
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| ctx | `context.Context` | Context for cancellation |
-| dir | `string` | Source directory to archive |
-| indexW | `io.Writer` | Destination for index blob |
-| dataW | `io.Writer` | Destination for data blob |
-| opts | `...CreateOption` | Configuration options |
-
-**Returns:**
-
-| Return | Type | Description |
-|--------|------|-------------|
-| err | `error` | Non-nil if archive creation fails |
-
-#### CreateBlob
-
-```go
-func CreateBlob(ctx context.Context, srcDir, destDir string, opts ...CreateBlobOption) (*BlobFile, error)
-```
-
-CreateBlob builds an archive from a directory and returns an open BlobFile handle. The index and data files are written to destDir with default names (`index.blob` and `data.blob`). This is a convenience function that combines Create and OpenFile.
-
-**Parameters:**
-
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| ctx | `context.Context` | Context for cancellation |
-| srcDir | `string` | Source directory to archive |
-| destDir | `string` | Destination directory for archive files |
-| opts | `...CreateBlobOption` | Configuration options |
-
-**Returns:**
-
-| Return | Type | Description |
-|--------|------|-------------|
-| blobFile | `*BlobFile` | The created and opened archive |
-| err | `error` | Non-nil if archive creation fails |
-
-#### DefaultSkipCompression
-
-```go
-func DefaultSkipCompression(minSize int64) SkipCompressionFunc
-```
-
-DefaultSkipCompression returns a SkipCompressionFunc that skips small files and known already-compressed extensions.
-
-**Parameters:**
-
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| minSize | `int64` | Files smaller than this size are stored uncompressed |
-
-**Returns:**
-
-| Return | Type | Description |
-|--------|------|-------------|
-| fn | `SkipCompressionFunc` | Predicate function for skip decisions |
-
-**Skipped Extensions:**
-
-`.7z`, `.aac`, `.avif`, `.br`, `.bz2`, `.flac`, `.gif`, `.gz`, `.heic`, `.ico`, `.jpeg`, `.jpg`, `.m4v`, `.mkv`, `.mov`, `.mp3`, `.mp4`, `.ogg`, `.opus`, `.pdf`, `.png`, `.rar`, `.tgz`, `.wav`, `.webm`, `.webp`, `.woff`, `.woff2`, `.xz`, `.zip`, `.zst`
+---
 
 ### Blob Methods
+
+These methods are available on `*Archive` (returned from Pull) and on `*core.Blob` / `*core.BlobFile` from internal packages.
 
 #### Open
 
@@ -274,7 +404,7 @@ DefaultSkipCompression returns a SkipCompressionFunc that skips small files and 
 func (b *Blob) Open(name string) (fs.File, error)
 ```
 
-Open implements `fs.FS`. Returns an `fs.File` for reading the named file. The returned file verifies the content hash on Close (unless disabled by `WithVerifyOnClose`) and returns `ErrHashMismatch` if verification fails. Callers must read to EOF or Close to ensure integrity; partial reads may return unverified data.
+Open implements `fs.FS`. Returns an `fs.File` for reading the named file. The returned file verifies the content hash on Close and returns `ErrHashMismatch` if verification fails.
 
 #### Stat
 
@@ -282,7 +412,7 @@ Open implements `fs.FS`. Returns an `fs.File` for reading the named file. The re
 func (b *Blob) Stat(name string) (fs.FileInfo, error)
 ```
 
-Stat implements `fs.StatFS`. Returns file info for the named file without reading its content. For directories (paths that are prefixes of other entries), Stat returns synthetic directory info.
+Stat implements `fs.StatFS`. Returns file info without reading content.
 
 #### ReadFile
 
@@ -290,7 +420,7 @@ Stat implements `fs.StatFS`. Returns file info for the named file without readin
 func (b *Blob) ReadFile(name string) ([]byte, error)
 ```
 
-ReadFile implements `fs.ReadFileFS`. Reads and returns the entire contents of the named file. The content is decompressed if necessary and verified against its hash.
+ReadFile implements `fs.ReadFileFS`. Reads and returns entire file contents.
 
 #### ReadDir
 
@@ -298,7 +428,7 @@ ReadFile implements `fs.ReadFileFS`. Reads and returns the entire contents of th
 func (b *Blob) ReadDir(name string) ([]fs.DirEntry, error)
 ```
 
-ReadDir implements `fs.ReadDirFS`. Returns directory entries for the named directory, sorted by name. Directory entries are synthesized from file paths; the archive does not store directories explicitly.
+ReadDir implements `fs.ReadDirFS`. Returns directory entries sorted by name.
 
 #### CopyTo
 
@@ -306,12 +436,7 @@ ReadDir implements `fs.ReadDirFS`. Returns directory entries for the named direc
 func (b *Blob) CopyTo(destDir string, paths ...string) error
 ```
 
-CopyTo extracts specific files to a destination directory. Parent directories are created as needed.
-
-**Default Behavior:**
-- Existing files are skipped (use `CopyWithOverwrite` to overwrite)
-- File modes and times are not preserved (use `CopyWithPreserveMode`/`CopyWithPreserveTimes`)
-- Range reads are pipelined with concurrency 4 (use `CopyWithReadConcurrency` to change)
+CopyTo extracts specific files to a destination directory.
 
 #### CopyToWithOptions
 
@@ -327,14 +452,7 @@ CopyToWithOptions extracts specific files with options.
 func (b *Blob) CopyDir(destDir, prefix string, opts ...CopyOption) error
 ```
 
-CopyDir extracts all files under a directory prefix to a destination. If prefix is "" or ".", all files in the archive are extracted.
-
-Files are written atomically using temp files and renames by default. `CopyWithCleanDest` clears the destination prefix and writes directly to the final path. This is more performant but less safe.
-
-**Default Behavior:**
-- Existing files are skipped (use `CopyWithOverwrite` to overwrite)
-- File modes and times are not preserved (use `CopyWithPreserveMode`/`CopyWithPreserveTimes`)
-- Range reads are pipelined with concurrency 4 (use `CopyWithReadConcurrency` to change)
+CopyDir extracts all files under a directory prefix. Use prefix "." for all files.
 
 #### Entry
 
@@ -342,7 +460,7 @@ Files are written atomically using temp files and renames by default. `CopyWithC
 func (b *Blob) Entry(path string) (EntryView, bool)
 ```
 
-Entry returns a read-only view of the entry for the given path. The returned view is only valid while the Blob remains alive.
+Entry returns a read-only view of the entry for the given path.
 
 #### Entries
 
@@ -350,7 +468,7 @@ Entry returns a read-only view of the entry for the given path. The returned vie
 func (b *Blob) Entries() iter.Seq[EntryView]
 ```
 
-Entries returns an iterator over all entries as read-only views. The returned views are only valid while the Blob remains alive.
+Entries returns an iterator over all entries.
 
 #### EntriesWithPrefix
 
@@ -358,7 +476,7 @@ Entries returns an iterator over all entries as read-only views. The returned vi
 func (b *Blob) EntriesWithPrefix(prefix string) iter.Seq[EntryView]
 ```
 
-EntriesWithPrefix returns an iterator over entries with the given prefix as read-only views. The returned views are only valid while the Blob remains alive.
+EntriesWithPrefix returns an iterator over entries with the given prefix.
 
 #### Len
 
@@ -368,98 +486,17 @@ func (b *Blob) Len() int
 
 Len returns the number of entries in the archive.
 
-#### Reader
-
-```go
-func (b *Blob) Reader() *file.Reader
-```
-
-Reader returns the underlying file reader. This is useful for cached readers that need to share the decompression pool.
-
-#### IndexData
-
-```go
-func (b *Blob) IndexData() []byte
-```
-
-IndexData returns the raw FlatBuffers-encoded index data. This is useful for creating new Blobs with different data sources.
-
-#### DataHash
-
-```go
-func (b *Blob) DataHash() ([]byte, bool)
-```
-
-DataHash returns the hash of the data blob bytes recorded in the index. The returned slice aliases the index buffer and must be treated as immutable. The boolean is false when the index does not record data metadata.
-
-#### DataSize
-
-```go
-func (b *Blob) DataSize() (uint64, bool)
-```
-
-DataSize returns the data blob size in bytes recorded in the index. The boolean is false when the index does not record data metadata.
-
-#### Stream
-
-```go
-func (b *Blob) Stream() io.Reader
-```
-
-Stream returns an `io.Reader` that streams the entire data blob from beginning to end. This is useful for copying or transmitting the complete data content.
-
 #### Save
 
 ```go
 func (b *Blob) Save(indexPath, dataPath string) error
 ```
 
-Save writes the blob's index and data to the specified file paths. Uses atomic writes (temp file + rename) to prevent partial writes on failure. Parent directories are created as needed.
+Save writes the blob's index and data to the specified file paths.
 
-**Parameters:**
-
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| indexPath | `string` | Path where index blob will be written |
-| dataPath | `string` | Path where data blob will be written |
-
-**Returns:**
-
-| Return | Type | Description |
-|--------|------|-------------|
-| err | `error` | Non-nil if file writing fails |
-
-### BlobFile Methods
-
-BlobFile embeds `*Blob`, so all Blob methods (Open, Stat, ReadFile, ReadDir, CopyTo, CopyDir, Entry, Entries, etc.) are directly accessible on BlobFile.
-
-#### Close
-
-```go
-func (bf *BlobFile) Close() error
-```
-
-Close closes the underlying data file. Should be called to release file resources. Safe to call multiple times.
-
-### Options
-
-Options configure a Blob via the `New` function.
-
-```go
-type Option func(*Blob)
-```
-
-| Option | Description | Default |
-|--------|-------------|---------|
-| `WithMaxFileSize(limit uint64)` | Per-file size limit (compressed and uncompressed). Set to 0 to disable. | 256MB |
-| `WithMaxDecoderMemory(limit uint64)` | Zstd decoder memory limit. Set to 0 to disable. | 256MB |
-| `WithDecoderConcurrency(n int)` | Zstd decoder thread count. Values &lt;0 use GOMAXPROCS. | 1 |
-| `WithDecoderLowmem(enabled bool)` | Zstd decoder low-memory mode. | false |
-| `WithVerifyOnClose(enabled bool)` | Hash verification on Close. When false, integrity is only guaranteed when callers read to EOF. | true |
+---
 
 ### Copy Options
-
-Copy options configure `CopyTo`, `CopyToWithOptions`, and `CopyDir` operations.
 
 ```go
 type CopyOption func(*copyConfig)
@@ -467,45 +504,26 @@ type CopyOption func(*copyConfig)
 
 | Option | Description | Default |
 |--------|-------------|---------|
-| `CopyWithOverwrite(bool)` | Overwrite existing files. | false |
-| `CopyWithPreserveMode(bool)` | Preserve file permission modes from the archive. | false |
-| `CopyWithPreserveTimes(bool)` | Preserve file modification times from the archive. | false |
-| `CopyWithCleanDest(bool)` | Clear destination prefix before copying, write directly (no temp files). Only supported by `CopyDir`. | false |
-| `CopyWithWorkers(n int)` | Worker count for parallel processing. &lt;0 forces serial, 0 uses automatic heuristics, &gt;0 forces fixed count. | 0 (auto) |
-| `CopyWithReadConcurrency(n int)` | Number of concurrent range reads. Use 1 for serial reads. | 4 |
-| `CopyWithReadAheadBytes(limit uint64)` | Total size cap for buffered group data. 0 disables the byte budget. | 0 (unlimited) |
+| `CopyWithOverwrite(bool)` | Overwrite existing files | false |
+| `CopyWithPreserveMode(bool)` | Preserve file permission modes | false |
+| `CopyWithPreserveTimes(bool)` | Preserve file modification times | false |
+| `CopyWithCleanDest(bool)` | Clear destination before copying (CopyDir only) | false |
+| `CopyWithWorkers(n int)` | Worker count (negative = serial, 0 = auto, positive = fixed) | 0 (auto) |
+| `CopyWithReadConcurrency(n int)` | Concurrent range reads | 4 |
 
-### Create Options
+---
 
-Create options configure archive creation via the `Create` function.
+### Helper Functions
 
-```go
-type CreateOption func(*createConfig)
-```
-
-| Option | Description | Default |
-|--------|-------------|---------|
-| `CreateWithCompression(c Compression)` | Compression algorithm. Use `CompressionNone` or `CompressionZstd`. | CompressionNone |
-| `CreateWithChangeDetection(cd ChangeDetection)` | File change detection during archive creation. | ChangeDetectionNone |
-| `CreateWithSkipCompression(fns ...SkipCompressionFunc)` | Predicates that decide to store files uncompressed. If any returns true, compression is skipped. | none |
-| `CreateWithMaxFiles(n int)` | Maximum file count. 0 uses `DefaultMaxFiles`, &lt;0 means unlimited. | 200,000 |
-
-### CreateBlob Options
-
-CreateBlob options configure archive creation and file naming via the `CreateBlob` function.
+#### DefaultSkipCompression
 
 ```go
-type CreateBlobOption func(*createBlobConfig)
+func DefaultSkipCompression(minSize int64) SkipCompressionFunc
 ```
 
-| Option | Description | Default |
-|--------|-------------|---------|
-| `CreateBlobWithIndexName(name string)` | Override the index filename. | "index.blob" |
-| `CreateBlobWithDataName(name string)` | Override the data filename. | "data.blob" |
-| `CreateBlobWithCompression(c Compression)` | Compression algorithm. Use `CompressionNone` or `CompressionZstd`. | CompressionNone |
-| `CreateBlobWithChangeDetection(cd ChangeDetection)` | File change detection during archive creation. | ChangeDetectionNone |
-| `CreateBlobWithSkipCompression(fns ...SkipCompressionFunc)` | Predicates that decide to store files uncompressed. | none |
-| `CreateBlobWithMaxFiles(n int)` | Maximum file count. 0 uses `DefaultMaxFiles`, &lt;0 means unlimited. | 200,000 |
+DefaultSkipCompression returns a predicate that skips small files and known compressed extensions (.jpg, .png, .gz, .zst, etc.).
+
+---
 
 ### Constants
 
@@ -520,21 +538,18 @@ type CreateBlobOption func(*createBlobConfig)
 
 | Constant | Value | Description |
 |----------|-------|-------------|
-| `ChangeDetectionNone` | 0 | No change detection (default) |
-| `ChangeDetectionStrict` | 1 | Verify files did not change during archive creation |
+| `ChangeDetectionNone` | 0 | No change detection |
+| `ChangeDetectionStrict` | 1 | Verify files didn't change during creation |
 
 #### File Name Constants
 
 | Constant | Value | Description |
 |----------|-------|-------------|
-| `DefaultIndexName` | "index.blob" | Default filename for index when using CreateBlob |
-| `DefaultDataName` | "data.blob" | Default filename for data when using CreateBlob |
+| `DefaultIndexName` | "index.blob" | Default index filename |
+| `DefaultDataName` | "data.blob" | Default data filename |
+| `DefaultMaxFiles` | 200,000 | Default file limit |
 
-#### Other Constants
-
-| Constant | Value | Description |
-|----------|-------|-------------|
-| `DefaultMaxFiles` | 200,000 | Default limit when no MaxFiles option is set |
+---
 
 ### Errors
 
@@ -545,113 +560,93 @@ type CreateBlobOption func(*createBlobConfig)
 | `ErrSizeOverflow` | Byte counts exceed supported limits |
 | `ErrSymlink` | Symlink encountered where not allowed |
 | `ErrTooManyFiles` | File count exceeded configured limit |
+| `ErrNotFound` | Archive does not exist at the reference |
+| `ErrInvalidReference` | Reference string is malformed |
+| `ErrInvalidManifest` | Manifest is not a valid blob archive manifest |
+| `ErrMissingIndex` | Manifest does not contain an index blob |
+| `ErrMissingData` | Manifest does not contain a data blob |
+| `ErrDigestMismatch` | Content does not match its expected digest |
+| `ErrPolicyViolation` | A policy rejected the manifest |
+| `ErrReferrersUnsupported` | Referrers are not supported by the registry |
 
 ---
 
-## Package blob/http
+## Internal Packages (Advanced)
+
+These packages provide lower-level functionality for advanced use cases. Most users should use the `blob` package above.
+
+---
+
+### Package blob/core
 
 ```
-import "github.com/meigma/blob/core/http"
+import blobcore "github.com/meigma/blob/core"
 ```
 
-Package http provides a ByteSource backed by HTTP range requests.
+Package core provides archive creation and reading without registry interaction.
 
-### Types
+#### Key Types
 
-#### Source
+| Type | Description |
+|------|-------------|
+| `*Blob` | Random access to archive files |
+| `*BlobFile` | Wraps `*Blob` with file handle (must be closed) |
 
-```go
-type Source struct {
-    // contains filtered or unexported fields
-}
-```
+#### Key Functions
 
-Source implements random access reads via HTTP range requests. It satisfies `blob.ByteSource` (`io.ReaderAt` plus `Size`).
+| Function | Description |
+|----------|-------------|
+| `New(indexData []byte, source ByteSource, opts ...Option) (*Blob, error)` | Create Blob from index data and byte source |
+| `OpenFile(indexPath, dataPath string, opts ...Option) (*BlobFile, error)` | Open local archive files |
+| `Create(ctx, dir string, indexW, dataW io.Writer, opts ...CreateOption) error` | Build archive to arbitrary writers |
+| `CreateBlob(ctx, srcDir, destDir string, opts ...CreateBlobOption) (*BlobFile, error)` | Create archive to local files |
 
-### Functions
+#### Options
 
-#### NewSource
-
-```go
-func NewSource(url string, opts ...Option) (*Source, error)
-```
-
-NewSource creates a Source backed by HTTP range requests. It probes the remote to determine the content size.
-
-**Parameters:**
-
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| url | `string` | URL of the remote resource |
-| opts | `...Option` | Configuration options |
-
-**Returns:**
-
-| Return | Type | Description |
-|--------|------|-------------|
-| source | `*Source` | The created Source |
-| err | `error` | Non-nil if metadata probe fails |
-
-### Source Methods
-
-#### Size
-
-```go
-func (s *Source) Size() int64
-```
-
-Size returns the total size of the remote content.
-
-#### SourceID
-
-```go
-func (s *Source) SourceID() string
-```
-
-SourceID returns a stable identifier for the remote content. The identifier is derived from the URL and, when available, ETag or Last-Modified headers. Used as part of block cache keys.
-
-#### ReadAt
-
-```go
-func (s *Source) ReadAt(p []byte, off int64) (int, error)
-```
-
-ReadAt reads data from the remote at the given offset using HTTP range requests. Implements `io.ReaderAt`.
-
-#### ReadRange
-
-```go
-func (s *Source) ReadRange(off, length int64) (io.ReadCloser, error)
-```
-
-ReadRange returns a reader for the specified byte range.
-
-### Options
-
-```go
-type Option func(*Source)
-```
+**Blob Options (`Option`):**
 
 | Option | Description | Default |
 |--------|-------------|---------|
-| `WithClient(client *http.Client)` | HTTP client used for requests | `http.DefaultClient` |
-| `WithHeaders(headers http.Header)` | Additional headers on each request | none |
-| `WithHeader(key, value string)` | Single header on each request | none |
-| `WithSourceID(id string)` | Override the automatic source identifier used for block cache keys | auto-generated |
+| `WithMaxFileSize(limit uint64)` | Per-file size limit | 256 MB |
+| `WithMaxDecoderMemory(limit uint64)` | Zstd decoder memory limit | 256 MB |
+| `WithDecoderConcurrency(n int)` | Zstd decoder thread count | 1 |
+| `WithDecoderLowmem(bool)` | Zstd low-memory mode | false |
+| `WithVerifyOnClose(bool)` | Hash verification on Close | true |
+| `WithCache(cache Cache)` | Content cache for file reads | none |
+
+**Create Options (`CreateOption`):**
+
+| Option | Description | Default |
+|--------|-------------|---------|
+| `CreateWithCompression(Compression)` | Compression algorithm | CompressionNone |
+| `CreateWithChangeDetection(ChangeDetection)` | File change detection | ChangeDetectionNone |
+| `CreateWithSkipCompression(fns ...SkipCompressionFunc)` | Skip compression predicates | none |
+| `CreateWithMaxFiles(n int)` | Maximum file count | 200,000 |
+
+**CreateBlob Options (`CreateBlobOption`):**
+
+| Option | Description | Default |
+|--------|-------------|---------|
+| `CreateBlobWithIndexName(name string)` | Override index filename | "index.blob" |
+| `CreateBlobWithDataName(name string)` | Override data filename | "data.blob" |
+| `CreateBlobWithCompression(Compression)` | Compression algorithm | CompressionNone |
+| `CreateBlobWithChangeDetection(ChangeDetection)` | File change detection | ChangeDetectionNone |
+| `CreateBlobWithSkipCompression(fns ...SkipCompressionFunc)` | Skip compression predicates | none |
+| `CreateBlobWithMaxFiles(n int)` | Maximum file count | 200,000 |
 
 ---
 
-## Package blob/cache
+### Package blob/core/cache
 
 ```
 import "github.com/meigma/blob/core/cache"
 ```
 
-Package cache provides content-addressed caching for blob archives.
+Package cache provides content-addressed caching interfaces.
 
-### Interfaces
+#### Interfaces
 
-#### Cache
+**Cache:**
 
 ```go
 type Cache interface {
@@ -664,20 +659,7 @@ type Cache interface {
 }
 ```
 
-Cache provides content-addressed storage for file contents. Keys are SHA256 hashes of uncompressed file content. Values are the uncompressed content. Because keys are content hashes, cache hits are implicitly verified.
-
-Implementations must be safe for concurrent use.
-
-| Method | Signature | Description |
-|--------|-----------|-------------|
-| Get | `Get(hash []byte) (fs.File, bool)` | Retrieves content by its SHA256 hash. Returns `nil, false` if not cached. |
-| Put | `Put(hash []byte, f fs.File) error` | Stores content by reading from the provided fs.File. |
-| Delete | `Delete(hash []byte) error` | Removes cached content for the given hash. |
-| MaxBytes | `MaxBytes() int64` | Returns the configured cache size limit (0 = unlimited). |
-| SizeBytes | `SizeBytes() int64` | Returns the current cache size in bytes. |
-| Prune | `Prune(targetBytes int64) (int64, error)` | Removes entries until cache is at or below targetBytes. Returns bytes freed. |
-
-#### StreamingCache
+**StreamingCache:**
 
 ```go
 type StreamingCache interface {
@@ -686,49 +668,7 @@ type StreamingCache interface {
 }
 ```
 
-StreamingCache extends Cache with streaming write support for large files. Implementations that support streaming (e.g., disk-based caches) should implement this interface to allow caching during `Open()` without buffering entire files in memory.
-
-| Method | Signature | Description |
-|--------|-----------|-------------|
-| Writer | `Writer(hash []byte) (Writer, error)` | Returns a Writer for streaming content into the cache. The hash is the expected SHA256 of the content being written. |
-
-#### Writer
-
-```go
-type Writer interface {
-    io.Writer
-    Commit() error
-    Discard() error
-}
-```
-
-Writer streams content into the cache. Content is written via Write calls. After all content is written, call `Commit` if verification succeeded or `Discard` if verification failed.
-
-| Method | Signature | Description |
-|--------|-----------|-------------|
-| Write | `Write(p []byte) (n int, err error)` | Writes content to the cache buffer. |
-| Commit | `Commit() error` | Finalizes the cache entry, making it available via Get. |
-| Discard | `Discard() error` | Aborts the cache write and cleans up temporary data. |
-
-#### ByteSource
-
-```go
-type ByteSource interface {
-    io.ReaderAt
-    Size() int64
-    SourceID() string
-}
-```
-
-ByteSource provides random access to data for block caching. This mirrors the `blob.ByteSource` interface.
-
-| Method | Signature | Description |
-|--------|-----------|-------------|
-| ReadAt | `ReadAt(p []byte, off int64) (int, error)` | Reads bytes at the given offset (from io.ReaderAt). |
-| Size | `Size() int64` | Returns the total size of the source. |
-| SourceID | `SourceID() string` | Returns a stable identifier for cache key generation. |
-
-#### BlockCache
+**BlockCache:**
 
 ```go
 type BlockCache interface {
@@ -739,624 +679,187 @@ type BlockCache interface {
 }
 ```
 
-BlockCache wraps ByteSources with block-level caching. Block caching is most effective for random, non-contiguous reads over remote sources.
-
-| Method | Signature | Description |
-|--------|-----------|-------------|
-| Wrap | `Wrap(src ByteSource, opts ...WrapOption) (ByteSource, error)` | Wraps a source with block caching. |
-| MaxBytes | `MaxBytes() int64` | Returns the configured cache size limit (0 = unlimited). |
-| SizeBytes | `SizeBytes() int64` | Returns the current cache size in bytes. |
-| Prune | `Prune(targetBytes int64) (int64, error)` | Removes entries until cache is at or below targetBytes. |
-
-### Constants
-
-| Constant | Value | Description |
-|----------|-------|-------------|
-| `DefaultBlockSize` | 65536 (64 KB) | Default block size for block caches |
-| `DefaultMaxBlocksPerRead` | 4 | Default threshold for bypassing cache on large reads |
-
-### Wrap Options
-
-```go
-type WrapOption func(*WrapConfig)
-```
-
-| Option | Description | Default |
-|--------|-------------|---------|
-| `WithBlockSize(n int64)` | Block size in bytes for caching. | 64 KB |
-| `WithMaxBlocksPerRead(n int)` | Bypass caching when read spans more than n blocks. 0 disables the limit. | 4 |
-
-### Types
-
-#### Blob
-
-```go
-type Blob struct {
-    // contains filtered or unexported fields
-}
-```
-
-Blob wraps a `blob.Blob` with content-addressed caching. Blob implements `fs.FS`, `fs.StatFS`, `fs.ReadFileFS`, and `fs.ReadDirFS`.
-
-For streaming reads via `Open()`, caching behavior depends on the cache type:
-- `StreamingCache`: content streams to cache without full buffering
-- Basic `Cache`: content is buffered in memory then cached on Close
-
-Blob uses singleflight to deduplicate concurrent `ReadFile` calls for the same content, preventing redundant network requests during cache miss storms.
-
-### Functions
-
-#### New
-
-```go
-func New(base *blob.Blob, cache Cache, opts ...Option) *Blob
-```
-
-New wraps a `blob.Blob` with caching support.
-
-**Parameters:**
-
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| base | `*blob.Blob` | The underlying Blob to wrap |
-| cache | `Cache` | Cache implementation to use |
-| opts | `...Option` | Configuration options |
-
-**Returns:**
-
-| Return | Type | Description |
-|--------|------|-------------|
-| blob | `*Blob` | The cached Blob wrapper |
-
-### Blob Methods
-
-#### Open
-
-```go
-func (b *Blob) Open(name string) (fs.File, error)
-```
-
-Open implements `fs.FS` with caching support. For files, the returned `fs.File` will cache content after successful hash verification on Close. For `StreamingCache` implementations, content streams directly to the cache. For basic `Cache` implementations, content is buffered in memory.
-
-#### Stat
-
-```go
-func (b *Blob) Stat(name string) (fs.FileInfo, error)
-```
-
-Stat implements `fs.StatFS`. Delegates to the underlying Blob.
-
-#### ReadFile
-
-```go
-func (b *Blob) ReadFile(name string) ([]byte, error)
-```
-
-ReadFile implements `fs.ReadFileFS` with caching support. Checks the cache first and returns cached content if available. On cache miss, reads from the source and caches the result. Concurrent calls for the same content are deduplicated using singleflight.
-
-#### ReadDir
-
-```go
-func (b *Blob) ReadDir(name string) ([]fs.DirEntry, error)
-```
-
-ReadDir implements `fs.ReadDirFS`. Delegates to the underlying Blob.
-
-#### Prefetch
-
-```go
-func (b *Blob) Prefetch(paths ...string) error
-```
-
-Prefetch fetches and caches the specified files. For adjacent files, Prefetch batches range requests to minimize round trips. This is useful for warming the cache with files that will be accessed soon.
-
-#### PrefetchDir
-
-```go
-func (b *Blob) PrefetchDir(prefix string) error
-```
-
-PrefetchDir fetches and caches all files under the given directory prefix. Because files are sorted by path and stored adjacently, PrefetchDir can fetch an entire directory's contents with a single range request, then split and cache each file individually.
-
-### Options
-
-```go
-type Option func(*Blob)
-```
-
-| Option | Description | Default |
-|--------|-------------|---------|
-| `WithPrefetchConcurrency(workers int)` | Number of workers for Prefetch/PrefetchDir. &lt;0 forces serial, 0 uses default (serial), &gt;0 forces fixed count. | 0 (serial) |
-
 ---
 
-## Package blob/cache/disk
+### Package blob/core/cache/disk
 
 ```
 import "github.com/meigma/blob/core/cache/disk"
 ```
 
-Package disk provides a disk-backed cache implementation.
+Package disk provides disk-backed cache implementations.
 
-### Types
+#### Functions
 
-#### Cache
+| Function | Description |
+|----------|-------------|
+| `New(dir string, opts ...Option) (*Cache, error)` | Create content cache |
+| `NewBlockCache(dir string, opts ...BlockCacheOption) (*BlockCache, error)` | Create block cache |
 
-```go
-type Cache struct {
-    // contains filtered or unexported fields
-}
-```
-
-Cache implements `cache.Cache` and `cache.StreamingCache` using the local filesystem.
-
-### Functions
-
-#### New
-
-```go
-func New(dir string, opts ...Option) (*Cache, error)
-```
-
-New creates a disk-backed cache rooted at the specified directory.
-
-**Parameters:**
-
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| dir | `string` | Root directory for the cache |
-| opts | `...Option` | Configuration options |
-
-**Returns:**
-
-| Return | Type | Description |
-|--------|------|-------------|
-| cache | `*Cache` | The created disk cache |
-| err | `error` | Non-nil if directory creation fails |
-
-### Cache Methods
-
-#### Get
-
-```go
-func (c *Cache) Get(hash []byte) ([]byte, bool)
-```
-
-Get retrieves content by its SHA256 hash. Returns `nil, false` if the content is not cached.
-
-#### Put
-
-```go
-func (c *Cache) Put(hash, content []byte) error
-```
-
-Put stores content indexed by its SHA256 hash. Writes are atomic using temp files and renames.
-
-#### Writer
-
-```go
-func (c *Cache) Writer(hash []byte) (cache.Writer, error)
-```
-
-Writer opens a streaming cache writer for the given hash. Implements `cache.StreamingCache`.
-
-### Options
-
-```go
-type Option func(*Cache)
-```
+#### Options
 
 | Option | Description | Default |
 |--------|-------------|---------|
-| `WithShardPrefixLen(n int)` | Number of hex characters used for directory sharding. Use 0 to disable sharding. | 2 |
-| `WithDirPerm(mode os.FileMode)` | Directory permissions for cache directories. | 0700 |
-| `WithMaxBytes(n int64)` | Maximum cache size in bytes. 0 disables the limit. | 0 (unlimited) |
-
-### Cache Methods
-
-#### MaxBytes
-
-```go
-func (c *Cache) MaxBytes() int64
-```
-
-MaxBytes returns the configured cache size limit (0 = unlimited).
-
-#### SizeBytes
-
-```go
-func (c *Cache) SizeBytes() int64
-```
-
-SizeBytes returns the current cache size in bytes.
-
-#### Prune
-
-```go
-func (c *Cache) Prune(targetBytes int64) (int64, error)
-```
-
-Prune removes cached entries until the cache is at or below targetBytes. Returns the number of bytes freed.
+| `WithMaxBytes(n int64)` | Maximum cache size | 0 (unlimited) |
+| `WithShardPrefixLen(n int)` | Directory sharding | 2 |
+| `WithDirPerm(mode os.FileMode)` | Directory permissions | 0700 |
+| `WithBlockMaxBytes(n int64)` | Maximum block cache size | 0 (unlimited) |
 
 ---
 
-### BlockCache Type
+### Package blob/core/http
 
-```go
-type BlockCache struct {
-    // contains filtered or unexported fields
-}
+```
+import blobhttp "github.com/meigma/blob/core/http"
 ```
 
-BlockCache provides a disk-backed block cache for ByteSources. It implements `cache.BlockCache`.
+Package http provides a ByteSource backed by HTTP range requests.
 
-### BlockCache Functions
-
-#### NewBlockCache
+#### Functions
 
 ```go
-func NewBlockCache(dir string, opts ...BlockCacheOption) (*BlockCache, error)
+func NewSource(url string, opts ...Option) (*Source, error)
 ```
 
-NewBlockCache creates a disk-backed block cache rooted at the specified directory.
+NewSource creates a Source backed by HTTP range requests.
 
-**Parameters:**
-
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| dir | `string` | Root directory for the block cache |
-| opts | `...BlockCacheOption` | Configuration options |
-
-**Returns:**
-
-| Return | Type | Description |
-|--------|------|-------------|
-| cache | `*BlockCache` | The created block cache |
-| err | `error` | Non-nil if directory creation fails |
-
-### BlockCache Methods
-
-#### Wrap
-
-```go
-func (c *BlockCache) Wrap(src cache.ByteSource, opts ...cache.WrapOption) (cache.ByteSource, error)
-```
-
-Wrap returns a ByteSource that caches reads in fixed-size blocks.
-
-#### MaxBytes
-
-```go
-func (c *BlockCache) MaxBytes() int64
-```
-
-MaxBytes returns the configured cache size limit (0 = unlimited).
-
-#### SizeBytes
-
-```go
-func (c *BlockCache) SizeBytes() int64
-```
-
-SizeBytes returns the current cache size in bytes.
-
-#### Prune
-
-```go
-func (c *BlockCache) Prune(targetBytes int64) (int64, error)
-```
-
-Prune removes cached entries until the cache is at or below targetBytes.
-
-### BlockCache Options
-
-```go
-type BlockCacheOption func(*BlockCache)
-```
+#### Options
 
 | Option | Description | Default |
 |--------|-------------|---------|
-| `WithBlockMaxBytes(n int64)` | Maximum cache size in bytes. 0 disables the limit. | 0 (unlimited) |
-| `WithBlockShardPrefixLen(n int)` | Number of hex characters for directory sharding. 0 disables sharding. | 2 |
-| `WithBlockDirPerm(mode os.FileMode)` | Directory permissions for cache directories. | 0700 |
+| `WithClient(client *http.Client)` | HTTP client for requests | http.DefaultClient |
+| `WithHeaders(headers http.Header)` | Additional headers | none |
+| `WithHeader(key, value string)` | Single additional header | none |
+| `WithSourceID(id string)` | Override source identifier for cache keys | auto-generated |
 
 ---
 
-## Package blob/client
+### Package blob/registry
 
 ```
-import "github.com/meigma/blob/client"
+import "github.com/meigma/blob/registry"
 ```
 
-Package client provides a high-level API for working with blob archives in OCI registries.
+Package registry provides direct OCI registry operations.
 
-### Types
+#### Key Types
 
-#### Client
+| Type | Description |
+|------|-------------|
+| `*Client` | Registry operations client |
+| `*BlobManifest` | Archive manifest from registry |
 
-```go
-type Client struct {
-    // contains filtered or unexported fields
-}
-```
+#### Key Functions
 
-Client provides operations for pushing and pulling blob archives to/from OCI registries.
+| Function | Description |
+|----------|-------------|
+| `New(opts ...Option) *Client` | Create registry client |
 
-### Functions
-
-#### New
-
-```go
-func New(opts ...Option) *Client
-```
-
-New creates a new OCI client with the given options.
-
-**Parameters:**
-
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| opts | `...Option` | Configuration options |
-
-**Returns:**
-
-| Return | Type | Description |
-|--------|------|-------------|
-| client | `*Client` | The created client |
-
-### Client Methods
-
-#### Push
-
-```go
-func (c *Client) Push(ctx context.Context, ref string, b *blob.Blob, opts ...PushOption) error
-```
-
-Push pushes a blob archive to an OCI registry.
-
-**Parameters:**
-
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| ctx | `context.Context` | Context for cancellation |
-| ref | `string` | OCI reference (e.g., "ghcr.io/org/repo:tag") |
-| b | `*blob.Blob` | The blob archive to push |
-| opts | `...PushOption` | Push configuration options |
-
-#### Pull
-
-```go
-func (c *Client) Pull(ctx context.Context, ref string, opts ...PullOption) (*blob.Blob, error)
-```
-
-Pull pulls a blob archive from an OCI registry. The returned Blob uses lazy loading via HTTP range requests.
-
-**Parameters:**
-
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| ctx | `context.Context` | Context for cancellation |
-| ref | `string` | OCI reference (e.g., "ghcr.io/org/repo:tag") |
-| opts | `...PullOption` | Pull configuration options |
-
-**Returns:**
-
-| Return | Type | Description |
-|--------|------|-------------|
-| blob | `*blob.Blob` | The pulled archive with lazy data loading |
-| err | `error` | Non-nil if pull fails |
-
-#### Fetch
-
-```go
-func (c *Client) Fetch(ctx context.Context, ref string, opts ...FetchOption) (*BlobManifest, error)
-```
-
-Fetch retrieves manifest metadata without downloading data. Use this to check if an archive exists or inspect its metadata.
-
-**Parameters:**
-
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| ctx | `context.Context` | Context for cancellation |
-| ref | `string` | OCI reference |
-| opts | `...FetchOption` | Fetch configuration options |
-
-**Returns:**
-
-| Return | Type | Description |
-|--------|------|-------------|
-| manifest | `*BlobManifest` | Manifest metadata |
-| err | `error` | Non-nil if fetch fails |
-
-#### Tag
-
-```go
-func (c *Client) Tag(ctx context.Context, ref string, digest string) error
-```
-
-Tag creates or updates a tag pointing to an existing manifest digest.
-
-**Parameters:**
-
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| ctx | `context.Context` | Context for cancellation |
-| ref | `string` | OCI reference with new tag |
-| digest | `string` | Digest of existing manifest |
-
-### Client Options
-
-```go
-type Option func(*Client)
-```
-
-| Option | Description | Default |
-|--------|-------------|---------|
-| `WithDockerConfig()` | Read credentials from ~/.docker/config.json | none |
-| `WithPlainHTTP(bool)` | Use plain HTTP instead of HTTPS | false |
-| `WithRefCache(cache.RefCache)` | Cache for tag to digest mappings | none |
-| `WithManifestCache(cache.ManifestCache)` | Cache for manifests | none |
-| `WithIndexCache(cache.IndexCache)` | Cache for index blobs | none |
-| `WithOCIClient(*oras.Client)` | Use custom ORAS client | default |
-
-### Push Options
-
-```go
-type PushOption func(*pushConfig)
-```
-
-| Option | Description | Default |
-|--------|-------------|---------|
-| `WithTags(tags ...string)` | Apply additional tags to the pushed manifest | none |
-| `WithAnnotations(map[string]string)` | Set custom manifest annotations | auto-generated |
-
-### Pull Options
-
-```go
-type PullOption func(*pullConfig)
-```
-
-| Option | Description | Default |
-|--------|-------------|---------|
-| `WithBlobOptions(opts ...blob.Option)` | Pass options to the created Blob | none |
-| `WithMaxIndexSize(maxBytes int64)` | Limit index blob size | 8 MB |
-| `WithPullSkipCache()` | Bypass ref and manifest caches | false |
-
-### Fetch Options
-
-```go
-type FetchOption func(*fetchConfig)
-```
-
-| Option | Description | Default |
-|--------|-------------|---------|
-| `WithSkipCache()` | Bypass manifest cache | false |
-
-### Errors
-
-| Error | Description |
-|-------|-------------|
-| `ErrNotFound` | Archive does not exist at the reference |
-| `ErrInvalidReference` | Reference string is malformed |
-| `ErrInvalidManifest` | Manifest is not a valid blob archive manifest |
-| `ErrMissingIndex` | Manifest does not contain an index blob |
-| `ErrMissingData` | Manifest does not contain a data blob |
-
----
-
-## Package blob/client/cache
-
-```
-import "github.com/meigma/blob/client/cache"
-```
-
-Package cache provides caching interfaces for the blob client.
-
-### Interfaces
-
-#### RefCache
-
-```go
-type RefCache interface {
-    GetDigest(ref string) (digest string, ok bool)
-    PutDigest(ref string, digest string) error
-    Delete(ref string) error
-    MaxBytes() int64
-    SizeBytes() int64
-    Prune(targetBytes int64) (int64, error)
-}
-```
-
-RefCache caches reference to digest mappings to avoid redundant HEAD requests for tag resolution.
+#### Client Methods
 
 | Method | Description |
 |--------|-------------|
-| `GetDigest` | Returns the cached digest for a reference |
-| `PutDigest` | Caches a reference to digest mapping |
-| `Delete` | Removes a cached reference |
-| `MaxBytes` | Returns configured cache size limit |
-| `SizeBytes` | Returns current cache size |
-| `Prune` | Removes entries until cache is at or below target |
-
-#### ManifestCache
-
-```go
-type ManifestCache interface {
-    GetManifest(digest string) (manifest *ocispec.Manifest, ok bool)
-    PutManifest(digest string, raw []byte) error
-    Delete(digest string) error
-    MaxBytes() int64
-    SizeBytes() int64
-    Prune(targetBytes int64) (int64, error)
-}
-```
-
-ManifestCache caches digest to manifest mappings to avoid redundant manifest fetches.
-
-#### IndexCache
-
-```go
-type IndexCache interface {
-    GetIndex(digest string) (index []byte, ok bool)
-    PutIndex(digest string, raw []byte) error
-    Delete(digest string) error
-    MaxBytes() int64
-    SizeBytes() int64
-    Prune(targetBytes int64) (int64, error)
-}
-```
-
-IndexCache caches digest to index blob mappings to avoid redundant index downloads.
+| `Push(ctx, ref string, b *blob.Blob, opts ...PushOption) error` | Push archive to registry |
+| `Pull(ctx, ref string, opts ...PullOption) (*blob.Blob, error)` | Pull archive from registry |
+| `Fetch(ctx, ref string, opts ...FetchOption) (*BlobManifest, error)` | Fetch manifest metadata |
+| `Tag(ctx, ref, digest string) error` | Create or update a tag |
+| `Resolve(ctx, ref string) (string, error)` | Resolve tag to digest |
 
 ---
 
-## Package blob/client/cache/disk
+### Package blob/registry/cache
 
 ```
-import "github.com/meigma/blob/client/cache/disk"
+import "github.com/meigma/blob/registry/cache"
 ```
 
-Package disk provides disk-backed cache implementations for the OCI client.
+Package cache provides caching interfaces for the registry client.
 
-### Functions
+#### Interfaces
 
-#### NewRefCache
+**RefCache:** Caches reference to digest mappings.
 
-```go
-func NewRefCache(dir string, opts ...RefCacheOption) (*RefCache, error)
+**ManifestCache:** Caches digest to manifest mappings.
+
+**IndexCache:** Caches digest to index blob mappings.
+
+---
+
+### Package blob/registry/cache/disk
+
+```
+import "github.com/meigma/blob/registry/cache/disk"
 ```
 
-NewRefCache creates a disk-backed cache for reference to digest mappings.
+Package disk provides disk-backed cache implementations for the registry client.
 
-#### NewManifestCache
+#### Functions
 
-```go
-func NewManifestCache(dir string, opts ...ManifestCacheOption) (*ManifestCache, error)
-```
+| Function | Description |
+|----------|-------------|
+| `NewRefCache(dir string, opts ...RefCacheOption) (*RefCache, error)` | Create ref cache |
+| `NewManifestCache(dir string, opts ...ManifestCacheOption) (*ManifestCache, error)` | Create manifest cache |
+| `NewIndexCache(dir string, opts ...IndexCacheOption) (*IndexCache, error)` | Create index cache |
 
-NewManifestCache creates a disk-backed cache for manifests with integrity validation.
-
-#### NewIndexCache
-
-```go
-func NewIndexCache(dir string, opts ...IndexCacheOption) (*IndexCache, error)
-```
-
-NewIndexCache creates a disk-backed cache for index blobs with integrity validation.
-
-### Common Options
-
-All cache types support these options:
+#### Common Options
 
 | Option | Description | Default |
 |--------|-------------|---------|
-| `WithShardPrefixLen(n int)` | Hex characters for directory sharding | 2 |
+| `WithMaxBytes(n int64)` | Maximum cache size | 0 (unlimited) |
+| `WithShardPrefixLen(n int)` | Directory sharding | 2 |
 | `WithDirPerm(mode os.FileMode)` | Directory permissions | 0700 |
-| `WithMaxBytes(n int64)` | Maximum cache size in bytes | 0 (unlimited) |
 
-### RefCache Options
+#### RefCache Options
 
 | Option | Description | Default |
 |--------|-------------|---------|
-| `WithRefCacheTTL(ttl time.Duration)` | Time-to-live for cached entries | 0 (no expiration) |
+| `WithRefCacheTTL(ttl time.Duration)` | Time-to-live for entries | 0 (no expiration) |
+
+---
+
+### Package blob/policy/sigstore
+
+```
+import "github.com/meigma/blob/policy/sigstore"
+```
+
+Package sigstore provides Sigstore signature verification policies.
+
+#### Functions
+
+```go
+func NewPolicy(opts ...Option) (Policy, error)
+```
+
+NewPolicy creates a Sigstore verification policy.
+
+#### Options
+
+| Option | Description |
+|--------|-------------|
+| `WithIdentity(issuer, subject string)` | Require signatures from specific issuer/subject |
+
+---
+
+### Package blob/policy/opa
+
+```
+import "github.com/meigma/blob/policy/opa"
+```
+
+Package opa provides OPA-based policy evaluation for SLSA attestations.
+
+#### Functions
+
+```go
+func NewPolicy(opts ...Option) (Policy, error)
+```
+
+NewPolicy creates an OPA policy evaluator.
+
+#### Options
+
+| Option | Description |
+|--------|-------------|
+| `WithPolicyFile(path string)` | Load Rego policy from file |
+| `WithPolicyString(rego string)` | Use inline Rego policy |

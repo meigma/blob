@@ -287,4 +287,4 @@ Using OCI means:
 - [Architecture](architecture) - Overall blob archive design
 - [Integrity](integrity) - Detailed verification mechanisms
 - [OCI Client](../guides/oci-client) - Push and pull operations
-- [OCI Client Caching](../guides/oci-client-caching) - Client cache configuration
+- [Caching](../guides/caching) - Cache configuration

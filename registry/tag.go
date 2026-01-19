@@ -20,9 +20,12 @@ func (c *Client) Tag(ctx context.Context, ref, digest string) error {
 		return fmt.Errorf("%w: reference must include a tag", ErrInvalidReference)
 	}
 
-	desc, err := descriptorFromDigest(digest)
+	// Resolve the digest to get the full descriptor (including media type).
+	// This is required because ORAS needs the media type to fetch the manifest
+	// when tagging.
+	desc, err := c.oci.Resolve(ctx, ref, digest)
 	if err != nil {
-		return err
+		return mapOCIError(err)
 	}
 
 	return mapOCIError(c.oci.Tag(ctx, ref, &desc, tag))

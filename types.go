@@ -45,6 +45,7 @@ var (
 	CopyWithCleanDest       = blobcore.CopyWithCleanDest
 	CopyWithWorkers         = blobcore.CopyWithWorkers
 	CopyWithReadConcurrency = blobcore.CopyWithReadConcurrency
+	CopyWithReadAheadBytes  = blobcore.CopyWithReadAheadBytes
 )
 
 // DefaultSkipCompression returns a SkipCompressionFunc that skips small files

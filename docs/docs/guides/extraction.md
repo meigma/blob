@@ -11,17 +11,16 @@ How to extract archive contents to the local filesystem.
 Pull an archive from an OCI registry and extract its contents:
 
 ```go
-import (
-	"context"
-
-	"github.com/meigma/blob/client"
-)
+import "github.com/meigma/blob"
 
 func extractFromRegistry(ref, destDir string) error {
-	c := client.New(client.WithDockerConfig())
+	c, err := blob.NewClient(blob.WithDockerConfig())
+	if err != nil {
+		return err
+	}
 
 	// Pull the archive
-	archive, err := c.Pull(context.Background(), ref)
+	archive, err := c.Pull(ctx, ref)
 	if err != nil {
 		return err
 	}
@@ -35,10 +34,12 @@ The pulled archive fetches file data lazily. For extraction, data is streamed vi
 
 ## Working with BlobFile
 
-When using `OpenFile` or `CreateBlob`, you receive a `*BlobFile` which embeds `*Blob`. All extraction methods work identically:
+When using `OpenFile` or `CreateBlob` from the core package, you receive a `*BlobFile` which embeds `*Blob`. All extraction methods work identically:
 
 ```go
-blobFile, err := blob.OpenFile("index.blob", "data.blob")
+import blobcore "github.com/meigma/blob/core"
+
+blobFile, err := blobcore.OpenFile("index.blob", "data.blob")
 if err != nil {
 	return err
 }
