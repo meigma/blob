@@ -83,6 +83,56 @@ func (f *File) Read(p []byte) (int, error) {
 	return n, nil
 }
 
+// ReadAt implements io.ReaderAt for uncompressed entries.
+// For compressed entries, ReadAt returns an error.
+func (f *File) ReadAt(p []byte, off int64) (int, error) {
+	if err := f.init(); err != nil {
+		return 0, err
+	}
+	if f.verifyErr != nil {
+		return 0, f.verifyErr
+	}
+	if len(p) == 0 {
+		return 0, nil
+	}
+	if off < 0 {
+		return 0, fmt.Errorf("read at %d: negative offset", off)
+	}
+	if f.entry.Compression != CompressionNone {
+		return 0, fmt.Errorf("read at %s: unsupported compression", f.entry.Path)
+	}
+
+	size, err := sizing.ToInt64(f.entry.OriginalSize, ErrSizeOverflow)
+	if err != nil {
+		return 0, err
+	}
+	if off >= size {
+		return 0, io.EOF
+	}
+
+	expected := len(p)
+	if remaining := size - off; remaining < int64(expected) {
+		expected = int(remaining)
+	}
+
+	dataOffset, err := sizing.ToInt64(f.entry.DataOffset, ErrSizeOverflow)
+	if err != nil {
+		return 0, err
+	}
+
+	n, err := f.reader.source.ReadAt(p[:expected], dataOffset+off)
+	if err == io.EOF && n == expected {
+		err = nil
+	}
+	if err != nil {
+		return n, err
+	}
+	if expected < len(p) {
+		return n, io.EOF
+	}
+	return n, nil
+}
+
 // Stat returns file info.
 func (f *File) Stat() (fs.FileInfo, error) {
 	return NewInfo(&f.entry, Base(f.entry.Path))

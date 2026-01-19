@@ -1,0 +1,154 @@
+{"benchmark":"BenchmarkSingleFileTransfer/archive=1MiB","params":{"archive_size_bytes":1048576,"file_size_bytes":65536},"results":{"archive_size":1048576,"bytes_transferred":65536,"file_size":65536,"latency_ms":0.1086,"overhead_bytes":0,"savings_percent":93.75}}
+goos: linux
+goarch: amd64
+pkg: github.com/meigma/blob
+cpu: AMD EPYC 9124 16-Core Processor                
+BenchmarkSingleFileTransfer/archive=1MiB-32         	   10000	    108612 ns/op	   1048576 archive_size	     65536 bytes_transferred	     65536 file_size	         0.1086 latency_ms	         0 overhead_bytes	        93.75 savings_percent	   65811 B/op	       7 allocs/op
+{"benchmark":"BenchmarkSingleFileTransfer/archive=10MiB","params":{"archive_size_bytes":10485760,"file_size_bytes":65536},"results":{"archive_size":10485760,"bytes_transferred":65536,"file_size":65536,"latency_ms":0.0941046658259773,"overhead_bytes":0,"savings_percent":99.375}}
+BenchmarkSingleFileTransfer/archive=10MiB-32        	   12688	     94167 ns/op	  10485760 archive_size	     65536 bytes_transferred	     65536 file_size	         0.09410 latency_ms	         0 overhead_bytes	        99.38 savings_percent	   65809 B/op	       7 allocs/op
+{"benchmark":"BenchmarkSingleFileTransfer/archive=100MiB","params":{"archive_size_bytes":104857600,"file_size_bytes":65536},"results":{"archive_size":104857600,"bytes_transferred":65536,"file_size":65536,"latency_ms":0.05443164292842239,"overhead_bytes":0,"savings_percent":99.9375}}
+BenchmarkSingleFileTransfer/archive=100MiB-32       	   22046	     54457 ns/op	 104857600 archive_size	     65536 bytes_transferred	     65536 file_size	         0.05443 latency_ms	         0 overhead_bytes	        99.94 savings_percent	   65809 B/op	       7 allocs/op
+{"benchmark":"BenchmarkSingleFileTransfer/archive=1GiB","params":{"archive_size_bytes":1073741824,"file_size_bytes":65536},"results":{"archive_size":1073741824,"bytes_transferred":65536,"file_size":65536,"latency_ms":0.055789071455865494,"overhead_bytes":0,"savings_percent":99.993896484375}}
+BenchmarkSingleFileTransfer/archive=1GiB-32         	   26170	     55791 ns/op	1073741824 archive_size	     65536 bytes_transferred	     65536 file_size	         0.05579 latency_ms	         0 overhead_bytes	        99.99 savings_percent	   65809 B/op	       7 allocs/op
+{"benchmark":"BenchmarkMultiFileTransfer/files=1","params":{"archive_size_bytes":104857600,"file_size_bytes":65536,"files":1,"files_per_iteration":1,"random_selection":true,"total_file_size":65536},"results":{"bytes_transferred":65536,"total_file_size":65536,"transfer_efficiency":100}}
+BenchmarkMultiFileTransfer/files=1-32               	   20550	     57872 ns/op	     65536 bytes_transferred	     65536 total_file_size	       100.0 transfer_efficiency	   65809 B/op	       7 allocs/op
+{"benchmark":"BenchmarkMultiFileTransfer/files=10","params":{"archive_size_bytes":104857600,"file_size_bytes":65536,"files":10,"files_per_iteration":10,"random_selection":true,"total_file_size":655360},"results":{"bytes_transferred":655360,"total_file_size":655360,"transfer_efficiency":100}}
+BenchmarkMultiFileTransfer/files=10-32              	    2353	    587964 ns/op	    655360 bytes_transferred	    655360 total_file_size	       100.0 transfer_efficiency	  658090 B/op	      70 allocs/op
+{"benchmark":"BenchmarkMultiFileTransfer/files=50","params":{"archive_size_bytes":104857600,"file_size_bytes":65536,"files":50,"files_per_iteration":50,"random_selection":true,"total_file_size":3276800},"results":{"bytes_transferred":3276800,"total_file_size":3276800,"transfer_efficiency":100}}
+BenchmarkMultiFileTransfer/files=50-32              	     420	   2833817 ns/op	   3276800 bytes_transferred	   3276800 total_file_size	       100.0 transfer_efficiency	 3290450 B/op	     350 allocs/op
+{"benchmark":"BenchmarkMultiFileTransfer/files=100","params":{"archive_size_bytes":104857600,"file_size_bytes":65536,"files":100,"files_per_iteration":100,"random_selection":true,"total_file_size":6553600},"results":{"bytes_transferred":6553600,"total_file_size":6553600,"transfer_efficiency":100}}
+BenchmarkMultiFileTransfer/files=100-32             	     200	   6089045 ns/op	   6553600 bytes_transferred	   6553600 total_file_size	       100.0 transfer_efficiency	 6580901 B/op	     700 allocs/op
+{"benchmark":"BenchmarkSequentialVsRandom/adjacent","params":{"archive_files":1024,"files":10},"results":{"bytes_transferred":655360,"range_request_count":1}}
+BenchmarkSequentialVsRandom/adjacent-32             	    3051	    383362 ns/op	    655360 bytes_transferred	         1.000 range_request_count	  657882 B/op	      32 allocs/op
+{"benchmark":"BenchmarkSequentialVsRandom/random","params":{"archive_files":1024,"files":10},"results":{"bytes_transferred":655360,"range_request_count":10}}
+BenchmarkSequentialVsRandom/random-32               	    2740	    766523 ns/op	    655360 bytes_transferred	        10.00 range_request_count	  655936 B/op	      22 allocs/op
+{"benchmark":"BenchmarkDirectoryTransfer/single-range","params":{"file_count":32,"prefix":"dir00"},"results":{"bytes_transferred":524288,"range_request_count":1}}
+BenchmarkDirectoryTransfer/single-range-32          	    1251	    863406 ns/op	    524288 bytes_transferred	         1.000 range_request_count	  532400 B/op	     112 allocs/op
+{"benchmark":"BenchmarkDirectoryTransfer/per-file","params":{"file_count":32,"prefix":"dir00"},"results":{"bytes_transferred":524288,"range_request_count":32}}
+BenchmarkDirectoryTransfer/per-file-32              	    1302	    878417 ns/op	    524288 bytes_transferred	        32.00 range_request_count	  533025 B/op	     224 allocs/op
+{"benchmark":"BenchmarkIndexSize/files=100","params":{"file_count":100},"results":{"bytes_per_entry":108.88,"file_count":100,"index_bytes":10888}}
+BenchmarkIndexSize/files=100-32                     	1000000000	         1.000 ns/op	       108.9 bytes_per_entry	       100.0 file_count	     10888 index_bytes	       0 B/op	       0 allocs/op
+{"benchmark":"BenchmarkIndexSize/files=1000","params":{"file_count":1000},"results":{"bytes_per_entry":108.088,"file_count":1000,"index_bytes":108088}}
+BenchmarkIndexSize/files=1000-32                    	1000000000	         1.000 ns/op	       108.1 bytes_per_entry	      1000 file_count	    108088 index_bytes	       0 B/op	       0 allocs/op
+{"benchmark":"BenchmarkIndexSize/files=10000","params":{"file_count":10000},"results":{"bytes_per_entry":108.0088,"file_count":10000,"index_bytes":1080088}}
+BenchmarkIndexSize/files=10000-32                   	1000000000	         1.000 ns/op	       108.0 bytes_per_entry	     10000 file_count	   1080088 index_bytes	       0 B/op	       0 allocs/op
+{"benchmark":"BenchmarkIndexSize/files=100000","params":{"file_count":100000},"results":{"bytes_per_entry":108.00088,"file_count":100000,"index_bytes":10800088}}
+BenchmarkIndexSize/files=100000-32                  	1000000000	         1.000 ns/op	       108.0 bytes_per_entry	    100000 file_count	  10800088 index_bytes	       0 B/op	       0 allocs/op
+{"benchmark":"BenchmarkIndexParse/files=100","params":{"file_count":100},"results":{"parse_latency_ns":135.09690007495644}}
+BenchmarkIndexParse/files=100-32                    	 9022573	       135.1 ns/op	       135.1 parse_latency_ns	      64 B/op	       2 allocs/op
+{"benchmark":"BenchmarkIndexParse/files=1000","params":{"file_count":1000},"results":{"parse_latency_ns":135.3311279745514}}
+BenchmarkIndexParse/files=1000-32                   	 8628528	       135.3 ns/op	       135.3 parse_latency_ns	      64 B/op	       2 allocs/op
+{"benchmark":"BenchmarkIndexParse/files=10000","params":{"file_count":10000},"results":{"parse_latency_ns":130.4332778153233}}
+BenchmarkIndexParse/files=10000-32                  	 8372058	       130.4 ns/op	       130.4 parse_latency_ns	      64 B/op	       2 allocs/op
+{"benchmark":"BenchmarkIndexParse/files=100000","params":{"file_count":100000},"results":{"parse_latency_ns":126.16250718099532}}
+BenchmarkIndexParse/files=100000-32                 	12033499	       126.2 ns/op	       126.2 parse_latency_ns	      64 B/op	       2 allocs/op
+{"benchmark":"BenchmarkFileLookup/files=100","params":{"file_count":100},"results":{"file_count":100,"lookup_latency_ns":26.507547175345632}}
+BenchmarkFileLookup/files=100-32                    	43638578	        26.51 ns/op	       100.0 file_count	        26.51 lookup_latency_ns	       0 B/op	       0 allocs/op
+{"benchmark":"BenchmarkFileLookup/files=1000","params":{"file_count":1000},"results":{"file_count":1000,"lookup_latency_ns":26.640080405272247}}
+BenchmarkFileLookup/files=1000-32                   	43131500	        26.64 ns/op	      1000 file_count	        26.64 lookup_latency_ns	       0 B/op	       0 allocs/op
+{"benchmark":"BenchmarkFileLookup/files=10000","params":{"file_count":10000},"results":{"file_count":10000,"lookup_latency_ns":26.649816612535666}}
+BenchmarkFileLookup/files=10000-32                  	43135173	        26.65 ns/op	     10000 file_count	        26.65 lookup_latency_ns	       0 B/op	       0 allocs/op
+{"benchmark":"BenchmarkFileLookup/files=100000","params":{"file_count":100000},"results":{"file_count":100000,"lookup_latency_ns":26.150626339320198}}
+BenchmarkFileLookup/files=100000-32                 	45375165	        26.15 ns/op	    100000 file_count	        26.15 lookup_latency_ns	       0 B/op	       0 allocs/op
+{"benchmark":"BenchmarkIndexFetchHTTP","params":{"file_count":10000,"latency_ms":5},"results":{"fetch_latency_ms":6.810344827586207,"index_bytes":1080088}}
+BenchmarkIndexFetchHTTP-32                          	     174	   6812791 ns/op	         6.810 fetch_latency_ms	   1080088 index_bytes	 5289623 B/op	     193 allocs/op
+{"benchmark":"BenchmarkReadDir/entries=10","params":{"entry_count":10},"results":{"entry_count":10,"latency_us":8.143672729828726}}
+BenchmarkReadDir/entries=10-32                      	  128041	      8144 ns/op	        10.00 entry_count	         8.144 latency_us	    3144 B/op	      54 allocs/op
+{"benchmark":"BenchmarkReadDir/entries=100","params":{"entry_count":100},"results":{"entry_count":100,"latency_us":61.05870151420867}}
+BenchmarkReadDir/entries=100-32                     	   19284	     61059 ns/op	       100.0 entry_count	        61.06 latency_us	   27992 B/op	     417 allocs/op
+{"benchmark":"BenchmarkReadDir/entries=1000","params":{"entry_count":1000},"results":{"entry_count":1000,"latency_us":388.33198992443323}}
+BenchmarkReadDir/entries=1000-32                    	    3970	    388332 ns/op	      1000 entry_count	       388.3 latency_us	  267512 B/op	    4020 allocs/op
+{"benchmark":"BenchmarkReadDirNested","params":{"depth":5,"entry_count":100},"results":{"latency_us":65.80595565625505}}
+BenchmarkReadDirNested-32                           	   18537	     65806 ns/op	        65.81 latency_us	   32080 B/op	     418 allocs/op
+{"benchmark":"BenchmarkCopyDirContiguous","params":{"prefix":"dir00"},"results":{"range_request_count":1,"throughput_mb_s":647.4020079228059}}
+BenchmarkCopyDirContiguous-32                       	    1879	    772318 ns/op	         1.000 range_request_count	       647.4 throughput_mb_s	  526456 B/op	       9 allocs/op
+{"benchmark":"BenchmarkCopyDirVsIndividual/copydir","params":{"file_count":256,"prefix":"assets"},"results":{"bytes_transferred":4194304,"range_request_count":1,"total_latency_ms":6.595628415300546}}
+BenchmarkCopyDirVsIndividual/copydir-32             	     183	   6598261 ns/op	   4194304 bytes_transferred	         1.000 range_request_count	         6.596 total_latency_ms	 4259504 B/op	     790 allocs/op
+{"benchmark":"BenchmarkCopyDirVsIndividual/individual","params":{"file_count":256,"prefix":"assets"},"results":{"bytes_transferred":4194304,"range_request_count":256,"total_latency_ms":7.108433734939759}}
+BenchmarkCopyDirVsIndividual/individual-32          	     166	   7113482 ns/op	   4194304 bytes_transferred	       256.0 range_request_count	         7.108 total_latency_ms	 4264198 B/op	    1792 allocs/op
+{"benchmark":"BenchmarkCacheMiss","params":{"cache_state":"cold","source":"http"},"results":{"bytes_transferred":25,"latency_ms":6.2727272727272725}}
+BenchmarkCacheMiss-32                               	     187	   6273547 ns/op	        25.00 bytes_transferred	         6.273 latency_ms	  799724 B/op	     233 allocs/op
+{"benchmark":"BenchmarkCacheHit","params":{"cache_state":"warm","source":"http"},"results":{"bytes_transferred":0,"latency_us":145.25510204081633}}
+BenchmarkCacheHit-32                                	    8232	    145255 ns/op	         0 bytes_transferred	       145.3 latency_us	  285222 B/op	      22 allocs/op
+{"benchmark":"BenchmarkCacheDeduplication","params":{"archives":2},"results":{"bytes_transferred":25,"cache_hits":1}}
+BenchmarkCacheDeduplication-32                      	    1602	    747090 ns/op	        25.00 bytes_transferred	         1.000 cache_hits	 1053925 B/op	      72 allocs/op
+{"benchmark":"BenchmarkCacheHitRatio","params":{"duplicate_percent":30,"file_count":100},"results":{"bytes_saved":1636705,"hit_ratio":16.95906432748538}}
+BenchmarkCacheHitRatio-32                           	     122	   9776977 ns/op	   1636705 bytes_saved	        16.96 hit_ratio	10106652 B/op	    2409 allocs/op
+{"benchmark":"BenchmarkIndexCacheBenefit","params":{"file_count":10000,"latency_ms":5},"results":{"first_open_latency_ms":6.901162790697675,"second_open_latency_us":0.38953488372093026}}
+BenchmarkIndexCacheBenefit-32                       	     172	   6903577 ns/op	         6.901 first_open_latency_ms	         0.3895 second_open_latency_us	 5253270 B/op	     107 allocs/op
+{"benchmark":"BenchmarkLatencyImpact/latency=1ms","params":{"rtt_ms":1},"results":{"data_transfer_time":0.8124031007751937,"rtt":1,"total_latency_ms":1.8124031007751937}}
+BenchmarkLatencyImpact/latency=1ms-32               	     645	   1813648 ns/op	         0.8124 data_transfer_time	         1.000 rtt	         1.812 total_latency_ms	  103101 B/op	     190 allocs/op
+{"benchmark":"BenchmarkLatencyImpact/latency=5ms","params":{"rtt_ms":5},"results":{"data_transfer_time":1.0301507537688446,"rtt":5,"total_latency_ms":6.030150753768845}}
+BenchmarkLatencyImpact/latency=5ms-32               	     199	   6034873 ns/op	         1.030 data_transfer_time	         5.000 rtt	         6.030 total_latency_ms	  102137 B/op	     189 allocs/op
+{"benchmark":"BenchmarkLatencyImpact/latency=20ms","params":{"rtt_ms":20},"results":{"data_transfer_time":1.1071428571428577,"rtt":20,"total_latency_ms":21.107142857142858}}
+BenchmarkLatencyImpact/latency=20ms-32              	      56	  21111091 ns/op	         1.107 data_transfer_time	        20.00 rtt	        21.11 total_latency_ms	  123897 B/op	     190 allocs/op
+{"benchmark":"BenchmarkLatencyImpact/latency=100ms","params":{"rtt_ms":100},"results":{"data_transfer_time":1.2000000000000028,"rtt":100,"total_latency_ms":101.2}}
+BenchmarkLatencyImpact/latency=100ms-32             	      10	 101295305 ns/op	         1.200 data_transfer_time	       100.0 rtt	       101.2 total_latency_ms	  218370 B/op	     195 allocs/op
+{"benchmark":"BenchmarkBandwidthImpact/bps=125000","params":{"bandwidth_bps":125000},"results":{"bandwidth_utilization":29174.20030007637,"throughput_mb_s":34.778356909842934}}
+BenchmarkBandwidthImpact/bps=125000-32              	     658	   1797095 ns/op	     29174 bandwidth_utilization	        34.78 throughput_mb_s	  100378 B/op	     190 allocs/op
+{"benchmark":"BenchmarkBandwidthImpact/bps=1250000","params":{"bandwidth_bps":1250000},"results":{"bandwidth_utilization":6941.6236069638135,"throughput_mb_s":82.75060185150879}}
+BenchmarkBandwidthImpact/bps=1250000-32             	    1582	    755282 ns/op	      6942 bandwidth_utilization	        82.75 throughput_mb_s	  100140 B/op	     190 allocs/op
+{"benchmark":"BenchmarkBandwidthImpact/bps=12500000","params":{"bandwidth_bps":12500000},"results":{"bandwidth_utilization":765.6898692828116,"throughput_mb_s":91.27734533343452}}
+BenchmarkBandwidthImpact/bps=12500000-32            	    1746	    684726 ns/op	       765.7 bandwidth_utilization	        91.28 throughput_mb_s	  100582 B/op	     190 allocs/op
+{"benchmark":"BenchmarkBandwidthImpact/bps=125000000","params":{"bandwidth_bps":125000000},"results":{"bandwidth_utilization":77.17984660096126,"throughput_mb_s":92.0055468093887}}
+BenchmarkBandwidthImpact/bps=125000000-32           	    1681	    679307 ns/op	        77.18 bandwidth_utilization	        92.01 throughput_mb_s	   99058 B/op	     190 allocs/op
+{"benchmark":"BenchmarkRangeRequestOverhead","params":{"range_requests":1.0005988023952095},"results":{"request_overhead_bytes":121.9925194494315,"response_overhead_bytes":191.9829443447038}}
+BenchmarkRangeRequestOverhead-32                    	    3340	    350953 ns/op	       122.0 request_overhead_bytes	       192.0 response_overhead_bytes	  127803 B/op	     190 allocs/op
+{"benchmark":"BenchmarkConcurrentReads","params":{"files":10},"results":{"parallelism_benefit":8.523809523809524,"total_latency_ms":59.666666666666664}}
+BenchmarkConcurrentReads-32                         	      18	  66756533 ns/op	         8.524 parallelism_benefit	        59.67 total_latency_ms	 2752414 B/op	    4416 allocs/op
+{"benchmark":"BenchmarkCompressionRatio","params":{"file_count":256,"pattern":"compressible"},"results":{"compressed_size":6144,"ratio":0.00146484375,"uncompressed_size":4194304}}
+BenchmarkCompressionRatio-32                        	1000000000	         1.000 ns/op	      6144 compressed_size	         0.001465 ratio	   4194304 uncompressed_size	       0 B/op	       0 allocs/op
+{"benchmark":"BenchmarkCompressionThroughput/none","params":{"compression":"none"},"results":{"throughput_mb_s":222.2790645160781}}
+BenchmarkCompressionThroughput/none-32              	      31	  35990794 ns/op	       222.3 throughput_mb_s	17800890 B/op	   11591 allocs/op
+{"benchmark":"BenchmarkCompressionThroughput/zstd","params":{"compression":"zstd"},"results":{"throughput_mb_s":400.556241560336}}
+BenchmarkCompressionThroughput/zstd-32              	      57	  19972227 ns/op	       400.6 throughput_mb_s	 2550888 B/op	   11627 allocs/op
+{"benchmark":"BenchmarkDecompressionOverhead","params":{"file_size":65536},"results":{"overhead":359.1103807378412,"read_latency_none":83.48053949903661,"read_latency_zstd":383.26782273603084}}
+BenchmarkDecompressionOverhead-32                   	    2595	    466969 ns/op	       359.1 overhead	        83.48 read_latency_none	       383.3 read_latency_zstd	  133155 B/op	      15 allocs/op
+{"benchmark":"BenchmarkPerFileIndependence","params":{"file":"dir15/file00127.dat"},"results":{"bytes_read":25,"files_decompressed":1}}
+BenchmarkPerFileIndependence-32                     	    3429	    313918 ns/op	        25.00 bytes_read	         1.000 files_decompressed	   66118 B/op	       8 allocs/op
+{"benchmark":"BenchmarkVsTarFullDownload","params":{"archive_size":104857600},"results":{"bytes_transferred_blob":65536,"bytes_transferred_tar":105684992}}
+BenchmarkVsTarFullDownload-32                       	     171	   6917110 ns/op	     65536 bytes_transferred_blob	 105684992 bytes_transferred_tar	 1023486 B/op	   24267 allocs/op
+{"benchmark":"BenchmarkVsTarExtractOne","params":{"archive_size":104857600},"results":{"latency_blob":0.05232558139534884,"latency_tar":6.994186046511628}}
+BenchmarkVsTarExtractOne-32                         	     172	   7054469 ns/op	         0.05233 latency_blob	         6.994 latency_tar	 1023484 B/op	   24267 allocs/op
+{"benchmark":"BenchmarkVsEstargz","params":{"file":"dir00/file00064.dat"},"results":{"bytes_transferred":24,"estargz_bytes_transferred":1628,"estargz_latency":0.2598798608915586,"latency":0.1071767309516282}}
+BenchmarkVsEstargz-32                               	    3163	    367893 ns/op	        24.00 bytes_transferred	      1628 estargz_bytes_transferred	         0.2599 estargz_latency	         0.1072 latency	  571288 B/op	     125 allocs/op
+{"benchmark":"BenchmarkVsZip","params":{"file":"dir00/file00064.dat"},"results":{"bytes_transferred":16384,"latency":0.027749874434957307,"zip_bytes_transferred":16430,"zip_latency":0.02197388247112004}}
+BenchmarkVsZip-32                                   	   23892	     50044 ns/op	     16384 bytes_transferred	         0.02775 latency	     16430 zip_bytes_transferred	         0.02197 zip_latency	  101138 B/op	      26 allocs/op
+{"benchmark":"BenchmarkCreateSmall","params":{"size":"small"},"results":{"latency_ms":9.84297520661157,"throughput_mb_s":158.65988086562808}}
+BenchmarkCreateSmall-32                             	     121	   9848110 ns/op	         9.843 latency_ms	       158.7 throughput_mb_s	 4517197 B/op	    2488 allocs/op
+{"benchmark":"BenchmarkCreateMedium","params":{"size":"medium"},"results":{"latency_ms":190,"throughput_mb_s":328.91613206385466}}
+BenchmarkCreateMedium-32                            	       6	 190018044 ns/op	       190.0 latency_ms	       328.9 throughput_mb_s	136071840 B/op	   22349 allocs/op
+{"benchmark":"BenchmarkCreateLarge","params":{"size":"large"},"results":{"latency_ms":2147,"throughput_mb_s":291.0669850829576}}
+BenchmarkCreateLarge-32                             	       1	2147272044 ns/op	      2147 latency_ms	       291.1 throughput_mb_s	2172199520 B/op	  220458 allocs/op
+{"benchmark":"BenchmarkCreateWithCompression","params":{"file_count":512},"results":{"throughput_none":317.2707962717549,"throughput_zstd":478.1907897396891}}
+BenchmarkCreateWithCompression-32                   	      28	  41945415 ns/op	       317.3 throughput_none	       478.2 throughput_zstd	20344990 B/op	   23216 allocs/op
+{"benchmark":"BenchmarkScaleFileCount/files=1000","params":{"file_count":1000},"results":{"file_count":1000,"lookup_latency_ns":27.994069108663528}}
+BenchmarkScaleFileCount/files=1000-32               	42977014	        27.99 ns/op	      1000 file_count	        27.99 lookup_latency_ns	       0 B/op	       0 allocs/op
+{"benchmark":"BenchmarkScaleFileCount/files=10000","params":{"file_count":10000},"results":{"file_count":10000,"lookup_latency_ns":26.99221441259328}}
+BenchmarkScaleFileCount/files=10000-32              	42634548	        26.99 ns/op	     10000 file_count	        26.99 lookup_latency_ns	       0 B/op	       0 allocs/op
+{"benchmark":"BenchmarkScaleFileCount/files=100000","params":{"file_count":100000},"results":{"file_count":100000,"lookup_latency_ns":26.032853089107412}}
+BenchmarkScaleFileCount/files=100000-32             	45793228	        26.03 ns/op	    100000 file_count	        26.03 lookup_latency_ns	       0 B/op	       0 allocs/op
+{"benchmark":"BenchmarkScaleFileCount/files=1000000","params":{"file_count":1000000},"results":{"file_count":1000000,"lookup_latency_ns":25.695121503600443}}
+BenchmarkScaleFileCount/files=1000000-32            	47078358	        25.70 ns/op	   1000000 file_count	        25.70 lookup_latency_ns	       0 B/op	       0 allocs/op
+{"benchmark":"BenchmarkScaleArchiveSize/archive=10MiB","params":{"archive_size":10485760},"results":{"read_latency":0.06249339672477549}}
+BenchmarkScaleArchiveSize/archive=10MiB-32          	   18930	     62519 ns/op	         0.06249 read_latency	   65809 B/op	       7 allocs/op
+{"benchmark":"BenchmarkScaleArchiveSize/archive=100MiB","params":{"archive_size":104857600},"results":{"read_latency":0.05278907747697199}}
+BenchmarkScaleArchiveSize/archive=100MiB-32         	   21387	     52796 ns/op	         0.05279 read_latency	   65809 B/op	       7 allocs/op
+{"benchmark":"BenchmarkScaleArchiveSize/archive=1GiB","params":{"archive_size":1073741824},"results":{"read_latency":0.055848835260599965}}
+BenchmarkScaleArchiveSize/archive=1GiB-32           	   23868	     55873 ns/op	         0.05585 read_latency	   65809 B/op	       7 allocs/op
+{"benchmark":"BenchmarkScaleArchiveSize/archive=10GiB","params":{"archive_size":10737418240},"results":{"read_latency":0.04409107336465486}}
+BenchmarkScaleArchiveSize/archive=10GiB-32          	   24903	     44121 ns/op	         0.04409 read_latency	   65809 B/op	       7 allocs/op
+{"benchmark":"BenchmarkScaleIndexMemory/files=1000","params":{"file_count":1000},"results":{"file_count":1000,"memory_bytes":64}}
+BenchmarkScaleIndexMemory/files=1000-32             	164019805	         7.071 ns/op	      1000 file_count	        64.00 memory_bytes	       0 B/op	       0 allocs/op
+{"benchmark":"BenchmarkScaleIndexMemory/files=10000","params":{"file_count":10000},"results":{"file_count":10000,"memory_bytes":64}}
+BenchmarkScaleIndexMemory/files=10000-32            	159421803	         7.159 ns/op	     10000 file_count	        64.00 memory_bytes	       0 B/op	       0 allocs/op
+{"benchmark":"BenchmarkScaleIndexMemory/files=100000","params":{"file_count":100000},"results":{"file_count":100000,"memory_bytes":64}}
+BenchmarkScaleIndexMemory/files=100000-32           	149356113	         7.403 ns/op	    100000 file_count	        64.00 memory_bytes	       0 B/op	       0 allocs/op
+{"benchmark":"BenchmarkScaleIndexMemory/files=1000000","params":{"file_count":1000000},"results":{"file_count":1000000,"memory_bytes":64}}
+BenchmarkScaleIndexMemory/files=1000000-32          	160365480	         7.154 ns/op	   1000000 file_count	        64.00 memory_bytes	       0 B/op	       0 allocs/op
+{"benchmark":"BenchmarkVerifyOnRead","params":{"file_size":262144},"results":{"overhead":-96.0993073101598,"throughput_unverified":29008.163192341755,"throughput_verified":1131.5193011005906}}
+BenchmarkVerifyOnRead-32                            	    7114	    229723 ns/op	       -96.10 overhead	     29008 throughput_unverified	      1132 throughput_verified	  262961 B/op	      12 allocs/op
+{"benchmark":"BenchmarkVerifyOnClose","params":{"file_size":262144},"results":{"latency_deferred":0.15127309036445333,"latency_inline":0.1475287069395906}}
+BenchmarkVerifyOnClose-32                           	    4006	    299145 ns/op	         0.1513 latency_deferred	         0.1475 latency_inline	   33930 B/op	      15 allocs/op
+PASS
+ok  	github.com/meigma/blob	178.581s

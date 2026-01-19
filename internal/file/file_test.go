@@ -131,6 +131,89 @@ func TestFile_PartialRead(t *testing.T) {
 	}
 }
 
+func TestFile_ReadAt(t *testing.T) {
+	t.Parallel()
+
+	content := []byte("hello world")
+	source := newMockSource(content)
+	ops := NewReader(source, WithMaxFileSize(0))
+
+	t.Run("uncompressed", func(t *testing.T) {
+		t.Parallel()
+
+		entry := &Entry{
+			Path:         "test.txt",
+			DataOffset:   0,
+			DataSize:     uint64(len(content)),
+			OriginalSize: uint64(len(content)),
+			Hash:         hashOf(content),
+			Compression:  CompressionNone,
+		}
+		f := ops.OpenFile(entry, false)
+		defer f.Close()
+
+		buf := make([]byte, 5)
+		n, err := f.ReadAt(buf, 6)
+		if err != nil {
+			t.Fatalf("ReadAt() error = %v", err)
+		}
+		if n != 5 {
+			t.Fatalf("ReadAt() n = %d, want 5", n)
+		}
+		if !bytes.Equal(buf, []byte("world")) {
+			t.Fatalf("ReadAt() = %q, want %q", buf, "world")
+		}
+	})
+
+	t.Run("past end", func(t *testing.T) {
+		t.Parallel()
+
+		entry := &Entry{
+			Path:         "test.txt",
+			DataOffset:   0,
+			DataSize:     uint64(len(content)),
+			OriginalSize: uint64(len(content)),
+			Hash:         hashOf(content),
+			Compression:  CompressionNone,
+		}
+		f := ops.OpenFile(entry, false)
+		defer f.Close()
+
+		buf := make([]byte, 5)
+		n, err := f.ReadAt(buf, int64(len(content)))
+		if !errors.Is(err, io.EOF) {
+			t.Fatalf("ReadAt() error = %v, want io.EOF", err)
+		}
+		if n != 0 {
+			t.Fatalf("ReadAt() n = %d, want 0", n)
+		}
+	})
+
+	t.Run("compressed", func(t *testing.T) {
+		t.Parallel()
+
+		compressed := compress(t, content)
+		source := newMockSource(compressed)
+		ops := NewReader(source, WithMaxFileSize(0))
+
+		entry := &Entry{
+			Path:         "test.txt",
+			DataOffset:   0,
+			DataSize:     uint64(len(compressed)),
+			OriginalSize: uint64(len(content)),
+			Hash:         hashOf(content),
+			Compression:  CompressionZstd,
+		}
+		f := ops.OpenFile(entry, false)
+		defer f.Close()
+
+		buf := make([]byte, 5)
+		if _, err := f.ReadAt(buf, 0); err == nil {
+			t.Fatalf("ReadAt() error = nil, want error")
+		}
+	})
+}
+
 func TestFile_VerifyOnClose(t *testing.T) {
 	t.Parallel()
 

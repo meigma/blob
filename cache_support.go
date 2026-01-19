@@ -3,6 +3,7 @@ package blob
 import (
 	"bytes"
 	"crypto/sha256"
+	"fmt"
 	"hash"
 	"io"
 	"io/fs"
@@ -51,6 +52,17 @@ func (f *cachedFile) Read(p []byte) (int, error) {
 		return n, err
 	}
 	return n, nil
+}
+
+func (f *cachedFile) ReadAt(p []byte, off int64) (int, error) {
+	if f.verifyErr != nil {
+		return 0, f.verifyErr
+	}
+	readerAt, ok := f.file.(io.ReaderAt)
+	if !ok {
+		return 0, fmt.Errorf("read at %s: reader does not support random access", f.entry.Path)
+	}
+	return readerAt.ReadAt(p, off)
 }
 
 func (f *cachedFile) Stat() (fs.FileInfo, error) {

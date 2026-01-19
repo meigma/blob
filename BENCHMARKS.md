@@ -156,6 +156,24 @@ go tool pprof -http=:8080 mutex.prof
 - Run on an idle machine to avoid thermal throttling and background noise.
 - For CPU scaling, try `-cpu=1,2,4,8`.
 
+## estargz comparison
+
+Comparative benchmarks for blob vs estargz live in `benchmarks/estargz`:
+
+```bash
+go test -run '^$' -bench=BenchmarkCompare -benchmem ./benchmarks/estargz
+```
+
+Optional HTTP range sources:
+
+```bash
+BLOB_BENCH_HTTP=1 BLOB_HTTP_LATENCY=5ms BLOB_HTTP_BPS=10MBps \
+  go test -run '^$' -bench=BenchmarkCompareReadFile -benchmem ./benchmarks/estargz
+```
+
+Optional formats:
+- `ESTARGZ_BENCH_ZSTDCHUNKED=1` includes `format=estargz/zstdchunked`
+
 ## Remote Benchmarking (Bare Metal)
 
 For consistent, reproducible benchmark results, run on a dedicated bare metal
