@@ -4,7 +4,6 @@ go 1.25.4
 
 require (
 	github.com/meigma/blob v0.0.0
-	github.com/meigma/blob/client v0.0.0
 	github.com/meigma/blob/policy/opa v0.0.0
 	github.com/meigma/blob/policy/sigstore v0.0.0
 )
@@ -119,7 +118,6 @@ require (
 
 replace (
 	github.com/meigma/blob => ../..
-	github.com/meigma/blob/client => ../../client
 	github.com/meigma/blob/policy/opa => ../../policy/opa
 	github.com/meigma/blob/policy/sigstore => ../../policy/sigstore
 )
