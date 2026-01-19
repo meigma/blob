@@ -40,8 +40,8 @@ To create a disk-backed cache:
 
 ```go
 import (
-	"github.com/meigma/blob/cache"
-	"github.com/meigma/blob/cache/disk"
+	"github.com/meigma/blob/core/cache"
+	"github.com/meigma/blob/core/cache/disk"
 )
 
 diskCache, err := disk.New("/path/to/cache")
@@ -145,8 +145,8 @@ Content caching is enabled by passing a cache to `blob.New()` or `client.Pull()`
 
 ```go
 import (
-	"github.com/meigma/blob"
-	"github.com/meigma/blob/cache/disk"
+	"github.com/meigma/blob/core"
+	"github.com/meigma/blob/core/cache/disk"
 )
 
 func openCachedArchive(indexData []byte, source blob.ByteSource) (*blob.Blob, error) {
@@ -169,8 +169,8 @@ When pulling from an OCI registry, pass the cache as a blob option:
 import (
 	"context"
 
-	"github.com/meigma/blob"
-	"github.com/meigma/blob/cache/disk"
+	"github.com/meigma/blob/core"
+	"github.com/meigma/blob/core/cache/disk"
 	"github.com/meigma/blob/client"
 )
 
@@ -236,7 +236,7 @@ type Cache interface {
 }
 ```
 
-The disk cache (`github.com/meigma/blob/cache/disk`) implements this interface and handles:
+The disk cache (`github.com/meigma/blob/core/cache/disk`) implements this interface and handles:
 - Atomic writes using temporary files and renames
 - Sharded directory structure for filesystem performance
 - Automatic size tracking and pruning
@@ -251,8 +251,8 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/meigma/blob"
-	"github.com/meigma/blob/cache/disk"
+	"github.com/meigma/blob/core"
+	"github.com/meigma/blob/core/cache/disk"
 	"github.com/meigma/blob/client"
 	clientdisk "github.com/meigma/blob/client/cache/disk"
 )

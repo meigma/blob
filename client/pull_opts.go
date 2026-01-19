@@ -1,6 +1,6 @@
 package client
 
-import "github.com/meigma/blob"
+import "github.com/meigma/blob/core"
 
 // PullOption configures a Pull operation.
 type PullOption func(*pullConfig)

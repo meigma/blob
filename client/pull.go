@@ -6,8 +6,8 @@ import (
 	"io"
 	"net/http"
 
-	"github.com/meigma/blob"
-	blobhttp "github.com/meigma/blob/http"
+	"github.com/meigma/blob/core"
+	blobhttp "github.com/meigma/blob/core/http"
 )
 
 type authClientProvider interface {

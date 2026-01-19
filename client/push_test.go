@@ -12,7 +12,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/meigma/blob"
+	"github.com/meigma/blob/core"
 )
 
 // createTestBlob creates a minimal valid blob for testing.

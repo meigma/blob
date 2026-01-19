@@ -8,8 +8,8 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/meigma/blob"
 	"github.com/meigma/blob/client"
+	blob "github.com/meigma/blob/core"
 )
 
 type pushConfig struct {

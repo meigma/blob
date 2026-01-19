@@ -23,8 +23,8 @@ import (
 	"github.com/containerd/stargz-snapshotter/estargz"
 	"github.com/containerd/stargz-snapshotter/estargz/zstdchunked"
 	"github.com/klauspost/compress/zstd"
-	"github.com/meigma/blob"
-	blobhttp "github.com/meigma/blob/http"
+	blob "github.com/meigma/blob/core"
+	blobhttp "github.com/meigma/blob/core/http"
 )
 
 var (

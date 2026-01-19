@@ -14,7 +14,7 @@ For file-based archives, `CreateBlob` is the simplest approach. It creates the a
 import (
 	"context"
 
-	"github.com/meigma/blob"
+	"github.com/meigma/blob/core"
 )
 
 func createArchive(srcDir, destDir string) (*blob.BlobFile, error) {
@@ -75,7 +75,7 @@ import (
 	"context"
 	"os"
 
-	"github.com/meigma/blob"
+	"github.com/meigma/blob/core"
 )
 
 func createArchive(srcDir string) error {
@@ -273,7 +273,7 @@ After creating an archive, push it to an OCI registry for remote access:
 import (
 	"context"
 
-	"github.com/meigma/blob"
+	"github.com/meigma/blob/core"
 	"github.com/meigma/blob/client"
 )
 

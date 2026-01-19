@@ -39,8 +39,8 @@ To create a disk-backed block cache:
 
 ```go
 import (
-    "github.com/meigma/blob/cache"
-    "github.com/meigma/blob/cache/disk"
+    "github.com/meigma/blob/core/cache"
+    "github.com/meigma/blob/core/cache/disk"
 )
 
 blockCache, err := disk.NewBlockCache("/path/to/cache")
@@ -67,10 +67,10 @@ To add block caching to an HTTP source:
 
 ```go
 import (
-    "github.com/meigma/blob"
-    "github.com/meigma/blob/http"
-    "github.com/meigma/blob/cache"
-    "github.com/meigma/blob/cache/disk"
+    "github.com/meigma/blob/core"
+    "github.com/meigma/blob/core/http"
+    "github.com/meigma/blob/core/cache"
+    "github.com/meigma/blob/core/cache/disk"
 )
 
 // Create HTTP source
@@ -180,10 +180,10 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/meigma/blob"
-	"github.com/meigma/blob/cache"
-	"github.com/meigma/blob/cache/disk"
-	"github.com/meigma/blob/http"
+	"github.com/meigma/blob/core"
+	"github.com/meigma/blob/core/cache"
+	"github.com/meigma/blob/core/cache/disk"
+	"github.com/meigma/blob/core/http"
 )
 
 func setupBlockCachedArchive(indexData []byte, dataURL, token string) (*blob.Blob, error) {

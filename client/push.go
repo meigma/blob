@@ -13,7 +13,7 @@ import (
 	"github.com/opencontainers/image-spec/specs-go"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 
-	"github.com/meigma/blob"
+	"github.com/meigma/blob/core"
 )
 
 // Push pushes a blob archive to an OCI registry.

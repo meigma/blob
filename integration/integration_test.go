@@ -11,7 +11,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/meigma/blob"
+	"github.com/meigma/blob/core"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

@@ -20,7 +20,7 @@ Requires Go 1.25 or later.
 import (
     "context"
     "bytes"
-    "github.com/meigma/blob"
+    "github.com/meigma/blob/core"
 )
 
 var indexBuf, dataBuf bytes.Buffer
@@ -30,7 +30,7 @@ err := blob.Create(context.Background(), "/path/to/source", &indexBuf, &dataBuf)
 ### Reading Files
 
 ```go
-import "github.com/meigma/blob"
+import "github.com/meigma/blob/core"
 
 // Open archive with index data and a ByteSource for the data blob
 archive, err := blob.New(indexData, source)
@@ -49,8 +49,8 @@ f, err := archive.Open("main.go")
 
 ```go
 import (
-    "github.com/meigma/blob"
-    "github.com/meigma/blob/http"
+    "github.com/meigma/blob/core"
+    "github.com/meigma/blob/core/http"
 )
 
 source, err := http.NewSource(dataURL,
@@ -63,8 +63,8 @@ archive, err := blob.New(indexData, source)
 
 ```go
 import (
-    "github.com/meigma/blob/cache"
-    "github.com/meigma/blob/cache/disk"
+    "github.com/meigma/blob/core/cache"
+    "github.com/meigma/blob/core/cache/disk"
 )
 
 diskCache, err := disk.New("/var/cache/blob")

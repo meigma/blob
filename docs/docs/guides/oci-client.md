@@ -83,7 +83,7 @@ Push a blob archive to a registry:
 import (
     "context"
 
-    "github.com/meigma/blob"
+    "github.com/meigma/blob/core"
     "github.com/meigma/blob/client"
 )
 
@@ -294,7 +294,7 @@ import (
     "fmt"
     "log"
 
-    "github.com/meigma/blob"
+    "github.com/meigma/blob/core"
     "github.com/meigma/blob/client"
     "github.com/meigma/blob/client/cache/disk"
 )

@@ -13,7 +13,7 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/meigma/blob"
+	"github.com/meigma/blob/core"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/wait"

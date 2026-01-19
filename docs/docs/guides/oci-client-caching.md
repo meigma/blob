@@ -277,11 +277,11 @@ import (
     "context"
     "time"
 
-    "github.com/meigma/blob"
-    "github.com/meigma/blob/cache"
+    "github.com/meigma/blob/core"
+    "github.com/meigma/blob/core/cache"
     "github.com/meigma/blob/client"
     "github.com/meigma/blob/client/cache/disk"
-    contentdisk "github.com/meigma/blob/cache/disk"
+    contentdisk "github.com/meigma/blob/core/cache/disk"
 )
 
 func createFullyCachedClient() (*client.Client, cache.Cache, error) {

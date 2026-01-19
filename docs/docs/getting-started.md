@@ -42,7 +42,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/meigma/blob"
+	"github.com/meigma/blob/core"
 	"github.com/meigma/blob/client"
 )
 
@@ -236,8 +236,8 @@ For repeated file access, add content-level caching. Pass the cache when pulling
 
 ```go
 import (
-	"github.com/meigma/blob"
-	"github.com/meigma/blob/cache/disk"
+	"github.com/meigma/blob/core"
+	"github.com/meigma/blob/core/cache/disk"
 )
 
 // Create content cache
@@ -283,8 +283,8 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/meigma/blob"
-	contentdisk "github.com/meigma/blob/cache/disk"
+	"github.com/meigma/blob/core"
+	contentdisk "github.com/meigma/blob/core/cache/disk"
 	"github.com/meigma/blob/client"
 	"github.com/meigma/blob/client/cache/disk"
 )
@@ -474,7 +474,7 @@ import (
 	"bytes"
 	"context"
 
-	"github.com/meigma/blob"
+	"github.com/meigma/blob/core"
 )
 
 var indexBuf, dataBuf bytes.Buffer
@@ -497,7 +497,7 @@ Create a Blob from index data and a ByteSource:
 import (
 	"io"
 
-	"github.com/meigma/blob"
+	"github.com/meigma/blob/core"
 )
 
 // memSource wraps a byte slice with random access

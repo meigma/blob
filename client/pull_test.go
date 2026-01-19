@@ -17,7 +17,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/meigma/blob"
+	"github.com/meigma/blob/core"
 )
 
 // pullMockOCIClient extends mockOCIClient with Pull-specific methods.

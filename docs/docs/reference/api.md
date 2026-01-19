@@ -9,7 +9,7 @@ Complete reference for all public types, functions, and options in the blob libr
 ## Package blob
 
 ```
-import "github.com/meigma/blob"
+import "github.com/meigma/blob/core"
 ```
 
 The blob package provides a file archive format optimized for random access via HTTP range requests against OCI registries.
@@ -551,7 +551,7 @@ type CreateBlobOption func(*createBlobConfig)
 ## Package blob/http
 
 ```
-import "github.com/meigma/blob/http"
+import "github.com/meigma/blob/core/http"
 ```
 
 Package http provides a ByteSource backed by HTTP range requests.
@@ -644,7 +644,7 @@ type Option func(*Source)
 ## Package blob/cache
 
 ```
-import "github.com/meigma/blob/cache"
+import "github.com/meigma/blob/core/cache"
 ```
 
 Package cache provides content-addressed caching for blob archives.
@@ -873,7 +873,7 @@ type Option func(*Blob)
 ## Package blob/cache/disk
 
 ```
-import "github.com/meigma/blob/cache/disk"
+import "github.com/meigma/blob/core/cache/disk"
 ```
 
 Package disk provides a disk-backed cache implementation.

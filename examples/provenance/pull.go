@@ -8,8 +8,8 @@ import (
 	"io"
 	"os"
 
-	"github.com/meigma/blob"
 	"github.com/meigma/blob/client"
+	blob "github.com/meigma/blob/core"
 	"github.com/meigma/blob/policy/opa"
 	"github.com/meigma/blob/policy/sigstore"
 )

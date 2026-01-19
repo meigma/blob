@@ -2,7 +2,7 @@
 set shell := ["bash", "-euo", "pipefail", "-c"]
 
 # Output directory for generated FlatBuffers code
-gen_dir := "internal"
+gen_dir := "core/internal"
 
 # Default recipe: validate code
 default: fmt vet lint test
@@ -39,7 +39,7 @@ build:
 generate:
     @echo "Generating FlatBuffers code..."
     @mkdir -p {{gen_dir}}/fb
-    flatc --go --go-namespace fb -o {{gen_dir}} schema/index.fbs
+    flatc --go --go-namespace fb -o {{gen_dir}} core/schema/index.fbs
 
 # Install development tools
 tools:

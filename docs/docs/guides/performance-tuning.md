@@ -287,7 +287,7 @@ For archives on slow networks or distant registries (> 200ms RTT):
 import (
 	"time"
 
-	"github.com/meigma/blob"
+	"github.com/meigma/blob/core"
 	"github.com/meigma/blob/client"
 	"github.com/meigma/blob/client/cache/disk"
 )

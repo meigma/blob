@@ -24,7 +24,7 @@ Blob enables random access to individual files via HTTP range requests without d
 import (
     "context"
 
-    "github.com/meigma/blob"
+    "github.com/meigma/blob/core"
     "github.com/meigma/blob/client"
 )
 
