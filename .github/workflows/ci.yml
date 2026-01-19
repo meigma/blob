@@ -41,7 +41,7 @@ jobs:
       - name: Generate code
         run: |
           mkdir -p internal/fb
-          flatc --go --go-namespace fb -o internal schema/index.fbs
+          flatc --go --go-namespace fb -o internal core/schema/index.fbs
 
       - name: Check generated files are up to date
         run: |
