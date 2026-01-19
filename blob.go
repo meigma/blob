@@ -40,6 +40,13 @@ type (
 
 	// EntryView provides a read-only view of an index entry.
 	EntryView = blobtype.EntryView
+
+	// File represents an archive file with optional random access.
+	// ReadAt is only supported for uncompressed entries.
+	File interface {
+		fs.File
+		io.ReaderAt
+	}
 )
 
 // EntryFromViewWithPath creates an Entry from an EntryView with the given path.

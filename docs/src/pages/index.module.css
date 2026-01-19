@@ -1,0 +1,17 @@
+.heroBanner {
+    padding: 5rem 0;
+    position: relative;
+    overflow: hidden;
+}
+
+@media (min-width: 997px) {
+    .heroBanner {
+        padding: 6.5rem 0;
+    }
+}
+
+.buttons {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+}

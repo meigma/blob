@@ -32,7 +32,7 @@ const config: Config = {
         docs: {
           sidebarPath: "./sidebars.ts",
           editUrl: "https://github.com/meigma/blob/edit/master/docs/",
-          routeBasePath: "/",
+          routeBasePath: "docs",
         },
         blog: false,
         theme: {
