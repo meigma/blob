@@ -26,10 +26,10 @@ import (
 
 	"github.com/containerd/stargz-snapshotter/estargz"
 	blobcache "github.com/meigma/blob/cache"
+	blobhttp "github.com/meigma/blob/http"
 	"github.com/meigma/blob/internal/batch"
 	"github.com/meigma/blob/internal/index"
 	"github.com/meigma/blob/internal/testutil"
-	blobhttp "github.com/meigma/blob/http"
 )
 
 type benchMetric struct {
@@ -42,6 +42,7 @@ func metric(name string, value float64) benchMetric {
 }
 
 func reportMetrics(b *testing.B, metrics ...benchMetric) map[string]any {
+	b.Helper()
 	results := make(map[string]any, len(metrics))
 	for _, m := range metrics {
 		b.ReportMetric(m.value, m.name)
@@ -51,6 +52,7 @@ func reportMetrics(b *testing.B, metrics ...benchMetric) map[string]any {
 }
 
 func reportAndEmit(b *testing.B, params map[string]any, metrics ...benchMetric) {
+	b.Helper()
 	results := reportMetrics(b, metrics...)
 	emitBenchJSON(b, params, results)
 }
@@ -63,7 +65,9 @@ type benchJSONRecord struct {
 
 var benchJSONMu sync.Mutex
 
-func emitBenchJSON(b *testing.B, params map[string]any, results map[string]any) {
+func emitBenchJSON(b *testing.B, params, results map[string]any) {
+	b.Helper()
+
 	if os.Getenv("BLOB_BENCH_JSON") == "" {
 		return
 	}
@@ -381,6 +385,7 @@ func newHTTPClientWithMetrics(cfg benchHTTPConfig, metrics *httpMetrics) *http.C
 	return &http.Client{Transport: transport}
 }
 
+//nolint:unparam // metrics return value available for future benchmarks
 func newCountingHTTPSource(data []byte, cfg benchHTTPConfig) (benchByteSource, *httpMetrics, func(), error) {
 	metrics := &httpMetrics{}
 	client := newHTTPClientWithMetrics(cfg, metrics)
@@ -402,6 +407,7 @@ func newCountingHTTPSource(data []byte, cfg benchHTTPConfig) (benchByteSource, *
 	return newCountingRangeSource(src), metrics, cleanup, nil
 }
 
+//nolint:unparam // fileSize parameter kept for flexibility
 func buildSyntheticIndex(fileCount, fileSize int) []byte {
 	entries := makeSyntheticEntries(fileCount, fileSize)
 	return buildIndex(entries, uint64(fileCount*fileSize), nil)
@@ -409,7 +415,7 @@ func buildSyntheticIndex(fileCount, fileSize int) []byte {
 
 func makeSyntheticEntries(fileCount, fileSize int) []Entry {
 	paths := make([]string, 0, fileCount)
-	for i := 0; i < fileCount; i++ {
+	for i := range fileCount {
 		paths = append(paths, fmt.Sprintf("dir%03d/file%07d.dat", i/1000, i))
 	}
 	sort.Strings(paths)
@@ -565,7 +571,7 @@ func buildZipFromDir(b *testing.B, dir string) []byte {
 	return buf.Bytes()
 }
 
-func readTarFile(data []byte, target string) ([]byte, int64, error) {
+func readTarFile(data []byte, target string) (content []byte, bytesRead int64, err error) {
 	counter := &countingReader{r: bytes.NewReader(data)}
 	tr := tar.NewReader(counter)
 	for {
@@ -586,11 +592,11 @@ func readTarFile(data []byte, target string) ([]byte, int64, error) {
 	}
 }
 
-func makeNestedBenchFiles(b *testing.B, dir string, depth int, fileCount, fileSize int) string {
+func makeNestedBenchFiles(b *testing.B, dir string, depth, fileCount, fileSize int) string {
 	b.Helper()
 
 	parts := make([]string, 0, depth)
-	for i := 0; i < depth; i++ {
+	for i := range depth {
 		parts = append(parts, fmt.Sprintf("level%02d", i))
 	}
 	prefix := filepath.Join(parts...)
@@ -600,7 +606,7 @@ func makeNestedBenchFiles(b *testing.B, dir string, depth int, fileCount, fileSi
 	}
 
 	content := bytes.Repeat([]byte("a"), fileSize)
-	for i := 0; i < fileCount; i++ {
+	for i := range fileCount {
 		name := fmt.Sprintf("file%04d.dat", i)
 		full := filepath.Join(fullDir, name)
 		if err := os.WriteFile(full, content, 0o644); err != nil {
@@ -639,12 +645,13 @@ func pickRandomPaths(paths []string, n int, seed int64) []string {
 		indices[i], indices[j] = indices[j], indices[i]
 	})
 	selected := make([]string, 0, n)
-	for i := 0; i < n; i++ {
+	for i := range n {
 		selected = append(selected, paths[indices[i]])
 	}
 	return selected
 }
 
+//nolint:unparam // opts parameter kept for flexibility
 func newCountingBlob(indexData, dataData []byte, opts ...Option) (*Blob, benchByteSource, error) {
 	src := testutil.NewMockByteSource(dataData)
 	var counted benchByteSource
@@ -665,8 +672,7 @@ func BenchmarkSingleFileTransfer(b *testing.B) {
 	archiveSizes := []int64{1 << 20, 10 << 20, 100 << 20, 1 << 30}
 
 	for _, archiveSize := range archiveSizes {
-		name := fmt.Sprintf("archive=%s", formatBytes(archiveSize))
-		b.Run(name, func(b *testing.B) {
+		b.Run("archive="+formatBytes(archiveSize), func(b *testing.B) {
 			if archiveSize >= 1<<30 && !benchLargeEnabled() {
 				b.Skip("BLOB_BENCH_LARGE not set")
 			}
@@ -1013,7 +1019,11 @@ func BenchmarkIndexFetchHTTP(b *testing.B) {
 	b.ReportAllocs()
 	b.ResetTimer()
 	for b.Loop() {
-		resp, err := client.Get(server.URL)
+		req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, server.URL, http.NoBody)
+		if err != nil {
+			b.Fatal(err)
+		}
+		resp, err := client.Do(req)
 		if err != nil {
 			b.Fatal(err)
 		}
@@ -1153,7 +1163,7 @@ func BenchmarkCopyDirVsIndividual(b *testing.B) {
 	}
 	content := bytes.Repeat([]byte("a"), fileSize)
 	paths := make([]string, 0, fileCount)
-	for i := 0; i < fileCount; i++ {
+	for i := range fileCount {
 		path := filepath.Join(assetsDir, fmt.Sprintf("file%04d.dat", i))
 		if err := os.WriteFile(path, content, 0o644); err != nil {
 			b.Fatal(err)
@@ -1458,7 +1468,7 @@ func BenchmarkCacheHitRatio(b *testing.B) {
 	}
 	bytesSaved := totalSaved / float64(b.N)
 	params := map[string]any{
-		"file_count":       fileCount,
+		"file_count":        fileCount,
 		"duplicate_percent": duplicatePct,
 	}
 	reportAndEmit(b, params,
@@ -1490,7 +1500,11 @@ func BenchmarkIndexCacheBenefit(b *testing.B) {
 	b.ResetTimer()
 	for b.Loop() {
 		start := time.Now()
-		resp, err := client.Get(server.URL)
+		req, reqErr := http.NewRequestWithContext(context.Background(), http.MethodGet, server.URL, http.NoBody)
+		if reqErr != nil {
+			b.Fatal(reqErr)
+		}
+		resp, err := client.Do(req)
 		if err != nil {
 			b.Fatal(err)
 		}
@@ -1615,7 +1629,7 @@ func BenchmarkBandwidthImpact(b *testing.B) {
 				benchSinkBytes = content
 			}
 
-			throughput := throughputMBs(int64(fileSize*int(b.N)), b.Elapsed())
+			throughput := throughputMBs(int64(fileSize*b.N), b.Elapsed())
 			maxThroughput := float64(bps) / (1024 * 1024)
 			utilization := 0.0
 			if maxThroughput > 0 {
@@ -1732,7 +1746,6 @@ func BenchmarkConcurrentReads(b *testing.B) {
 		var wg sync.WaitGroup
 		for _, path := range selection {
 			wg.Add(1)
-			path := path
 			go func() {
 				defer wg.Done()
 				content, err := blob.ReadFile(path)
@@ -2068,11 +2081,11 @@ func BenchmarkVsEstargz(b *testing.B) {
 		b.Fatal(err)
 	}
 	var estargzBuf bytes.Buffer
-	if _, err := io.Copy(&estargzBuf, rc); err != nil {
+	if _, err = io.Copy(&estargzBuf, rc); err != nil {
 		rc.Close()
 		b.Fatal(err)
 	}
-	if err := rc.Close(); err != nil {
+	if err = rc.Close(); err != nil {
 		b.Fatal(err)
 	}
 	zdata := estargzBuf.Bytes()
@@ -2339,8 +2352,7 @@ func BenchmarkScaleArchiveSize(b *testing.B) {
 	archiveSizes := []int64{10 << 20, 100 << 20, 1 << 30, 10 << 30}
 
 	for _, archiveSize := range archiveSizes {
-		name := fmt.Sprintf("archive=%s", formatBytes(archiveSize))
-		b.Run(name, func(b *testing.B) {
+		b.Run("archive="+formatBytes(archiveSize), func(b *testing.B) {
 			if archiveSize >= 1<<30 && !benchLargeEnabled() {
 				b.Skip("BLOB_BENCH_LARGE not set")
 			}
@@ -2518,13 +2530,13 @@ func BenchmarkVerifyOnClose(b *testing.B) {
 		if err != nil {
 			b.Fatal(err)
 		}
-		if _, err := io.ReadFull(f, buf); err != nil && err != io.EOF && err != io.ErrUnexpectedEOF {
+		if _, err = io.ReadFull(f, buf); err != nil && err != io.EOF && err != io.ErrUnexpectedEOF {
 			b.Fatal(err)
 		}
-		if _, err := io.Copy(io.Discard, f); err != nil {
+		if _, err = io.Copy(io.Discard, f); err != nil {
 			b.Fatal(err)
 		}
-		if err := f.Close(); err != nil {
+		if err = f.Close(); err != nil {
 			b.Fatal(err)
 		}
 		inlineTotal += time.Since(start)
@@ -2534,10 +2546,10 @@ func BenchmarkVerifyOnClose(b *testing.B) {
 		if err != nil {
 			b.Fatal(err)
 		}
-		if _, err := io.ReadFull(f, buf); err != nil && err != io.EOF && err != io.ErrUnexpectedEOF {
+		if _, err = io.ReadFull(f, buf); err != nil && err != io.EOF && err != io.ErrUnexpectedEOF {
 			b.Fatal(err)
 		}
-		if err := f.Close(); err != nil {
+		if err = f.Close(); err != nil {
 			b.Fatal(err)
 		}
 		deferredTotal += time.Since(start)

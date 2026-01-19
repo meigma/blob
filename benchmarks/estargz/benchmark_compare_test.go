@@ -128,7 +128,6 @@ func BenchmarkCompareBuild(b *testing.B) {
 		totalBytes := int64(bc.fileCount * bc.fileSize)
 
 		for _, format := range formats {
-			format := format
 			b.Run(fmt.Sprintf("%s/%s", bc.name, format.name), func(b *testing.B) {
 				if totalBytes > 0 {
 					b.SetBytes(totalBytes)
@@ -205,7 +204,6 @@ func BenchmarkCompareOpenHTTP(b *testing.B) {
 	}
 
 	for _, format := range formats {
-		format := format
 		b.Run(format.name, func(b *testing.B) {
 			switch format.kind {
 			case formatBlob:
@@ -296,13 +294,11 @@ func BenchmarkCompareReadFile(b *testing.B) {
 			}
 
 			for _, format := range formats {
-				format := format
 				b.Run(fmt.Sprintf("%s/%s/%s", bc.name, pattern, format.name), func(b *testing.B) {
 					switch format.kind {
 					case formatBlob:
 						archive := blobData[format.blobCompression]
 						for _, source := range benchSources() {
-							source := source
 							b.Run(source.name, func(b *testing.B) {
 								byteSource, cleanup, err := source.newBlob(b, archive.dataData)
 								if err != nil {
@@ -321,8 +317,8 @@ func BenchmarkCompareReadFile(b *testing.B) {
 								b.ReportAllocs()
 								b.ResetTimer()
 								for i := 0; b.Loop(); i++ {
-									path := paths[i%len(paths)]
-									content, err := bb.ReadFile(path)
+									filePath := paths[i%len(paths)]
+									content, err := bb.ReadFile(filePath)
 									if err != nil {
 										b.Fatal(err)
 									}
@@ -333,7 +329,6 @@ func BenchmarkCompareReadFile(b *testing.B) {
 					case formatEStargz:
 						data := estargzData[format.name]
 						for _, source := range benchSources() {
-							source := source
 							b.Run(source.name, func(b *testing.B) {
 								readerAt, cleanup, err := source.newReaderAt(b, data)
 								if err != nil {
@@ -353,8 +348,8 @@ func BenchmarkCompareReadFile(b *testing.B) {
 								b.ReportAllocs()
 								b.ResetTimer()
 								for i := 0; b.Loop(); i++ {
-									path := paths[i%len(paths)]
-									fileReader, err := r.OpenFile(path)
+									filePath := paths[i%len(paths)]
+									fileReader, err := r.OpenFile(filePath)
 									if err != nil {
 										b.Fatal(err)
 									}
@@ -405,13 +400,11 @@ func BenchmarkCompareCopyDir(b *testing.B) {
 	totalBytes := int64(dirEntries * fileSize)
 
 	for _, format := range formats {
-		format := format
 		b.Run(format.name, func(b *testing.B) {
 			switch format.kind {
 			case formatBlob:
 				archive := blobData[format.blobCompression]
 				for _, source := range benchSources() {
-					source := source
 					b.Run(source.name, func(b *testing.B) {
 						byteSource, cleanup, err := source.newBlob(b, archive.dataData)
 						if err != nil {
@@ -454,7 +447,6 @@ func BenchmarkCompareCopyDir(b *testing.B) {
 			case formatEStargz:
 				data := estargzData[format.name]
 				for _, source := range benchSources() {
-					source := source
 					b.Run(source.name, func(b *testing.B) {
 						readerAt, cleanup, err := source.newReaderAt(b, data)
 						if err != nil {
@@ -530,13 +522,11 @@ func BenchmarkCompareCopyAll(b *testing.B) {
 	totalBytes := int64(fileCount * fileSize)
 
 	for _, format := range formats {
-		format := format
 		b.Run(format.name, func(b *testing.B) {
 			switch format.kind {
 			case formatBlob:
 				archive := blobData[format.blobCompression]
 				for _, source := range benchSources() {
-					source := source
 					b.Run(source.name, func(b *testing.B) {
 						byteSource, cleanup, err := source.newBlob(b, archive.dataData)
 						if err != nil {
@@ -579,7 +569,6 @@ func BenchmarkCompareCopyAll(b *testing.B) {
 			case formatEStargz:
 				data := estargzData[format.name]
 				for _, source := range benchSources() {
-					source := source
 					b.Run(source.name, func(b *testing.B) {
 						readerAt, cleanup, err := source.newReaderAt(b, data)
 						if err != nil {
@@ -657,8 +646,8 @@ func copyEStargzEntry(r *estargz.Reader, entry *estargz.TOCEntry, entryPath, des
 		if err != nil {
 			return err
 		}
-		if err := os.MkdirAll(filepath.Dir(destPath), 0o755); err != nil {
-			return err
+		if mkdirErr := os.MkdirAll(filepath.Dir(destPath), 0o755); mkdirErr != nil {
+			return mkdirErr
 		}
 		f, err := os.Create(destPath)
 		if err != nil {
@@ -679,7 +668,7 @@ func makeBenchFiles(b *testing.B, dir string, fileCount, fileSize int, pattern b
 
 	paths := make([]string, 0, fileCount)
 	rng := rand.New(rand.NewSource(1))
-	for i := 0; i < fileCount; i++ {
+	for i := range fileCount {
 		relPath := fmt.Sprintf("dir%02d/file%05d.dat", i%benchDirCount, i)
 		fullPath := filepath.Join(dir, filepath.FromSlash(relPath))
 		if err := os.MkdirAll(filepath.Dir(fullPath), 0o755); err != nil {
@@ -815,7 +804,7 @@ func buildTarFromDir(b *testing.B, dir string) []byte {
 	return buf.Bytes()
 }
 
-func newBenchHTTPServer(data []byte, index []byte) *httptest.Server {
+func newBenchHTTPServer(data, index []byte) *httptest.Server {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/data", func(w http.ResponseWriter, r *http.Request) {
 		http.ServeContent(w, r, "data", time.Time{}, bytes.NewReader(data))
@@ -829,7 +818,11 @@ func newBenchHTTPServer(data []byte, index []byte) *httptest.Server {
 }
 
 func fetchHTTPBytes(client *http.Client, url string) ([]byte, error) {
-	resp, err := client.Get(url)
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, url, http.NoBody)
+	if err != nil {
+		return nil, err
+	}
+	resp, err := client.Do(req)
 	if err != nil {
 		return nil, err
 	}
@@ -957,7 +950,7 @@ func (r *httpRangeReaderAt) ReadAt(p []byte, off int64) (int, error) {
 	if end >= r.size {
 		end = r.size - 1
 	}
-	req, err := http.NewRequest(http.MethodGet, r.url, nil)
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, r.url, http.NoBody)
 	if err != nil {
 		return 0, err
 	}
