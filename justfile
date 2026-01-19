@@ -4,6 +4,9 @@ set shell := ["bash", "-euo", "pipefail", "-c"]
 # Output directory for generated FlatBuffers code
 gen_dir := "core/internal"
 
+# Policy module directories (separate go.mod files)
+policy_modules := "policy/opa policy/sigstore"
+
 # Default recipe: validate code
 default: fmt vet lint test
 
@@ -19,21 +22,37 @@ fmt:
 vet:
     @echo "Running go vet..."
     go vet ./...
+    @for mod in {{policy_modules}}; do \
+        echo "Running go vet in $mod..."; \
+        (cd "$mod" && go vet ./...); \
+    done
 
 # Run golangci-lint
 lint:
     @echo "Running golangci-lint..."
     golangci-lint run
+    @for mod in {{policy_modules}}; do \
+        echo "Running golangci-lint in $mod..."; \
+        (cd "$mod" && golangci-lint run); \
+    done
 
 # Run tests
 test:
     @echo "Running tests..."
     go test -race -cover ./...
+    @for mod in {{policy_modules}}; do \
+        echo "Running tests in $mod..."; \
+        (cd "$mod" && go test -race -cover ./...); \
+    done
 
 # Build the package
 build:
     @echo "Building..."
     go build ./...
+    @for mod in {{policy_modules}}; do \
+        echo "Building $mod..."; \
+        (cd "$mod" && go build ./...); \
+    done
 
 # Generate FlatBuffers code
 generate:

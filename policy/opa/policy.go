@@ -143,7 +143,7 @@ func (p *Policy) fetchAttestationFromReferrer(ctx context.Context, req registry.
 //
 //nolint:gocritic // req passed by value per registry.Policy interface contract
 func (p *Policy) fetchAttestationsFromLayers(ctx context.Context, req registry.PolicyRequest, layers []ocispec.Descriptor) []AttestationInput {
-	var attestations []AttestationInput
+	attestations := make([]AttestationInput, 0, len(layers))
 
 	for _, layer := range layers {
 		data, err := req.Client.FetchDescriptor(ctx, req.Ref, layer)

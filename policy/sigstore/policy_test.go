@@ -20,6 +20,7 @@ type mockPolicyClient struct {
 	fetchErr    error
 }
 
+//nolint:gocritic // signature matches registry.PolicyClient interface
 func (m *mockPolicyClient) Referrers(_ context.Context, _ string, _ ocispec.Descriptor, _ string) ([]ocispec.Descriptor, error) {
 	if m.referrerErr != nil {
 		return nil, m.referrerErr
@@ -27,6 +28,7 @@ func (m *mockPolicyClient) Referrers(_ context.Context, _ string, _ ocispec.Desc
 	return m.referrers, nil
 }
 
+//nolint:gocritic // signature matches registry.PolicyClient interface
 func (m *mockPolicyClient) FetchDescriptor(_ context.Context, _ string, desc ocispec.Descriptor) ([]byte, error) {
 	if m.fetchErr != nil {
 		return nil, m.fetchErr

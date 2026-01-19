@@ -57,12 +57,14 @@ func NewPolicy(opts ...PolicyOption) (*Policy, error) {
 }
 
 // Evaluate implements registry.Policy.
+//
+//nolint:gocritic // req passed by value per registry.Policy interface contract
 func (p *Policy) Evaluate(ctx context.Context, req registry.PolicyRequest) error {
 	// List sigstore bundle referrers for the subject manifest
 	referrers, err := req.Client.Referrers(ctx, req.Ref, req.Subject, SignatureArtifactType)
 	if err != nil {
 		if errors.Is(err, registry.ErrReferrersUnsupported) {
-			return fmt.Errorf("sigstore: registry does not support referrers API")
+			return errors.New("sigstore: registry does not support referrers API")
 		}
 		return fmt.Errorf("sigstore: list referrers: %w", err)
 	}
@@ -111,7 +113,7 @@ type ociArtifactManifest struct {
 func parseOCIArtifactLayers(data []byte) ([]ocispec.Descriptor, bool, error) {
 	var manifest ociArtifactManifest
 	if err := json.Unmarshal(data, &manifest); err != nil {
-		return nil, false, nil
+		return nil, false, nil //nolint:nilerr // not an OCI artifact manifest, signal to try other parsing
 	}
 	if manifest.SchemaVersion != 2 {
 		return nil, false, nil
@@ -128,6 +130,7 @@ func parseOCIArtifactLayers(data []byte) ([]ocispec.Descriptor, bool, error) {
 	return layers, true, nil
 }
 
+//nolint:gocritic // req passed by value to match Evaluate call chain
 func (p *Policy) verifyBundleData(ctx context.Context, req registry.PolicyRequest, data, payload []byte) error {
 	layers, ok, err := parseOCIArtifactLayers(data)
 	if err != nil {
