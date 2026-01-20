@@ -1,11 +1,13 @@
 module github.com/meigma/blob/policy/gittuf
 
-go 1.25.4
+go 1.25.5
 
 require (
 	github.com/gittuf/gittuf v0.0.0
 	github.com/meigma/blob v0.0.0
+	github.com/opencontainers/go-digest v1.0.0
 	github.com/opencontainers/image-spec v1.1.1
+	github.com/stretchr/testify v1.11.1
 )
 
 require (
@@ -76,7 +78,6 @@ require (
 	github.com/mitchellh/mapstructure v1.5.0 // indirect
 	github.com/nozzle/throttler v0.0.0-20180817012639-2ea982251481 // indirect
 	github.com/oklog/ulid v1.3.1 // indirect
-	github.com/opencontainers/go-digest v1.0.0 // indirect
 	github.com/opentracing/opentracing-go v1.2.0 // indirect
 	github.com/pelletier/go-toml/v2 v2.2.3 // indirect
 	github.com/pjbgf/sha1cd v0.3.2 // indirect
@@ -104,7 +105,6 @@ require (
 	github.com/spf13/cobra v1.10.2 // indirect
 	github.com/spf13/pflag v1.0.10 // indirect
 	github.com/spf13/viper v1.20.1 // indirect
-	github.com/stretchr/testify v1.11.1 // indirect
 	github.com/subosito/gotenv v1.6.0 // indirect
 	github.com/syndtr/goleveldb v1.0.1-0.20220721030215-126854af5e6d // indirect
 	github.com/theupdateframework/go-tuf v0.7.0 // indirect
