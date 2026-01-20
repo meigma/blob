@@ -302,8 +302,10 @@ err := blobcore.Create(ctx, srcDir, indexFile, dataFile,
 | `github.com/meigma/blob/core/http` | HTTP byte source |
 | `github.com/meigma/blob/registry` | OCI registry operations |
 | `github.com/meigma/blob/registry/cache` | Registry cache implementations |
-| `github.com/meigma/blob/policy/sigstore` | Sigstore signature verification |
-| `github.com/meigma/blob/policy/opa` | OPA policy evaluation |
+| `github.com/meigma/blob/policy` | Policy composition (RequireAll, RequireAny) |
+| `github.com/meigma/blob/policy/sigstore` | Sigstore signature verification (GitHubActionsPolicy) |
+| `github.com/meigma/blob/policy/slsa` | SLSA provenance validation (GitHubActionsWorkflow) |
+| `github.com/meigma/blob/policy/opa` | Custom OPA/Rego policy evaluation |
 
 ## See Also
 
