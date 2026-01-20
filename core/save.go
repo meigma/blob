@@ -35,7 +35,8 @@ func (b *Blob) Save(indexPath, dataPath string) error {
 	return nil
 }
 
-// writeFileAtomic writes data to a temp file then renames to target.
+// writeFileAtomic writes data to a temp file then renames to target,
+// ensuring atomic replacement of the target file.
 func writeFileAtomic(target string, data []byte) error {
 	dir := filepath.Dir(target)
 	tmp, err := os.CreateTemp(dir, ".blob-*")
@@ -60,7 +61,8 @@ func writeFileAtomic(target string, data []byte) error {
 	return nil
 }
 
-// streamFileAtomic streams from reader to a temp file then renames to target.
+// streamFileAtomic streams from reader to a temp file then renames to target,
+// ensuring atomic replacement of the target file.
 func streamFileAtomic(target string, r io.Reader) error {
 	dir := filepath.Dir(target)
 	tmp, err := os.CreateTemp(dir, ".blob-*")

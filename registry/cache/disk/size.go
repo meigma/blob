@@ -9,12 +9,15 @@ import (
 	"time"
 )
 
+// cacheEntry represents a single cached file with its metadata.
 type cacheEntry struct {
 	path    string
 	size    int64
 	modTime time.Time
 }
 
+// dirSize returns the total size of all regular files under root.
+// If the directory does not exist, it returns 0 with no error.
 func dirSize(root string) (int64, error) {
 	var total int64
 	err := filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
@@ -37,6 +40,9 @@ func dirSize(root string) (int64, error) {
 	return total, err
 }
 
+// pruneDir removes files from root until the total size is at or below targetBytes.
+// Files are removed in order of modification time (oldest first).
+// It returns the number of bytes freed and the remaining size.
 func pruneDir(root string, targetBytes int64) (freed, remaining int64, err error) {
 	if targetBytes < 0 {
 		targetBytes = 0

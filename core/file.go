@@ -15,7 +15,7 @@ const (
 	DefaultDataName  = "data.blob"
 )
 
-// fileSource wraps *os.File to implement ByteSource.
+// fileSource wraps *os.File to implement ByteSource for local file access.
 // os.File has ReadAt but not Size, so we cache the size at construction.
 type fileSource struct {
 	file     *os.File
@@ -50,6 +50,8 @@ func (fs *fileSource) SourceID() string {
 	return fs.sourceID
 }
 
+// fallbackFileSourceID generates a source ID from file path and metadata
+// when no content hash is available.
 func fallbackFileSourceID(path string, info os.FileInfo) string {
 	absPath, err := filepath.Abs(path)
 	if err != nil {

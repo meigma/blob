@@ -24,6 +24,7 @@ type cachedFile struct {
 	verifyErr     error
 }
 
+// newCachedFile creates a cachedFile that wraps f with hash verification.
 func newCachedFile(f fs.File, entry *blobtype.Entry, verifyOnClose bool, deleteFunc func([]byte) error) *cachedFile {
 	return &cachedFile{
 		file:          f,
@@ -34,6 +35,7 @@ func newCachedFile(f fs.File, entry *blobtype.Entry, verifyOnClose bool, deleteF
 	}
 }
 
+// Read implements io.Reader, computing a running hash for verification.
 func (f *cachedFile) Read(p []byte) (int, error) {
 	if f.verifyErr != nil {
 		return 0, f.verifyErr
@@ -54,6 +56,7 @@ func (f *cachedFile) Read(p []byte) (int, error) {
 	return n, nil
 }
 
+// ReadAt implements io.ReaderAt for random access without hash verification.
 func (f *cachedFile) ReadAt(p []byte, off int64) (int, error) {
 	if f.verifyErr != nil {
 		return 0, f.verifyErr
@@ -65,10 +68,12 @@ func (f *cachedFile) ReadAt(p []byte, off int64) (int, error) {
 	return readerAt.ReadAt(p, off)
 }
 
+// Stat returns file info from the archive entry metadata.
 func (f *cachedFile) Stat() (fs.FileInfo, error) {
 	return file.NewInfo(f.entry, file.Base(f.entry.Path))
 }
 
+// Close closes the underlying file, optionally draining to verify the hash.
 func (f *cachedFile) Close() error {
 	if f.verified || !f.verifyOnClose {
 		closeErr := f.file.Close()
@@ -97,6 +102,7 @@ func (f *cachedFile) Close() error {
 	return closeErr
 }
 
+// verifyHash checks if the accumulated hash matches the expected entry hash.
 func (f *cachedFile) verifyHash() error {
 	if f.verified {
 		return f.verifyErr
@@ -118,10 +124,12 @@ type bytesFile struct {
 	size int64
 }
 
+// Stat returns synthetic file info with the cached size.
 func (f *bytesFile) Stat() (fs.FileInfo, error) {
 	return &bytesFileInfo{size: f.size}, nil
 }
 
+// Close is a no-op since the underlying bytes.Reader needs no cleanup.
 func (f *bytesFile) Close() error { return nil }
 
 // bytesFileInfo implements fs.FileInfo for bytesFile.
@@ -129,12 +137,23 @@ type bytesFileInfo struct {
 	size int64
 }
 
-func (fi *bytesFileInfo) Name() string       { return "" }
-func (fi *bytesFileInfo) Size() int64        { return fi.size }
-func (fi *bytesFileInfo) Mode() fs.FileMode  { return 0o644 }
+// Name returns an empty string since cached content has no file name.
+func (fi *bytesFileInfo) Name() string { return "" }
+
+// Size returns the content size in bytes.
+func (fi *bytesFileInfo) Size() int64 { return fi.size }
+
+// Mode returns a default file mode.
+func (fi *bytesFileInfo) Mode() fs.FileMode { return 0o644 }
+
+// ModTime returns the zero time since cached content has no modification time.
 func (fi *bytesFileInfo) ModTime() time.Time { return time.Time{} }
-func (fi *bytesFileInfo) IsDir() bool        { return false }
-func (fi *bytesFileInfo) Sys() any           { return nil }
+
+// IsDir returns false since cached content is never a directory.
+func (fi *bytesFileInfo) IsDir() bool { return false }
+
+// Sys returns nil since there is no underlying system data.
+func (fi *bytesFileInfo) Sys() any { return nil }
 
 // ensureCached populates the cache for an entry if not already cached.
 // Uses singleflight to prevent duplicate fetches.

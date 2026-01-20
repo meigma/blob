@@ -47,6 +47,7 @@ func TestError_InvalidReference(t *testing.T) {
 
 	for _, ref := range invalidRefs {
 		t.Run(ref, func(t *testing.T) {
+			t.Parallel()
 			_, err := client.Fetch(ctx, ref)
 			assert.Error(t, err, "Fetch should fail with invalid ref")
 		})
@@ -62,7 +63,7 @@ func TestError_TooManyFiles(t *testing.T) {
 
 	// Create many files
 	manyFiles := make(map[string][]byte)
-	for i := 0; i < 100; i++ {
+	for i := range 100 {
 		manyFiles[filepath.Join("dir", string(rune('a'+i%26)), string(rune('0'+i%10))+".txt")] = []byte("x")
 	}
 
@@ -156,6 +157,7 @@ func TestError_Open_InvalidPath(t *testing.T) {
 
 	for _, path := range invalidPaths {
 		t.Run(path, func(t *testing.T) {
+			t.Parallel()
 			_, err := archive.Open(path)
 			require.Error(t, err, "Open should fail for %q", path)
 		})
@@ -171,7 +173,7 @@ func TestError_IndexTooLarge(t *testing.T) {
 
 	// Create many files to have a larger index
 	manyFiles := make(map[string][]byte)
-	for i := 0; i < 50; i++ {
+	for i := range 50 {
 		path := filepath.Join("dir", string(rune('a'+i%26)), string(rune('0'+i%10))+".txt")
 		manyFiles[path] = []byte("content")
 	}

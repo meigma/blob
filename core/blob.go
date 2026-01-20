@@ -1,13 +1,3 @@
-//go:generate flatc --go --go-namespace fb -o internal schema/index.fbs
-
-// Package blob provides a file archive format optimized for random access
-// via HTTP range requests against OCI registries.
-//
-// Archives consist of two OCI blobs:
-//   - Index blob: FlatBuffers-encoded file metadata enabling O(log n) lookups
-//   - Data blob: Concatenated file contents, sorted by path for efficient directory fetches
-//
-// The package implements fs.FS and related interfaces for stdlib compatibility.
 package blob
 
 import (
@@ -563,7 +553,9 @@ func cleanCopyDest(destDir, prefix string) (string, error) {
 	return target, nil
 }
 
-// openDir implements fs.File and fs.ReadDirFile for directories.
+// openDir implements fs.File and fs.ReadDirFile for synthetic directories.
+// Archive directories are synthesized from file paths since the format
+// does not store directories explicitly.
 type openDir struct {
 	b    *Blob
 	name string
@@ -639,6 +631,8 @@ func (b *Blob) isDir(name string) bool {
 }
 
 // dirIter iterates over directory entries, synthesizing subdirectories.
+// It deduplicates entries that share a common directory component and
+// yields synthetic directory entries for nested paths.
 type dirIter struct {
 	next     func() (EntryView, bool)
 	stop     func()
@@ -647,6 +641,7 @@ type dirIter struct {
 	done     bool
 }
 
+// newDirIter creates a directory iterator for entries under prefix.
 func newDirIter(idx *index.Index, prefix string) *dirIter {
 	next, stop := iter.Pull(idx.EntriesWithPrefixView(prefix))
 	return &dirIter{
@@ -656,6 +651,8 @@ func newDirIter(idx *index.Index, prefix string) *dirIter {
 	}
 }
 
+// Next returns the next directory entry, synthesizing subdirectory entries
+// when files exist in nested paths.
 func (it *dirIter) Next() (fs.DirEntry, bool) {
 	if it.done {
 		return nil, false
@@ -687,6 +684,7 @@ func (it *dirIter) Next() (fs.DirEntry, bool) {
 	}
 }
 
+// Close releases resources held by the iterator.
 func (it *dirIter) Close() {
 	if it.done {
 		return

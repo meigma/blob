@@ -9,7 +9,8 @@ import (
 	"oras.land/oras-go/v2/registry"
 )
 
-// clientRef holds parsed reference information.
+// clientRef holds parsed OCI reference components including registry host,
+// repository path, and the reference (tag or digest).
 type clientRef struct {
 	registry   string
 	repository string

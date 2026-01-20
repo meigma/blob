@@ -17,8 +17,10 @@ type DecompressPool struct {
 	decoderLowmem         bool
 }
 
+// decompressOption configures a DecompressPool.
 type decompressOption func(*DecompressPool)
 
+// withDecoderConcurrency sets the decoder concurrency level.
 func withDecoderConcurrency(n int) decompressOption {
 	return func(p *DecompressPool) {
 		if n < 0 {
@@ -29,6 +31,7 @@ func withDecoderConcurrency(n int) decompressOption {
 	}
 }
 
+// withDecoderLowmem enables or disables low-memory mode for decoders.
 func withDecoderLowmem(b bool) decompressOption {
 	return func(p *DecompressPool) {
 		p.decoderLowmem = b

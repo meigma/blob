@@ -19,8 +19,10 @@ import (
 	"github.com/testcontainers/testcontainers-go/wait"
 )
 
+// benchOCISink prevents compiler optimizations from eliminating benchmark results.
 var benchOCISink []byte
 
+// benchPattern controls what type of data is written to benchmark files.
 type benchPattern string
 
 const (
@@ -28,17 +30,20 @@ const (
 	benchPatternRandom       benchPattern = "random"
 )
 
+// benchOCIData holds the test data for OCI flow benchmarks.
 type benchOCIData struct {
 	blob     *blob.Blob
 	readPath string
 	dataSize int64
 }
 
+// memByteSource is an in-memory implementation of blob.ByteSource for benchmarks.
 type memByteSource struct {
 	data     []byte
 	sourceID string
 }
 
+// newMemByteSource creates a memByteSource wrapping the provided data.
 func newMemByteSource(data []byte) *memByteSource {
 	return &memByteSource{
 		data:     data,
@@ -65,11 +70,13 @@ func (m *memByteSource) SourceID() string {
 	return m.sourceID
 }
 
+// benchRefCache is a thread-safe in-memory RefCache for benchmarks.
 type benchRefCache struct {
 	mu   sync.RWMutex
 	data map[string]string
 }
 
+// newBenchRefCache creates an empty benchRefCache.
 func newBenchRefCache() *benchRefCache {
 	return &benchRefCache{data: make(map[string]string)}
 }
@@ -99,11 +106,13 @@ func (c *benchRefCache) MaxBytes() int64            { return 0 }
 func (c *benchRefCache) SizeBytes() int64           { return 0 }
 func (c *benchRefCache) Prune(int64) (int64, error) { return 0, nil }
 
+// benchManifestCache is a thread-safe in-memory ManifestCache for benchmarks.
 type benchManifestCache struct {
 	mu   sync.RWMutex
 	data map[string][]byte
 }
 
+// newBenchManifestCache creates an empty benchManifestCache.
 func newBenchManifestCache() *benchManifestCache {
 	return &benchManifestCache{data: make(map[string][]byte)}
 }
@@ -140,11 +149,13 @@ func (c *benchManifestCache) MaxBytes() int64            { return 0 }
 func (c *benchManifestCache) SizeBytes() int64           { return 0 }
 func (c *benchManifestCache) Prune(int64) (int64, error) { return 0, nil }
 
+// benchIndexCache is a thread-safe in-memory IndexCache for benchmarks.
 type benchIndexCache struct {
 	mu   sync.RWMutex
 	data map[string][]byte
 }
 
+// newBenchIndexCache creates an empty benchIndexCache.
 func newBenchIndexCache() *benchIndexCache {
 	return &benchIndexCache{data: make(map[string][]byte)}
 }
@@ -333,6 +344,7 @@ func BenchmarkOCIPullCache(b *testing.B) {
 	}
 }
 
+// startRegistry starts an ephemeral OCI registry container for benchmarks.
 func startRegistry(ctx context.Context, tb testing.TB) string {
 	tb.Helper()
 
@@ -364,10 +376,12 @@ func startRegistry(ctx context.Context, tb testing.TB) string {
 	return fmt.Sprintf("%s:%s", host, port.Port())
 }
 
+// isOKStatus returns true if the HTTP status code indicates success.
 func isOKStatus(status int) bool {
 	return status >= 200 && status < 300
 }
 
+// createBenchOCIData creates benchmark test data with the specified parameters.
 func createBenchOCIData(tb testing.TB, fileCount, fileSize int, compression blob.Compression, pattern benchPattern) benchOCIData {
 	tb.Helper()
 
@@ -396,6 +410,7 @@ func createBenchOCIData(tb testing.TB, fileCount, fileSize int, compression blob
 	}
 }
 
+// writeBenchFiles writes test files to dir and returns the path of the first file.
 func writeBenchFiles(tb testing.TB, dir string, fileCount, fileSize int, pattern benchPattern) string {
 	tb.Helper()
 
@@ -435,6 +450,7 @@ func writeBenchFiles(tb testing.TB, dir string, fileCount, fileSize int, pattern
 	return readPath
 }
 
+// sanitizeBenchName converts a benchmark name to a valid OCI repository name.
 func sanitizeBenchName(name string) string {
 	name = strings.ReplaceAll(name, "/", "-")
 	name = strings.ReplaceAll(name, "=", "-")

@@ -46,7 +46,8 @@ func TestCopyDirRejectsTraversalPaths(t *testing.T) {
 	require.Error(t, statErr)
 }
 
-// createTestArchive creates a Blob for testing.
+// createTestArchive creates a Blob for testing with the given files and compression.
+// Files are specified as a map of path to content.
 func createTestArchive(t *testing.T, files map[string][]byte, compression Compression) *Blob {
 	t.Helper()
 

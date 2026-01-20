@@ -13,7 +13,9 @@ import (
 	blobhttp "github.com/meigma/blob/core/http"
 )
 
-func TestSourceReadAt(t *testing.T) {
+func TestSource_ReadAt(t *testing.T) {
+	t.Parallel()
+
 	data := []byte("hello world")
 	server := httptest.NewServer(nethttp.HandlerFunc(func(w nethttp.ResponseWriter, r *nethttp.Request) {
 		nethttp.ServeContent(w, r, "data", time.Time{}, bytes.NewReader(data))
@@ -28,32 +30,54 @@ func TestSourceReadAt(t *testing.T) {
 		t.Fatalf("Size() = %d, want %d", src.Size(), len(data))
 	}
 
-	buf := make([]byte, 5)
-	n, err := src.ReadAt(buf, 6)
-	if err != nil {
-		t.Fatalf("ReadAt() error = %v", err)
-	}
-	if n != len(buf) {
-		t.Fatalf("ReadAt() n = %d, want %d", n, len(buf))
-	}
-	if string(buf) != "world" {
-		t.Fatalf("ReadAt() got %q, want %q", string(buf), "world")
+	tests := []struct {
+		name    string
+		bufSize int
+		offset  int64
+		wantN   int
+		wantErr error
+		want    string
+	}{
+		{
+			name:    "read from middle",
+			bufSize: 5,
+			offset:  6,
+			wantN:   5,
+			wantErr: nil,
+			want:    "world",
+		},
+		{
+			name:    "read past end returns EOF",
+			bufSize: 10,
+			offset:  int64(len(data) - 3),
+			wantN:   3,
+			wantErr: io.EOF,
+			want:    "rld",
+		},
 	}
 
-	edge := make([]byte, 10)
-	n, err = src.ReadAt(edge, int64(len(data)-3))
-	if err != io.EOF {
-		t.Fatalf("ReadAt() error = %v, want io.EOF", err)
-	}
-	if n != 3 {
-		t.Fatalf("ReadAt() n = %d, want 3", n)
-	}
-	if string(edge[:n]) != "rld" {
-		t.Fatalf("ReadAt() got %q, want %q", string(edge[:n]), "rld")
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			buf := make([]byte, tt.bufSize)
+			n, err := src.ReadAt(buf, tt.offset)
+			if err != tt.wantErr {
+				t.Fatalf("ReadAt() error = %v, want %v", err, tt.wantErr)
+			}
+			if n != tt.wantN {
+				t.Fatalf("ReadAt() n = %d, want %d", n, tt.wantN)
+			}
+			if got := string(buf[:n]); got != tt.want {
+				t.Fatalf("ReadAt() got %q, want %q", got, tt.want)
+			}
+		})
 	}
 }
 
-func TestSourceRangeUnsupported(t *testing.T) {
+func TestNewSource_RangeUnsupported(t *testing.T) {
+	t.Parallel()
+
 	data := []byte("range unsupported")
 	server := httptest.NewServer(nethttp.HandlerFunc(func(w nethttp.ResponseWriter, r *nethttp.Request) {
 		if r.Method == nethttp.MethodHead {
@@ -70,7 +94,9 @@ func TestSourceRangeUnsupported(t *testing.T) {
 	}
 }
 
-func TestSourceReadAtRetriesWithoutIfMatchOn412(t *testing.T) {
+func TestSource_ReadAt_RetriesWithoutIfMatchOn412(t *testing.T) {
+	t.Parallel()
+
 	data := []byte("hello world")
 	etag := `"retry-test"`
 	var withIfMatchRange int32

@@ -8,6 +8,8 @@ import (
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 )
 
+// referrersProvider is an optional interface that OCIClient implementations
+// can provide to support the OCI Referrers API.
 type referrersProvider interface {
 	Referrers(ctx context.Context, repoRef string, subject ocispec.Descriptor, artifactType string) ([]ocispec.Descriptor, error)
 }

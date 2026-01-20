@@ -1,4 +1,3 @@
-// Package disk provides a disk-backed cache implementation.
 package disk
 
 import (
@@ -18,13 +17,15 @@ const (
 )
 
 // Cache implements cache.Cache using the local filesystem.
+// Files are stored in a directory hierarchy with optional sharding by hash prefix.
+// The cache is safe for concurrent use.
 type Cache struct {
-	dir            string
-	shardPrefixLen int
-	dirPerm        os.FileMode
-	maxBytes       int64
-	bytes          atomic.Int64
-	pruneMu        sync.Mutex
+	dir            string       // root directory for cached files
+	shardPrefixLen int          // number of hex chars for subdirectory sharding
+	dirPerm        os.FileMode  // permissions for created directories
+	maxBytes       int64        // maximum cache size (0 = unlimited)
+	bytes          atomic.Int64 // current total size of cached files
+	pruneMu        sync.Mutex   // serializes prune operations
 }
 
 // Option configures a disk cache.

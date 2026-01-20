@@ -12,6 +12,8 @@ import (
 	blobhttp "github.com/meigma/blob/core/http"
 )
 
+// authClientProvider is an optional interface that OCIClient implementations
+// can provide to supply a pre-configured HTTP client with authentication.
 type authClientProvider interface {
 	AuthClient(repoRef string) (*http.Client, error)
 }
@@ -173,6 +175,8 @@ func (c *Client) createDataSource(ctx context.Context, ref string, manifest *Blo
 	return source, nil
 }
 
+// readIndexData reads index data from r with optional size limits.
+// If maxSize is positive, reading stops if the limit is exceeded.
 func readIndexData(r io.Reader, expectedSize, maxSize int64) ([]byte, error) {
 	if maxSize > 0 && expectedSize > maxSize {
 		return nil, fmt.Errorf("index blob too large: %d > %d", expectedSize, maxSize)

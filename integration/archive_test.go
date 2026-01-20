@@ -112,6 +112,7 @@ func TestArchive_ReadDir_Nested(t *testing.T) {
 	require.NoError(t, err, "Pull")
 
 	t.Run("dir1", func(t *testing.T) {
+		t.Parallel()
 		entries, err := archive.ReadDir("dir1")
 		require.NoError(t, err)
 
@@ -120,6 +121,7 @@ func TestArchive_ReadDir_Nested(t *testing.T) {
 	})
 
 	t.Run("dir1/sub", func(t *testing.T) {
+		t.Parallel()
 		entries, err := archive.ReadDir("dir1/sub")
 		require.NoError(t, err)
 
@@ -128,6 +130,7 @@ func TestArchive_ReadDir_Nested(t *testing.T) {
 	})
 
 	t.Run("dir2/deep", func(t *testing.T) {
+		t.Parallel()
 		entries, err := archive.ReadDir("dir2/deep")
 		require.NoError(t, err)
 
@@ -224,6 +227,7 @@ func TestArchive_Stat(t *testing.T) {
 	require.NoError(t, err, "Pull")
 
 	t.Run("file", func(t *testing.T) {
+		t.Parallel()
 		info, err := archive.Stat("hello.txt")
 		require.NoError(t, err, "Stat file")
 
@@ -233,6 +237,7 @@ func TestArchive_Stat(t *testing.T) {
 	})
 
 	t.Run("directory", func(t *testing.T) {
+		t.Parallel()
 		// Create files with a directory structure
 		files := map[string][]byte{
 			"dir/file.txt": []byte("content"),
@@ -410,12 +415,12 @@ func TestCopyTo_SpecificFiles(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, nestedArchive["root.txt"], content)
 
-	content, err = os.ReadFile(filepath.Join(destDir, "dir1/a.txt"))
+	content, err = os.ReadFile(filepath.Join(destDir, "dir1", "a.txt"))
 	require.NoError(t, err)
 	assert.Equal(t, nestedArchive["dir1/a.txt"], content)
 
 	// Files not extracted should not exist
-	_, err = os.Stat(filepath.Join(destDir, "dir2/x.txt"))
+	_, err = os.Stat(filepath.Join(destDir, "dir2", "x.txt"))
 	assert.True(t, os.IsNotExist(err))
 }
 
@@ -625,7 +630,7 @@ func TestCopyDir_WithWorkers(t *testing.T) {
 
 	// Create more files to benefit from parallelism
 	manyFiles := make(map[string][]byte)
-	for i := 0; i < 20; i++ {
+	for i := range 20 {
 		manyFiles[filepath.Join("data", string(rune('a'+i%26))+".txt")] = makeRandomContent(1024)
 	}
 

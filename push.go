@@ -56,7 +56,7 @@ func (c *Client) PushArchive(ctx context.Context, ref string, archive *blobcore.
 // pushArchive is the internal push implementation.
 func (c *Client) pushArchive(ctx context.Context, ref string, archive *blobcore.Blob, cfg *pushConfig) error {
 	// Build registry client options
-	regOpts := []registry.Option{}
+	var regOpts []registry.Option //nolint:prealloc // size depends on optional config
 	regOpts = append(regOpts, registry.WithOrasOptions(c.orasOpts...))
 	if c.refCache != nil {
 		regOpts = append(regOpts, registry.WithRefCache(c.refCache))
