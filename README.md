@@ -82,11 +82,40 @@ archive, err := blobcore.New(indexData, source)
 content, err := archive.ReadFile("config/app.json")
 ```
 
+### Supply Chain Security
+
+Verify archive provenance with Sigstore signatures and SLSA attestations:
+
+```go
+import (
+    "github.com/meigma/blob"
+    "github.com/meigma/blob/policy"
+    "github.com/meigma/blob/policy/sigstore"
+    "github.com/meigma/blob/policy/slsa"
+)
+
+// Verify signatures and provenance from GitHub Actions
+sigPolicy, _ := sigstore.GitHubActionsPolicy("myorg/myrepo",
+    sigstore.AllowBranches("main"),
+    sigstore.AllowTags("v*"),
+)
+slsaPolicy, _ := slsa.GitHubActionsWorkflow("myorg/myrepo")
+
+c, _ := blob.NewClient(
+    blob.WithDockerConfig(),
+    blob.WithPolicy(policy.RequireAll(sigPolicy, slsaPolicy)),
+)
+
+// Pull fails if verification fails
+archive, err := c.Pull(ctx, "ghcr.io/myorg/myarchive:v1")
+```
+
 ## Features
 
 - **Random access** - Read any file without downloading the entire archive
 - **Directory fetches** - Path-sorted storage enables single-request directory reads
 - **Integrity verification** - Per-file SHA256 hashes
+- **Supply chain security** - Sigstore signing and SLSA provenance with simple verification helpers
 - **Compression** - Per-file zstd compression preserves random access
 - **Content-addressed caching** - Automatic deduplication across archives
 - **Standard interfaces** - Implements `fs.FS`, `fs.ReadFileFS`, `fs.ReadDirFS`
