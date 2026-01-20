@@ -489,6 +489,11 @@ func (b *Blob) copyEntries(destDir string, entries []*batch.Entry, cfg *copyConf
 	if len(entries) == 0 {
 		return nil
 	}
+	for _, entry := range entries {
+		if !fs.ValidPath(entry.Path) {
+			return &fs.PathError{Op: "copy", Path: entry.Path, Err: fs.ErrInvalid}
+		}
+	}
 
 	// Create file sink with options
 	sinkOpts := []batch.FileSinkOption{
