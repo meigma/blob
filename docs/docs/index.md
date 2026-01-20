@@ -21,24 +21,16 @@ Blob enables random access to individual files via HTTP range requests without d
 ## Quick Start
 
 ```go
-import (
-    "context"
+import "github.com/meigma/blob"
 
-    "github.com/meigma/blob"
-    "github.com/meigma/blob/client"
+// Create client and push an archive
+c, _ := blob.NewClient(blob.WithDockerConfig())
+c.Push(ctx, "ghcr.io/myorg/myarchive:v1", "./src",
+    blob.PushWithCompression(blob.CompressionZstd),
 )
-
-// Create and push an archive
-blobFile, _ := blob.CreateBlob(context.Background(), "./src", "/tmp/archive",
-    blob.CreateBlobWithCompression(blob.CompressionZstd),
-)
-defer blobFile.Close()
-
-c := client.New(client.WithDockerConfig())
-c.Push(context.Background(), "ghcr.io/myorg/myarchive:v1", blobFile.Blob)
 
 // Pull and read files lazily
-archive, _ := c.Pull(context.Background(), "ghcr.io/myorg/myarchive:v1")
+archive, _ := c.Pull(ctx, "ghcr.io/myorg/myarchive:v1")
 content, _ := archive.ReadFile("config.json")
 ```
 

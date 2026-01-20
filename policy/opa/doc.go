@@ -1,7 +1,7 @@
 // Package opa provides a client.Policy implementation for validating SLSA
 // provenance attestations using OPA Rego policies.
 //
-// This package implements [github.com/meigma/blob/client.Policy] using the
+// This package implements [github.com/meigma/blob/registry.Policy] using the
 // Open Policy Agent (OPA) Rego language for flexible attestation validation.
 //
 // # Separate Module

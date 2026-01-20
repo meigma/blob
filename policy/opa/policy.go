@@ -9,7 +9,7 @@ import (
 	"github.com/open-policy-agent/opa/v1/rego"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 
-	"github.com/meigma/blob/client"
+	"github.com/meigma/blob/registry"
 )
 
 // DefaultArtifactType is the OCI artifact type for in-toto attestations.
@@ -21,7 +21,7 @@ var defaultPredicateTypes = []string{
 	"https://slsa.dev/provenance/v0.2",
 }
 
-// Policy implements client.Policy using OPA Rego for attestation validation.
+// Policy implements registry.Policy using OPA Rego for attestation validation.
 // It fetches in-toto attestation referrers from the registry and evaluates
 // them against a compiled Rego policy.
 type Policy struct {
@@ -52,14 +52,14 @@ func NewPolicy(opts ...PolicyOption) (*Policy, error) {
 	return p, nil
 }
 
-// Evaluate implements client.Policy.
+// Evaluate implements registry.Policy.
 //
-//nolint:gocritic // req passed by value per client.Policy interface contract
-func (p *Policy) Evaluate(ctx context.Context, req client.PolicyRequest) error {
+//nolint:gocritic // req passed by value per registry.Policy interface contract
+func (p *Policy) Evaluate(ctx context.Context, req registry.PolicyRequest) error {
 	// Fetch attestation referrers
 	referrers, err := req.Client.Referrers(ctx, req.Ref, req.Subject, p.artifactType)
 	if err != nil {
-		if errors.Is(err, client.ErrReferrersUnsupported) {
+		if errors.Is(err, registry.ErrReferrersUnsupported) {
 			return errors.New("opa: registry does not support referrers API")
 		}
 		return fmt.Errorf("opa: list referrers: %w", err)
@@ -89,8 +89,8 @@ func (p *Policy) Evaluate(ctx context.Context, req client.PolicyRequest) error {
 // For OCI image manifests (like Sigstore bundles), it fetches the layers containing
 // the actual attestation content.
 //
-//nolint:gocritic // req passed by value per client.Policy interface contract
-func (p *Policy) fetchAttestations(ctx context.Context, req client.PolicyRequest, referrers []ocispec.Descriptor) []AttestationInput {
+//nolint:gocritic // req passed by value per registry.Policy interface contract
+func (p *Policy) fetchAttestations(ctx context.Context, req registry.PolicyRequest, referrers []ocispec.Descriptor) []AttestationInput {
 	attestations := make([]AttestationInput, 0, len(referrers))
 
 	for _, ref := range referrers {
@@ -111,8 +111,8 @@ func (p *Policy) fetchAttestations(ctx context.Context, req client.PolicyRequest
 // fetchAttestationFromReferrer fetches attestation content from a referrer descriptor.
 // If the referrer is an OCI image manifest, it fetches the layers containing the attestation.
 //
-//nolint:gocritic // req passed by value per client.Policy interface contract
-func (p *Policy) fetchAttestationFromReferrer(ctx context.Context, req client.PolicyRequest, ref ocispec.Descriptor) []AttestationInput {
+//nolint:gocritic // req passed by value per registry.Policy interface contract
+func (p *Policy) fetchAttestationFromReferrer(ctx context.Context, req registry.PolicyRequest, ref ocispec.Descriptor) []AttestationInput {
 	data, err := req.Client.FetchDescriptor(ctx, req.Ref, ref)
 	if err != nil {
 		p.logger.Warn("failed to fetch attestation descriptor",
@@ -141,9 +141,9 @@ func (p *Policy) fetchAttestationFromReferrer(ctx context.Context, req client.Po
 
 // fetchAttestationsFromLayers fetches and parses attestations from OCI manifest layers.
 //
-//nolint:gocritic // req passed by value per client.Policy interface contract
-func (p *Policy) fetchAttestationsFromLayers(ctx context.Context, req client.PolicyRequest, layers []ocispec.Descriptor) []AttestationInput {
-	var attestations []AttestationInput
+//nolint:gocritic // req passed by value per registry.Policy interface contract
+func (p *Policy) fetchAttestationsFromLayers(ctx context.Context, req registry.PolicyRequest, layers []ocispec.Descriptor) []AttestationInput {
+	attestations := make([]AttestationInput, 0, len(layers))
 
 	for _, layer := range layers {
 		data, err := req.Client.FetchDescriptor(ctx, req.Ref, layer)
@@ -237,5 +237,5 @@ func collectDenyReasons(denySet []any) []string {
 	return reasons
 }
 
-// Ensure Policy implements client.Policy.
-var _ client.Policy = (*Policy)(nil)
+// Ensure Policy implements registry.Policy.
+var _ registry.Policy = (*Policy)(nil)

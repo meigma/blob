@@ -11,10 +11,10 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/meigma/blob/client"
+	"github.com/meigma/blob/registry"
 )
 
-// mockPolicyClient implements client.PolicyClient for testing.
+// mockPolicyClient implements registry.PolicyClient for testing.
 type mockPolicyClient struct {
 	referrers   []ocispec.Descriptor
 	referrerErr error
@@ -22,7 +22,7 @@ type mockPolicyClient struct {
 	fetchErr    error
 }
 
-//nolint:gocritic // implements client.PolicyClient interface
+//nolint:gocritic // implements registry.PolicyClient interface
 func (m *mockPolicyClient) Referrers(_ context.Context, _ string, _ ocispec.Descriptor, _ string) ([]ocispec.Descriptor, error) {
 	if m.referrerErr != nil {
 		return nil, m.referrerErr
@@ -30,7 +30,7 @@ func (m *mockPolicyClient) Referrers(_ context.Context, _ string, _ ocispec.Desc
 	return m.referrers, nil
 }
 
-//nolint:gocritic // implements client.PolicyClient interface
+//nolint:gocritic // implements registry.PolicyClient interface
 func (m *mockPolicyClient) FetchDescriptor(_ context.Context, _ string, desc ocispec.Descriptor) ([]byte, error) {
 	if m.fetchErr != nil {
 		return nil, m.fetchErr
@@ -40,7 +40,7 @@ func (m *mockPolicyClient) FetchDescriptor(_ context.Context, _ string, desc oci
 			return data, nil
 		}
 	}
-	return nil, client.ErrNotFound
+	return nil, registry.ErrNotFound
 }
 
 // createDSSEEnvelope creates a DSSE envelope for testing.
@@ -113,7 +113,7 @@ func TestPolicy_NoAttestations(t *testing.T) {
 		referrers: []ocispec.Descriptor{},
 	}
 
-	req := client.PolicyRequest{
+	req := registry.PolicyRequest{
 		Ref:    "example.com/repo:tag",
 		Digest: "sha256:abc123",
 		Subject: ocispec.Descriptor{
@@ -138,10 +138,10 @@ func TestPolicy_ReferrersUnsupported(t *testing.T) {
 	require.NoError(t, err)
 
 	mockClient := &mockPolicyClient{
-		referrerErr: client.ErrReferrersUnsupported,
+		referrerErr: registry.ErrReferrersUnsupported,
 	}
 
-	req := client.PolicyRequest{
+	req := registry.PolicyRequest{
 		Ref:    "example.com/repo:tag",
 		Digest: "sha256:abc123",
 		Subject: ocispec.Descriptor{
@@ -193,7 +193,7 @@ func TestPolicy_AllowPolicy(t *testing.T) {
 		},
 	}
 
-	req := client.PolicyRequest{
+	req := registry.PolicyRequest{
 		Ref:    "example.com/repo:tag",
 		Digest: manifestDigest.String(),
 		Subject: ocispec.Descriptor{
@@ -245,7 +245,7 @@ func TestPolicy_DenyPolicy(t *testing.T) {
 		},
 	}
 
-	req := client.PolicyRequest{
+	req := registry.PolicyRequest{
 		Ref:    "example.com/repo:tag",
 		Digest: manifestDigest.String(),
 		Subject: ocispec.Descriptor{
@@ -295,7 +295,7 @@ func TestPolicy_DenyWithReasons(t *testing.T) {
 		},
 	}
 
-	req := client.PolicyRequest{
+	req := registry.PolicyRequest{
 		Ref:    "example.com/repo:tag",
 		Digest: manifestDigest.String(),
 		Subject: ocispec.Descriptor{
@@ -337,7 +337,7 @@ func TestPolicy_InvalidAttestation(t *testing.T) {
 		},
 	}
 
-	req := client.PolicyRequest{
+	req := registry.PolicyRequest{
 		Ref:    "example.com/repo:tag",
 		Digest: manifestDigest.String(),
 		Subject: ocispec.Descriptor{
@@ -392,7 +392,7 @@ func TestPolicy_PredicateTypeFiltering(t *testing.T) {
 		},
 	}
 
-	req := client.PolicyRequest{
+	req := registry.PolicyRequest{
 		Ref:    "example.com/repo:tag",
 		Digest: manifestDigest.String(),
 		Subject: ocispec.Descriptor{

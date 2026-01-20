@@ -4,106 +4,58 @@ sidebar_position: 1
 
 # Creating Archives
 
-How to build blob archives from directories for storage in OCI registries.
+How to build and push blob archives to OCI registries.
 
-## Using CreateBlob (Recommended)
+## Using Push (Recommended)
 
-For file-based archives, `CreateBlob` is the simplest approach. It creates the archive files and returns an open `BlobFile` ready for use:
-
-```go
-import (
-	"context"
-
-	"github.com/meigma/blob"
-)
-
-func createArchive(srcDir, destDir string) (*blob.BlobFile, error) {
-	return blob.CreateBlob(context.Background(), srcDir, destDir,
-		blob.CreateBlobWithCompression(blob.CompressionZstd),
-	)
-}
-```
-
-This creates `index.blob` and `data.blob` in `destDir` and returns an open archive. Remember to close it when done:
+For most use cases, `Push` creates the archive and pushes it in a single call:
 
 ```go
-blobFile, err := blob.CreateBlob(ctx, srcDir, destDir)
+import "github.com/meigma/blob"
+
+c, err := blob.NewClient(blob.WithDockerConfig())
 if err != nil {
 	return err
 }
-defer blobFile.Close()
 
-// Use the archive immediately
-content, err := blobFile.ReadFile("config.json")
-```
-
-### Custom Filenames
-
-Override the default filenames with options:
-
-```go
-blobFile, err := blob.CreateBlob(ctx, srcDir, destDir,
-	blob.CreateBlobWithIndexName("my-archive.idx"),
-	blob.CreateBlobWithDataName("my-archive.dat"),
+err = c.Push(ctx, "ghcr.io/myorg/myarchive:v1", "./src",
+	blob.PushWithCompression(blob.CompressionZstd),
 )
 ```
 
-### Saving an Existing Blob
+This creates a compressed archive from the source directory and pushes it to the registry.
 
-To save an in-memory or remote Blob to local files:
+### Push Options
+
+Control archive creation with push options:
 
 ```go
-// archive is a *blob.Blob from any source
-err := archive.Save("/path/to/index.blob", "/path/to/data.blob")
+err = c.Push(ctx, ref, srcDir,
+	// Compression
+	blob.PushWithCompression(blob.CompressionZstd),
+	blob.PushWithSkipCompression(blob.DefaultSkipCompression(1024)),
+
+	// Build safety
+	blob.PushWithChangeDetection(blob.ChangeDetectionStrict),
+	blob.PushWithMaxFiles(100000),
+
+	// Registry metadata
+	blob.PushWithTags("latest", "stable"),
+	blob.PushWithAnnotations(map[string]string{
+		"org.opencontainers.image.version": "1.0.0",
+	}),
+)
 ```
 
 ---
 
-## Using Create (Advanced)
-
-The lower-level `Create` function provides more control when you need to:
-- Write to non-file destinations (network streams, cloud storage)
-- Handle index and data separately
-- Integrate with custom I/O pipelines
-
-### Basic Usage
-
-To create an archive, provide a source directory and writers for the index and data:
-
-```go
-import (
-	"context"
-	"os"
-
-	"github.com/meigma/blob"
-)
-
-func createArchive(srcDir string) error {
-	indexFile, err := os.Create("archive.index")
-	if err != nil {
-		return err
-	}
-	defer indexFile.Close()
-
-	dataFile, err := os.Create("archive.data")
-	if err != nil {
-		return err
-	}
-	defer dataFile.Close()
-
-	return blob.Create(context.Background(), srcDir, indexFile, dataFile)
-}
-```
-
-The function walks the source directory recursively, writing file contents to the data writer and metadata to the index writer. Files are written in path-sorted order to enable efficient directory fetches.
-
 ## Compression
 
-To enable zstd compression, use `CreateWithCompression`:
+Enable zstd compression to reduce archive size:
 
 ```go
-err := blob.Create(ctx, srcDir, indexW, dataW,
-	blob.CreateWithCompression(blob.CompressionZstd),
+err = c.Push(ctx, ref, srcDir,
+	blob.PushWithCompression(blob.CompressionZstd),
 )
 ```
 
@@ -115,12 +67,12 @@ Available compression options:
 
 ## Skipping Compression
 
-Some files compress poorly because they are already compressed (images, videos, archives) or too small to benefit. Use `CreateWithSkipCompression` to skip these:
+Some files compress poorly because they are already compressed (images, videos, archives) or too small to benefit. Use `PushWithSkipCompression` to skip these:
 
 ```go
-err := blob.Create(ctx, srcDir, indexW, dataW,
-	blob.CreateWithCompression(blob.CompressionZstd),
-	blob.CreateWithSkipCompression(blob.DefaultSkipCompression(1024)),
+err = c.Push(ctx, ref, srcDir,
+	blob.PushWithCompression(blob.CompressionZstd),
+	blob.PushWithSkipCompression(blob.DefaultSkipCompression(1024)),
 )
 ```
 
@@ -139,9 +91,9 @@ skipGenerated := func(path string, info fs.FileInfo) bool {
 		strings.Contains(path, "/generated/")
 }
 
-err := blob.Create(ctx, srcDir, indexW, dataW,
-	blob.CreateWithCompression(blob.CompressionZstd),
-	blob.CreateWithSkipCompression(
+err = c.Push(ctx, ref, srcDir,
+	blob.PushWithCompression(blob.CompressionZstd),
+	blob.PushWithSkipCompression(
 		blob.DefaultSkipCompression(1024),
 		skipGenerated,
 	),
@@ -155,12 +107,12 @@ If any predicate returns true, the file is stored uncompressed.
 For build pipelines, enable strict change detection to catch files that change during archive creation:
 
 ```go
-err := blob.Create(ctx, srcDir, indexW, dataW,
-	blob.CreateWithChangeDetection(blob.ChangeDetectionStrict),
+err = c.Push(ctx, ref, srcDir,
+	blob.PushWithChangeDetection(blob.ChangeDetectionStrict),
 )
 ```
 
-With strict change detection, Create verifies that file size and modification time remain unchanged after reading. If a file changes mid-write, Create returns an error rather than producing an archive with inconsistent content.
+With strict change detection, the archive creation verifies that file size and modification time remain unchanged after reading. If a file changes mid-write, an error is returned rather than producing an archive with inconsistent content.
 
 Change detection modes:
 - `blob.ChangeDetectionNone` - No verification (default, fewer syscalls)
@@ -171,13 +123,12 @@ Change detection modes:
 To protect against runaway archive creation, limit the number of files:
 
 ```go
-// Allow up to 50,000 files
-err := blob.Create(ctx, srcDir, indexW, dataW,
-	blob.CreateWithMaxFiles(50000),
+err = c.Push(ctx, ref, srcDir,
+	blob.PushWithMaxFiles(50000),
 )
 ```
 
-If the source directory contains more files than the limit, Create returns `blob.ErrTooManyFiles`.
+If the source directory contains more files than the limit, the operation returns `blob.ErrTooManyFiles`.
 
 Special values:
 - `0` - Use default limit (200,000 files)
@@ -185,7 +136,7 @@ Special values:
 
 ## Memory Considerations
 
-Create builds the entire index in memory before writing. Memory usage scales with the number of files and average path length.
+Archive creation builds the entire index in memory before writing. Memory usage scales with the number of files and average path length.
 
 Rough guide:
 - 10,000 files: ~3-5 MB
@@ -194,114 +145,120 @@ Rough guide:
 
 For archives approaching the default 200,000 file limit, ensure the build environment has sufficient memory (256 MB+ recommended).
 
-## Cancellation
+---
 
-Pass a context to support cancellation of long-running archive creation:
+## Local Archives with CreateBlob
+
+When you need local archive files without pushing to a registry, use `CreateBlob` from the core package:
 
 ```go
-ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
-defer cancel()
+import blobcore "github.com/meigma/blob/core"
 
-err := blob.Create(ctx, srcDir, indexW, dataW,
-	blob.CreateWithCompression(blob.CompressionZstd),
+blobFile, err := blobcore.CreateBlob(ctx, srcDir, destDir,
+	blobcore.CreateBlobWithCompression(blobcore.CompressionZstd),
 )
-if errors.Is(err, context.DeadlineExceeded) {
-	// Archive creation timed out
+if err != nil {
+	return err
 }
+defer blobFile.Close()
+
+// Use the archive immediately
+content, _ := blobFile.ReadFile("config.json")
 ```
 
-## Complete Examples
+This creates `index.blob` and `data.blob` in `destDir` and returns an open archive.
 
-### Using CreateBlob
+### Custom Filenames
 
-A production archive creation function with `CreateBlob`:
+Override the default filenames:
 
 ```go
-func createProductionArchive(srcDir, destDir string) (*blob.BlobFile, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
-	defer cancel()
-
-	return blob.CreateBlob(ctx, srcDir, destDir,
-		blob.CreateBlobWithCompression(blob.CompressionZstd),
-		blob.CreateBlobWithSkipCompression(blob.DefaultSkipCompression(1024)),
-		blob.CreateBlobWithChangeDetection(blob.ChangeDetectionStrict),
-		blob.CreateBlobWithMaxFiles(100000),
-	)
-}
+blobFile, err := blobcore.CreateBlob(ctx, srcDir, destDir,
+	blobcore.CreateBlobWithIndexName("my-archive.idx"),
+	blobcore.CreateBlobWithDataName("my-archive.dat"),
+)
 ```
 
-### Using Create
+### Pushing a Pre-created Archive
 
-A production archive creation function with the lower-level `Create` API:
-
-```go
-func createProductionArchive(srcDir, indexPath, dataPath string) error {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
-	defer cancel()
-
-	indexFile, err := os.Create(indexPath)
-	if err != nil {
-		return fmt.Errorf("create index file: %w", err)
-	}
-	defer indexFile.Close()
-
-	dataFile, err := os.Create(dataPath)
-	if err != nil {
-		return fmt.Errorf("create data file: %w", err)
-	}
-	defer dataFile.Close()
-
-	err = blob.Create(ctx, srcDir, indexFile, dataFile,
-		blob.CreateWithCompression(blob.CompressionZstd),
-		blob.CreateWithSkipCompression(blob.DefaultSkipCompression(1024)),
-		blob.CreateWithChangeDetection(blob.ChangeDetectionStrict),
-		blob.CreateWithMaxFiles(100000),
-	)
-	if err != nil {
-		return fmt.Errorf("create archive: %w", err)
-	}
-
-	return nil
-}
-```
-
-## Pushing to OCI Registry
-
-After creating an archive, push it to an OCI registry for remote access:
+If you have a local archive you want to push later:
 
 ```go
 import (
-	"context"
-
 	"github.com/meigma/blob"
-	"github.com/meigma/blob/client"
+	blobcore "github.com/meigma/blob/core"
 )
 
-func createAndPush(srcDir, destDir, ref string) error {
-	ctx := context.Background()
+// Create local archive
+blobFile, _ := blobcore.CreateBlob(ctx, srcDir, destDir,
+	blobcore.CreateBlobWithCompression(blobcore.CompressionZstd),
+)
+defer blobFile.Close()
 
-	// Create the archive
-	blobFile, err := blob.CreateBlob(ctx, srcDir, destDir,
-		blob.CreateBlobWithCompression(blob.CompressionZstd),
-		blob.CreateBlobWithChangeDetection(blob.ChangeDetectionStrict),
+// Push to registry
+c, _ := blob.NewClient(blob.WithDockerConfig())
+c.PushArchive(ctx, ref, blobFile.Blob,
+	blob.PushWithTags("latest"),
+)
+```
+
+### Saving a Remote Archive Locally
+
+To save an in-memory or remote Blob to local files:
+
+```go
+// archive is a *blobcore.Blob from any source (e.g., pulled from registry)
+err := archive.Save("/path/to/index.blob", "/path/to/data.blob")
+```
+
+---
+
+## Complete Example
+
+A production archive creation and push:
+
+```go
+package main
+
+import (
+	"context"
+	"log"
+	"time"
+
+	"github.com/meigma/blob"
+)
+
+func main() {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
+	defer cancel()
+
+	c, err := blob.NewClient(
+		blob.WithDockerConfig(),
+		blob.WithCacheDir("/tmp/blob-cache"),
 	)
 	if err != nil {
-		return err
+		log.Fatal(err)
 	}
-	defer blobFile.Close()
 
-	// Push to registry
-	c := client.New(client.WithDockerConfig())
-	return c.Push(ctx, ref, blobFile.Blob,
-		client.WithTags("latest"),
+	err = c.Push(ctx, "ghcr.io/myorg/myarchive:v1.0.0", "./dist",
+		blob.PushWithCompression(blob.CompressionZstd),
+		blob.PushWithSkipCompression(blob.DefaultSkipCompression(1024)),
+		blob.PushWithChangeDetection(blob.ChangeDetectionStrict),
+		blob.PushWithMaxFiles(100000),
+		blob.PushWithTags("latest"),
+		blob.PushWithAnnotations(map[string]string{
+			"org.opencontainers.image.version":  "1.0.0",
+			"org.opencontainers.image.revision": "abc123",
+		}),
 	)
+	if err != nil {
+		log.Fatal(err)
+	}
 }
 ```
 
-See [OCI Client](oci-client) for more push options and authentication methods.
-
 ## See Also
 
-- [OCI Client](oci-client) - Push archives to OCI registries
+- [OCI Client](oci-client) - Client configuration and authentication
+- [Advanced Usage](advanced) - Lower-level Create API for custom I/O pipelines
 - [Architecture](../explanation/architecture) - How the archive format works
-- [Integrity](../explanation/integrity) - How content verification works

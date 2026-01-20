@@ -15,10 +15,9 @@ This tutorial walks through the complete workflow of creating a blob archive, pu
 ## What We Will Build
 
 We will create a simple program that:
-1. Creates an archive from a source directory
-2. Pushes the archive to an OCI registry
-3. Pulls the archive and reads files lazily
-4. Adds client caching for improved performance
+1. Creates and pushes an archive in a single call
+2. Pulls the archive and reads files lazily
+3. Adds caching for improved performance
 
 ## Step 1: Create a Project
 
@@ -43,7 +42,6 @@ import (
 	"path/filepath"
 
 	"github.com/meigma/blob"
-	"github.com/meigma/blob/client"
 )
 
 func main() {
@@ -92,42 +90,25 @@ for path, content := range files {
 fmt.Printf("Created %d test files in %s\n", len(files), srcDir)
 ```
 
-## Step 3: Create the Archive
+## Step 3: Push to OCI Registry
 
-Create an archive from the source directory using `CreateBlob`:
-
-```go
-// Create a temporary directory for the archive
-archiveDir, err := os.MkdirTemp("", "blob-archive-*")
-if err != nil {
-	return err
-}
-defer os.RemoveAll(archiveDir)
-
-// Create the archive with zstd compression
-blobFile, err := blob.CreateBlob(context.Background(), srcDir, archiveDir,
-	blob.CreateBlobWithCompression(blob.CompressionZstd),
-)
-if err != nil {
-	return fmt.Errorf("create archive: %w", err)
-}
-defer blobFile.Close()
-
-fmt.Printf("Archive created: %d files\n", blobFile.Len())
-```
-
-## Step 4: Push to OCI Registry
-
-Push the archive to a registry. Replace the reference with your own registry:
+Create a client and push the archive. The `Push` method creates the archive and pushes it in a single call:
 
 ```go
+ctx := context.Background()
+
 // Create the OCI client
-c := client.New(client.WithDockerConfig())
+c, err := blob.NewClient(blob.WithDockerConfig())
+if err != nil {
+	return fmt.Errorf("create client: %w", err)
+}
 
-// Push to registry
+// Push to registry - creates archive from srcDir and pushes in one call
 // Replace with your registry: docker.io/username/demo:v1, ghcr.io/org/demo:v1, etc.
 ref := "localhost:5000/blob-demo:v1"  // Use a local registry for testing
-if err := c.Push(context.Background(), ref, blobFile.Blob); err != nil {
+if err := c.Push(ctx, ref, srcDir,
+	blob.PushWithCompression(blob.CompressionZstd),
+); err != nil {
 	return fmt.Errorf("push archive: %w", err)
 }
 
@@ -146,19 +127,19 @@ docker run -d -p 5000:5000 --name registry registry:2
 And configure the client to use plain HTTP:
 
 ```go
-c := client.New(
-	client.WithDockerConfig(),
-	client.WithPlainHTTP(true),  // For local registries without TLS
+c, err := blob.NewClient(
+	blob.WithDockerConfig(),
+	blob.WithPlainHTTP(true),  // For local registries without TLS
 )
 ```
 
-## Step 5: Pull and Read Files Lazily
+## Step 4: Pull and Read Files Lazily
 
 Pull the archive and read files. Data is fetched on demand via HTTP range requests:
 
 ```go
 // Pull the archive (downloads only the small index blob)
-archive, err := c.Pull(context.Background(), ref)
+archive, err := c.Pull(ctx, ref)
 if err != nil {
 	return fmt.Errorf("pull archive: %w", err)
 }
@@ -190,84 +171,42 @@ for _, entry := range entries {
 }
 ```
 
-## Step 6: Add Client Caching
+## Step 5: Add Caching
 
-Add OCI client caches to avoid redundant registry requests:
+Add caching with a single option. `WithCacheDir` enables all cache layers:
 
 ```go
-import "github.com/meigma/blob/client/cache/disk"
-
-// Create caches
-refCache, err := disk.NewRefCache("/tmp/blob-cache/refs")
-if err != nil {
-	return err
-}
-
-manifestCache, err := disk.NewManifestCache("/tmp/blob-cache/manifests")
-if err != nil {
-	return err
-}
-
-indexCache, err := disk.NewIndexCache("/tmp/blob-cache/indexes")
-if err != nil {
-	return err
-}
-
-// Create client with caching
-c := client.New(
-	client.WithDockerConfig(),
-	client.WithPlainHTTP(true),
-	client.WithRefCache(refCache),
-	client.WithManifestCache(manifestCache),
-	client.WithIndexCache(indexCache),
+// Create client with all caches enabled in one line
+c, err := blob.NewClient(
+	blob.WithDockerConfig(),
+	blob.WithPlainHTTP(true),
+	blob.WithCacheDir("/tmp/blob-cache"),
 )
+if err != nil {
+	return err
+}
 
-// Second pull will use cached data
-archive, err := c.Pull(context.Background(), ref)
+// Second pull will use cached data - no network requests needed
+archive, err := c.Pull(ctx, ref)
 if err != nil {
 	return err
 }
 fmt.Printf("Pulled (cached): %d files\n", archive.Len())
-```
 
-## Step 7: Add Content Caching (Optional)
-
-For repeated file access, add content-level caching. Pass the cache when pulling the archive:
-
-```go
-import (
-	"github.com/meigma/blob"
-	"github.com/meigma/blob/cache/disk"
-)
-
-// Create content cache
-contentCache, err := disk.New("/tmp/blob-cache/content")
-if err != nil {
-	return err
-}
-
-// Pull with content caching enabled
-archive, err := c.Pull(context.Background(), ref,
-	client.WithBlobOptions(blob.WithCache(contentCache)),
-)
-if err != nil {
-	return err
-}
-
-// First read: fetches via network, caches result
+// Cached file reads are instant
 content, err := archive.ReadFile("src/main.go")
 if err != nil {
 	return err
 }
-fmt.Printf("First read: %s\n", content)
-
-// Second read: returns from cache, no network request
-content, err = archive.ReadFile("src/main.go")
-if err != nil {
-	return err
-}
-fmt.Printf("Second read (cached): %s\n", content)
+fmt.Printf("src/main.go: %s\n", content)
 ```
+
+The cache directory structure is:
+- `content/` - file content cache (deduplication across archives)
+- `blocks/` - HTTP range block cache
+- `refs/` - tag→digest mappings
+- `manifests/` - parsed manifests
+- `indexes/` - index blobs
 
 ## Complete Example
 
@@ -284,9 +223,6 @@ import (
 	"path/filepath"
 
 	"github.com/meigma/blob"
-	contentdisk "github.com/meigma/blob/cache/disk"
-	"github.com/meigma/blob/client"
-	"github.com/meigma/blob/client/cache/disk"
 )
 
 func main() {
@@ -324,53 +260,32 @@ func run() error {
 	}
 	fmt.Printf("Created %d test files\n", len(files))
 
-	// Step 2: Create the archive
-	archiveDir, err := os.MkdirTemp("", "blob-archive-*")
+	// Step 2: Create cached client
+	c, err := blob.NewClient(
+		blob.WithDockerConfig(),
+		blob.WithPlainHTTP(true), // For local registry
+		blob.WithCacheDir("/tmp/blob-cache"),
+	)
 	if err != nil {
 		return err
 	}
-	defer os.RemoveAll(archiveDir)
 
-	blobFile, err := blob.CreateBlob(ctx, srcDir, archiveDir,
-		blob.CreateBlobWithCompression(blob.CompressionZstd),
-	)
-	if err != nil {
-		return fmt.Errorf("create archive: %w", err)
-	}
-	defer blobFile.Close()
-	fmt.Printf("Archive created: %d files\n", blobFile.Len())
-
-	// Step 3: Create cached client with content caching
-	refCache, _ := disk.NewRefCache("/tmp/blob-cache/refs")
-	manifestCache, _ := disk.NewManifestCache("/tmp/blob-cache/manifests")
-	indexCache, _ := disk.NewIndexCache("/tmp/blob-cache/indexes")
-	contentCache, _ := contentdisk.New("/tmp/blob-cache/content")
-
-	c := client.New(
-		client.WithDockerConfig(),
-		client.WithPlainHTTP(true), // For local registry
-		client.WithRefCache(refCache),
-		client.WithManifestCache(manifestCache),
-		client.WithIndexCache(indexCache),
-	)
-
-	// Step 4: Push to registry
+	// Step 3: Push to registry (creates archive and pushes in one call)
 	ref := "localhost:5000/blob-demo:v1"
-	if err := c.Push(ctx, ref, blobFile.Blob); err != nil {
+	if err := c.Push(ctx, ref, srcDir,
+		blob.PushWithCompression(blob.CompressionZstd),
+	); err != nil {
 		return fmt.Errorf("push: %w", err)
 	}
 	fmt.Printf("Pushed to %s\n", ref)
 
-	// Step 5: Pull with content caching enabled
-	archive, err := c.Pull(ctx, ref,
-		client.WithBlobOptions(blob.WithCache(contentCache)),
-	)
+	// Step 4: Pull and read files
+	archive, err := c.Pull(ctx, ref)
 	if err != nil {
 		return fmt.Errorf("pull: %w", err)
 	}
 	fmt.Printf("Pulled: %d files\n", archive.Len())
 
-	// Step 6: Read files (uses content cache automatically)
 	content, _ := archive.ReadFile("readme.txt")
 	fmt.Printf("\nreadme.txt: %s\n", content)
 
@@ -398,7 +313,6 @@ Expected output:
 
 ```
 Created 5 test files
-Archive created: 5 files
 Pushed to localhost:5000/blob-demo:v1
 Pulled: 5 files
 
@@ -413,10 +327,9 @@ config/ directory:
 
 Now that you have the basics, explore these guides:
 
-- [OCI Client](guides/oci-client) - Authentication options and advanced client usage
-- [OCI Client Caching](guides/oci-client-caching) - Configure client cache tiers
+- [OCI Client](guides/oci-client) - Authentication options and client configuration
 - [Creating Archives](guides/creating-archives) - Compression, change detection, and file limits
-- [Caching](guides/caching) - Content caching for file deduplication
+- [Caching](guides/caching) - Cache configuration and sizing
 - [Extracting Files](guides/extraction) - Advanced extraction options
 - [Performance Tuning](guides/performance-tuning) - Optimize for your workload
 
@@ -426,7 +339,7 @@ For production deployments, add supply chain security to verify archive provenan
 
 ```go
 import (
-    "github.com/meigma/blob/client"
+    "github.com/meigma/blob"
     "github.com/meigma/blob/policy/sigstore"
     "github.com/meigma/blob/policy/opa"
 )
@@ -445,10 +358,10 @@ opaPolicy, _ := opa.NewPolicy(
 )
 
 // Create client with both policies
-c := client.New(
-    client.WithDockerConfig(),
-    client.WithPolicy(sigPolicy),
-    client.WithPolicy(opaPolicy),
+c, _ := blob.NewClient(
+    blob.WithDockerConfig(),
+    blob.WithPolicy(sigPolicy),
+    blob.WithPolicy(opaPolicy),
 )
 
 // Pull rejects archives that fail verification
@@ -458,87 +371,3 @@ archive, err := c.Pull(ctx, ref)
 This ensures archives are signed by trusted identities and built through authorized CI/CD pipelines.
 
 See the [Provenance & Signing](guides/provenance) guide for complete implementation details, including OPA policy examples and CI/CD integration.
-
----
-
-## Lower-Level API
-
-For more control over archive creation and data sources, use the lower-level APIs:
-
-### Create API
-
-Write index and data to separate writers:
-
-```go
-import (
-	"bytes"
-	"context"
-
-	"github.com/meigma/blob"
-)
-
-var indexBuf, dataBuf bytes.Buffer
-
-err := blob.Create(context.Background(), srcDir, &indexBuf, &dataBuf,
-	blob.CreateWithCompression(blob.CompressionZstd),
-)
-if err != nil {
-	return err
-}
-
-fmt.Printf("Index: %d bytes, Data: %d bytes\n", indexBuf.Len(), dataBuf.Len())
-```
-
-### New API
-
-Create a Blob from index data and a ByteSource:
-
-```go
-import (
-	"io"
-
-	"github.com/meigma/blob"
-)
-
-// memSource wraps a byte slice with random access
-type memSource struct {
-	data []byte
-}
-
-func (m *memSource) ReadAt(p []byte, off int64) (int, error) {
-	if off >= int64(len(m.data)) {
-		return 0, io.EOF
-	}
-	n := copy(p, m.data[off:])
-	return n, nil
-}
-
-func (m *memSource) Size() int64 {
-	return int64(len(m.data))
-}
-
-func (m *memSource) SourceID() string {
-	return "memory"
-}
-
-// Create blob from index and data
-source := &memSource{data: dataBuf.Bytes()}
-archive, err := blob.New(indexBuf.Bytes(), source)
-if err != nil {
-	return err
-}
-```
-
-### OpenFile API
-
-Open local archive files directly:
-
-```go
-blobFile, err := blob.OpenFile("./archive/index.blob", "./archive/data.blob")
-if err != nil {
-	return err
-}
-defer blobFile.Close()
-
-content, _ := blobFile.ReadFile("config.json")
-```

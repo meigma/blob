@@ -1,7 +1,7 @@
 // Package sigstore provides a client.Policy implementation for verifying
 // blob archives using Sigstore signatures.
 //
-// This package implements [github.com/meigma/blob/client.Policy] using the
+// This package implements [github.com/meigma/blob/registry.Policy] using the
 // sigstore-go library for cryptographic verification of OCI artifact signatures.
 //
 // # Separate Module

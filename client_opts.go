@@ -1,0 +1,295 @@
+package blob
+
+import (
+	"os"
+	"path/filepath"
+	"time"
+
+	corecache "github.com/meigma/blob/core/cache"
+	coredisk "github.com/meigma/blob/core/cache/disk"
+	registrycache "github.com/meigma/blob/registry/cache"
+	registrydisk "github.com/meigma/blob/registry/cache/disk"
+	"github.com/meigma/blob/registry/oras"
+)
+
+// Option configures a Client.
+type Option func(*Client) error
+
+// Default cache size limits for WithCacheDir.
+const (
+	DefaultContentCacheSize  int64 = 100 << 20 // 100 MB
+	DefaultBlockCacheSize    int64 = 50 << 20  // 50 MB
+	DefaultIndexCacheSize    int64 = 50 << 20  // 50 MB
+	DefaultManifestCacheSize int64 = 10 << 20  // 10 MB
+	DefaultRefCacheSize      int64 = 5 << 20   // 5 MB
+	DefaultRefCacheTTL             = 5 * time.Minute
+)
+
+// --- Authentication Options ---
+
+// WithDockerConfig enables reading credentials from ~/.docker/config.json.
+// This is the recommended way to authenticate with registries.
+func WithDockerConfig() Option {
+	return func(c *Client) error {
+		c.orasOpts = append(c.orasOpts, oras.WithDockerConfig())
+		return nil
+	}
+}
+
+// WithStaticCredentials sets static username/password credentials for a registry.
+// The registry parameter should be the registry host (e.g., "ghcr.io").
+func WithStaticCredentials(registry, username, password string) Option {
+	return func(c *Client) error {
+		c.orasOpts = append(c.orasOpts, oras.WithStaticCredentials(registry, username, password))
+		return nil
+	}
+}
+
+// WithStaticToken sets a static bearer token for a registry.
+// The registry parameter should be the registry host (e.g., "ghcr.io").
+func WithStaticToken(registry, token string) Option {
+	return func(c *Client) error {
+		c.orasOpts = append(c.orasOpts, oras.WithStaticToken(registry, token))
+		return nil
+	}
+}
+
+// WithAnonymous forces anonymous access, ignoring any configured credentials.
+func WithAnonymous() Option {
+	return func(c *Client) error {
+		c.orasOpts = append(c.orasOpts, oras.WithAnonymous())
+		return nil
+	}
+}
+
+// --- Transport Options ---
+
+// WithPlainHTTP enables plain HTTP (no TLS) for registries.
+// This is useful for local development registries.
+func WithPlainHTTP(enabled bool) Option {
+	return func(c *Client) error {
+		c.orasOpts = append(c.orasOpts, oras.WithPlainHTTP(enabled))
+		return nil
+	}
+}
+
+// WithUserAgent sets the User-Agent header for registry requests.
+func WithUserAgent(ua string) Option {
+	return func(c *Client) error {
+		c.orasOpts = append(c.orasOpts, oras.WithUserAgent(ua))
+		return nil
+	}
+}
+
+// --- Caching Options (Simple) ---
+
+// WithCacheDir enables all caches with default sizes in subdirectories of dir.
+//
+// This creates:
+//   - dir/content/ - file content cache (100 MB)
+//   - dir/blocks/  - HTTP range block cache (50 MB)
+//   - dir/refs/    - tag→digest cache (5 MB)
+//   - dir/manifests/ - manifest cache (10 MB)
+//   - dir/indexes/ - index blob cache (50 MB)
+//
+// For custom sizes or selective caching, use individual cache options.
+func WithCacheDir(dir string) Option {
+	return func(c *Client) error {
+		if err := os.MkdirAll(dir, 0o750); err != nil {
+			return err
+		}
+
+		// Content cache
+		contentCache, err := coredisk.New(
+			filepath.Join(dir, "content"),
+			coredisk.WithMaxBytes(DefaultContentCacheSize),
+		)
+		if err != nil {
+			return err
+		}
+		c.contentCache = contentCache
+
+		// Block cache
+		blockCache, err := coredisk.NewBlockCache(
+			filepath.Join(dir, "blocks"),
+			coredisk.WithBlockMaxBytes(DefaultBlockCacheSize),
+		)
+		if err != nil {
+			return err
+		}
+		c.blockCache = blockCache
+
+		// Ref cache
+		refCache, err := registrydisk.NewRefCache(
+			filepath.Join(dir, "refs"),
+			registrydisk.WithMaxBytes(DefaultRefCacheSize),
+		)
+		if err != nil {
+			return err
+		}
+		c.refCache = refCache
+
+		// Manifest cache
+		manifestCache, err := registrydisk.NewManifestCache(
+			filepath.Join(dir, "manifests"),
+			registrydisk.WithMaxBytes(DefaultManifestCacheSize),
+		)
+		if err != nil {
+			return err
+		}
+		c.manifestCache = manifestCache
+
+		// Index cache
+		indexCache, err := registrydisk.NewIndexCache(
+			filepath.Join(dir, "indexes"),
+			registrydisk.WithMaxBytes(DefaultIndexCacheSize),
+		)
+		if err != nil {
+			return err
+		}
+		c.indexCache = indexCache
+
+		return nil
+	}
+}
+
+// WithContentCacheDir enables content caching with default size.
+func WithContentCacheDir(dir string) Option {
+	return func(c *Client) error {
+		cache, err := coredisk.New(dir, coredisk.WithMaxBytes(DefaultContentCacheSize))
+		if err != nil {
+			return err
+		}
+		c.contentCache = cache
+		return nil
+	}
+}
+
+// WithBlockCacheDir enables block caching with default size.
+func WithBlockCacheDir(dir string) Option {
+	return func(c *Client) error {
+		cache, err := coredisk.NewBlockCache(dir, coredisk.WithBlockMaxBytes(DefaultBlockCacheSize))
+		if err != nil {
+			return err
+		}
+		c.blockCache = cache
+		return nil
+	}
+}
+
+// WithRefCacheDir enables reference caching with default size.
+func WithRefCacheDir(dir string) Option {
+	return func(c *Client) error {
+		cache, err := registrydisk.NewRefCache(dir, registrydisk.WithMaxBytes(DefaultRefCacheSize))
+		if err != nil {
+			return err
+		}
+		c.refCache = cache
+		return nil
+	}
+}
+
+// WithManifestCacheDir enables manifest caching with default size.
+func WithManifestCacheDir(dir string) Option {
+	return func(c *Client) error {
+		cache, err := registrydisk.NewManifestCache(dir, registrydisk.WithMaxBytes(DefaultManifestCacheSize))
+		if err != nil {
+			return err
+		}
+		c.manifestCache = cache
+		return nil
+	}
+}
+
+// WithIndexCacheDir enables index caching with default size.
+func WithIndexCacheDir(dir string) Option {
+	return func(c *Client) error {
+		cache, err := registrydisk.NewIndexCache(dir, registrydisk.WithMaxBytes(DefaultIndexCacheSize))
+		if err != nil {
+			return err
+		}
+		c.indexCache = cache
+		return nil
+	}
+}
+
+// WithRefCacheTTL sets the TTL for reference cache entries.
+// This determines how long tag→digest mappings are considered fresh.
+func WithRefCacheTTL(ttl time.Duration) Option {
+	return func(c *Client) error {
+		c.refCacheTTL = ttl
+		return nil
+	}
+}
+
+// --- Caching Options (Advanced) ---
+
+// WithContentCache sets a custom content cache implementation.
+// Import github.com/meigma/blob/core/cache/disk for the disk implementation.
+func WithContentCache(cache corecache.Cache) Option {
+	return func(c *Client) error {
+		c.contentCache = cache
+		return nil
+	}
+}
+
+// WithBlockCache sets a custom block cache implementation.
+// Import github.com/meigma/blob/core/cache/disk for the disk implementation.
+func WithBlockCache(cache corecache.BlockCache) Option {
+	return func(c *Client) error {
+		c.blockCache = cache
+		return nil
+	}
+}
+
+// WithRefCache sets a custom reference cache implementation.
+// Import github.com/meigma/blob/registry/cache/disk for the disk implementation.
+func WithRefCache(cache registrycache.RefCache) Option {
+	return func(c *Client) error {
+		c.refCache = cache
+		return nil
+	}
+}
+
+// WithManifestCache sets a custom manifest cache implementation.
+// Import github.com/meigma/blob/registry/cache/disk for the disk implementation.
+func WithManifestCache(cache registrycache.ManifestCache) Option {
+	return func(c *Client) error {
+		c.manifestCache = cache
+		return nil
+	}
+}
+
+// WithIndexCache sets a custom index cache implementation.
+// Import github.com/meigma/blob/registry/cache/disk for the disk implementation.
+func WithIndexCache(cache registrycache.IndexCache) Option {
+	return func(c *Client) error {
+		c.indexCache = cache
+		return nil
+	}
+}
+
+// --- Policy Options ---
+
+// WithPolicy adds a policy that must pass for Fetch and Pull operations.
+// Policies are evaluated in order; the first failure stops evaluation.
+func WithPolicy(policy Policy) Option {
+	return func(c *Client) error {
+		if policy != nil {
+			c.policies = append(c.policies, policy)
+		}
+		return nil
+	}
+}
+
+// WithPolicies adds multiple policies that must pass for Fetch and Pull operations.
+func WithPolicies(policies ...Policy) Option {
+	return func(c *Client) error {
+		for _, p := range policies {
+			if p != nil {
+				c.policies = append(c.policies, p)
+			}
+		}
+		return nil
+	}
+}

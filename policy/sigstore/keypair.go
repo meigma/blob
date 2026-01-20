@@ -210,7 +210,7 @@ func (s *StaticKeypair) GetPublicKeyPem() (string, error) {
 // SignData returns the signature and the data that was signed.
 // For RSA and ECDSA, data is hashed before signing.
 // For Ed25519, the raw data is passed to the signer.
-func (s *StaticKeypair) SignData(_ context.Context, data []byte) ([]byte, []byte, error) {
+func (s *StaticKeypair) SignData(_ context.Context, data []byte) (sig, signedData []byte, err error) {
 	hf := s.algDetails.GetHashType()
 	dataToSign := data
 
@@ -221,7 +221,7 @@ func (s *StaticKeypair) SignData(_ context.Context, data []byte) ([]byte, []byte
 		dataToSign = hasher.Sum(nil)
 	}
 
-	sig, err := s.privKey.Sign(rand.Reader, dataToSign, hf)
+	sig, err = s.privKey.Sign(rand.Reader, dataToSign, hf)
 	if err != nil {
 		return nil, nil, err
 	}

@@ -3,7 +3,7 @@ module github.com/meigma/blob/policy/sigstore
 go 1.25.4
 
 require (
-	github.com/meigma/blob/client v0.0.0
+	github.com/meigma/blob v0.0.0
 	github.com/opencontainers/go-digest v1.0.0
 	github.com/opencontainers/image-spec v1.1.1
 	github.com/sigstore/protobuf-specs v0.5.0
@@ -98,7 +98,4 @@ require (
 	oras.land/oras-go/v2 v2.6.0 // indirect
 )
 
-replace (
-	github.com/meigma/blob => ../..
-	github.com/meigma/blob/client => ../../client
-)
+replace github.com/meigma/blob => ../..

@@ -8,8 +8,8 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/meigma/blob"
-	"github.com/meigma/blob/client"
+	blob "github.com/meigma/blob/core"
+	"github.com/meigma/blob/registry"
 )
 
 type pushConfig struct {
@@ -73,12 +73,12 @@ func push(cfg pushConfig) error {
 	}
 
 	// Create client with appropriate options
-	var opts []client.Option
-	opts = append(opts, client.WithDockerConfig())
+	var opts []registry.Option
+	opts = append(opts, registry.WithDockerConfig())
 	if cfg.plainHTTP {
-		opts = append(opts, client.WithPlainHTTP(true))
+		opts = append(opts, registry.WithPlainHTTP(true))
 	}
-	c := client.New(opts...)
+	c := registry.New(opts...)
 
 	fmt.Printf("Pushing to %s...\n", cfg.ref)
 

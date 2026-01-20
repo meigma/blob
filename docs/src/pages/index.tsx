@@ -487,13 +487,15 @@ function CodeExample() {
                         </div>
                         <div className="code-frame">
                             <CodeBlock language="go">
-                                {`// Push with signing
-client.Push(ctx, "ghcr.io/org/configs:v1", archive)
+                                {`// Push a directory to registry
+c, _ := blob.NewClient(blob.WithDockerConfig())
+c.Push(ctx, "ghcr.io/org/configs:v1", "./src")
 
-// Pull with verification
-c := client.New(
-    client.WithPolicy(sigstore.NewPolicy(...)),
-    client.WithPolicy(opa.NewPolicy(...)),
+// Pull with verification policies
+c, _ := blob.NewClient(
+    blob.WithDockerConfig(),
+    blob.WithPolicy(sigstore.NewPolicy(...)),
+    blob.WithPolicy(opa.NewPolicy(...)),
 )
 
 // Lazy load - only downloads what you read

@@ -3,7 +3,7 @@ module github.com/meigma/blob/policy/opa
 go 1.25.4
 
 require (
-	github.com/meigma/blob/client v0.0.0
+	github.com/meigma/blob v0.0.0
 	github.com/open-policy-agent/opa v1.4.2
 	github.com/opencontainers/go-digest v1.0.0
 	github.com/opencontainers/image-spec v1.1.1
@@ -51,7 +51,4 @@ require (
 	sigs.k8s.io/yaml v1.4.0 // indirect
 )
 
-replace (
-	github.com/meigma/blob => ../..
-	github.com/meigma/blob/client => ../../client
-)
+replace github.com/meigma/blob => ../..

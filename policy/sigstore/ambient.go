@@ -35,7 +35,7 @@ func getGitHubActionsToken(ctx context.Context) (string, error) {
 	// Add audience parameter for Sigstore
 	url := requestURL + "&audience=sigstore"
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, http.NoBody)
 	if err != nil {
 		return "", fmt.Errorf("create request: %w", err)
 	}
@@ -50,7 +50,10 @@ func getGitHubActionsToken(ctx context.Context) (string, error) {
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
+		body, err := io.ReadAll(resp.Body)
+		if err != nil {
+			return "", fmt.Errorf("GitHub Actions OIDC request failed with status %d", resp.StatusCode)
+		}
 		return "", fmt.Errorf("GitHub Actions OIDC request failed with status %d: %s", resp.StatusCode, string(body))
 	}
 

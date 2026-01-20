@@ -8,10 +8,10 @@ import (
 	"io"
 	"os"
 
-	"github.com/meigma/blob"
-	"github.com/meigma/blob/client"
+	blob "github.com/meigma/blob/core"
 	"github.com/meigma/blob/policy/opa"
 	"github.com/meigma/blob/policy/sigstore"
+	"github.com/meigma/blob/registry"
 )
 
 // Default GitHub Actions OIDC issuer.
@@ -63,7 +63,7 @@ func pull(cfg *pullConfig) error {
 	if err != nil {
 		return err
 	}
-	c := client.New(opts...)
+	c := registry.New(opts...)
 
 	fmt.Printf("Pulling %s...\n", cfg.ref)
 
@@ -83,10 +83,10 @@ func pull(cfg *pullConfig) error {
 }
 
 // buildClientOptions configures client policies based on pullConfig.
-func buildClientOptions(cfg *pullConfig) ([]client.Option, error) {
-	opts := []client.Option{client.WithDockerConfig()}
+func buildClientOptions(cfg *pullConfig) ([]registry.Option, error) {
+	opts := []registry.Option{registry.WithDockerConfig()}
 	if cfg.plainHTTP {
-		opts = append(opts, client.WithPlainHTTP(true))
+		opts = append(opts, registry.WithPlainHTTP(true))
 	}
 
 	// Add sigstore policy if not skipped
@@ -95,7 +95,7 @@ func buildClientOptions(cfg *pullConfig) ([]client.Option, error) {
 		if err != nil {
 			return nil, err
 		}
-		opts = append(opts, client.WithPolicy(sigPolicy))
+		opts = append(opts, registry.WithPolicy(sigPolicy))
 	} else {
 		fmt.Println("Skipping signature verification")
 	}
@@ -106,7 +106,7 @@ func buildClientOptions(cfg *pullConfig) ([]client.Option, error) {
 		if err != nil {
 			return nil, err
 		}
-		opts = append(opts, client.WithPolicy(opaPolicy))
+		opts = append(opts, registry.WithPolicy(opaPolicy))
 	} else {
 		fmt.Println("Skipping attestation policy")
 	}
