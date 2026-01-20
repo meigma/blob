@@ -63,11 +63,12 @@ jobs:
         run: |
           REF="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}"
 
-          # Push and sign with sigstore (keyless)
-          ./provenance push --ref "$REF" --sign
+          # Push and sign with sigstore (keyless), capture output
+          OUTPUT=$(./provenance push --ref "$REF" --sign 2>&1)
+          echo "$OUTPUT"
 
-          # Get the digest from the manifest
-          DIGEST=$(./provenance push --ref "$REF" 2>&1 | grep "Digest:" | awk '{print $2}')
+          # Extract digest from the push output
+          DIGEST=$(echo "$OUTPUT" | grep "Digest:" | awk '{print $2}')
           echo "digest=$DIGEST" >> "$GITHUB_OUTPUT"
           echo "ref=$REF" >> "$GITHUB_OUTPUT"
 
