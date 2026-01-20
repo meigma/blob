@@ -8,7 +8,7 @@
 
 This proposal explores integrating [gittuf](https://gittuf.dev/) with Blob to provide **source provenance** verification. While Blob currently offers robust build provenance through SLSA attestations (proving *how* an archive was built), it lacks verification of *what* authorized the source code changes. Gittuf fills this gap by providing cryptographic proof that Git repository changes followed security policies.
 
-**Recommendation:** Integration is **feasible and valuable**. Gittuf's Go implementation, TUF-based trust model, and well-defined verification semantics align well with Blob's existing policy framework.
+**Recommendation:** Integration is **feasible and straightforward**. Gittuf's `experimental/gittuf` package provides a complete public Go API (`Clone()`, `VerifyRef()`, `LoadPublicKey()`) that can be directly imported - no CLI wrapping or upstream negotiation required.
 
 ## Background
 
@@ -194,33 +194,107 @@ Options for accessing gittuf metadata:
 
 ### Dependencies
 
-The gittuf project is written in Go with well-structured internal packages:
+The gittuf project provides a **public Go API** in the `experimental/gittuf` package:
 
 ```
 github.com/gittuf/gittuf/
-├── internal/
-│   ├── policy/      # Policy definitions and enforcement
-│   ├── rsl/         # Reference State Log implementation
-│   ├── tuf/         # TUF metadata handling
-│   ├── signerverifier/  # Cryptographic operations
-│   └── gitinterface/    # Git operations
+├── experimental/
+│   └── gittuf/           # Public API (importable!)
+│       ├── repository.go # Repository type and methods
+│       ├── verify.go     # VerifyRef, VerifyRefFromEntry
+│       ├── keys.go       # LoadPublicKey, LoadSigner
+│       ├── policy.go     # Policy management
+│       ├── rsl.go        # RSL operations
+│       └── options/      # Verification options
+└── internal/             # Internal implementation details
 ```
 
-**Challenge:** Gittuf's packages are in `internal/`, not exported for external use.
+**Key finding:** The `experimental/gittuf` package exports all the types and functions needed for integration. No upstream negotiation, CLI wrapping, or vendoring required.
 
-**Solutions:**
+### Available gittuf API
 
-1. **Upstream contribution**: Work with gittuf maintainers to export a verification API
-2. **Fork/vendor**: Include necessary code (Apache-2.0 licensed)
-3. **CLI wrapper**: Shell out to `gittuf verify-ref` command
-4. **Collaborate on SDK**: Partner to create `github.com/gittuf/gittuf-go` library
-
-**Recommendation:** Approach gittuf maintainers about exporting a verification SDK. This benefits both projects and the broader supply chain security ecosystem.
-
-### Proposed API
+The following functions are directly importable from `github.com/gittuf/gittuf/experimental/gittuf`:
 
 ```go
+// Repository loading
+func LoadRepository(repositoryPath string) (*Repository, error)
+func Clone(ctx context.Context, remoteURL, dir, initialBranch string,
+    expectedRootKeys []tuf.Principal, bare bool) (*Repository, error)
+
+// Key management
+func LoadPublicKey(keyRef string) (tuf.Principal, error)
+
+// Core verification (what we need!)
+func (r *Repository) VerifyRef(ctx context.Context, refName string,
+    opts ...verifyopts.Option) error
+func (r *Repository) VerifyRefFromEntry(ctx context.Context, refName, entryID string,
+    opts ...verifyopts.Option) error
+func (r *Repository) VerifyMergeable(ctx context.Context, targetRef, featureRef string,
+    opts ...verifymergeableopts.Option) (bool, error)
+
+// Policy inspection
+func (r *Repository) HasPolicy() (bool, error)
+func (r *Repository) ListRules(ctx context.Context, targetRef string) ([]*DelegationWithDepth, error)
+```
+
+This makes integration **significantly more straightforward** than initially assessed.
+
+### Proposed Blob Policy Implementation
+
+Using the gittuf API directly, the implementation becomes straightforward:
+
+```go
+// policy/gittuf/policy.go
 package gittuf
+
+import (
+    "context"
+    "fmt"
+    "os"
+    "path/filepath"
+
+    gittuflib "github.com/gittuf/gittuf/experimental/gittuf"
+    "github.com/gittuf/gittuf/internal/tuf"
+    "github.com/meigma/blob/registry"
+)
+
+// Policy implements registry.Policy for gittuf verification.
+type Policy struct {
+    repoURL      string
+    rootKeys     []tuf.Principal
+    refName      string           // e.g., "refs/heads/main"
+    cloneDir     string           // temp directory for clone
+    verifyOpts   []verifyopts.Option
+}
+
+// Evaluate implements registry.Policy.
+func (p *Policy) Evaluate(ctx context.Context, req registry.PolicyRequest) error {
+    // 1. Extract source commit from SLSA provenance
+    commit, refName, err := p.extractSourceInfo(ctx, req)
+    if err != nil {
+        return fmt.Errorf("gittuf: %w", err)
+    }
+
+    // 2. Clone repository with gittuf verification
+    //    Clone() validates root keys automatically
+    tmpDir, err := os.MkdirTemp("", "gittuf-verify-*")
+    if err != nil {
+        return fmt.Errorf("gittuf: failed to create temp dir: %w", err)
+    }
+    defer os.RemoveAll(tmpDir)
+
+    repo, err := gittuflib.Clone(ctx, p.repoURL, tmpDir, "", p.rootKeys, true)
+    if err != nil {
+        return fmt.Errorf("gittuf: clone failed: %w", err)
+    }
+
+    // 3. Verify the reference using gittuf's native verification
+    if err := repo.VerifyRef(ctx, refName, p.verifyOpts...); err != nil {
+        return fmt.Errorf("gittuf: verification failed for %s: %w", refName, err)
+    }
+
+    return nil
+}
 
 // NewPolicy creates a gittuf source provenance policy.
 func NewPolicy(opts ...PolicyOption) (*Policy, error)
@@ -228,39 +302,26 @@ func NewPolicy(opts ...PolicyOption) (*Policy, error)
 // PolicyOption configures the policy.
 type PolicyOption func(*Policy) error
 
-// WithRepository sets the source repository to verify against.
+// WithRepository sets the source repository URL.
 func WithRepository(url string) PolicyOption
 
 // WithRootKeys sets the trusted root key fingerprints.
-// At least one root key must be provided.
-func WithRootKeys(fingerprints ...string) PolicyOption
+// Keys are loaded using gittuf's LoadPublicKey() which supports:
+// - SSH keys: "ssh:SHA256:..." or path to .pub file
+// - GPG keys: "gpg:FINGERPRINT"
+// - Sigstore/Fulcio: "fulcio:email@example.com"
+func WithRootKeys(keyRefs ...string) PolicyOption
 
-// ProtectBranch requires verification for changes to specific branches.
-func ProtectBranch(patterns ...string) PolicyOption
-
-// ProtectPath requires verification for changes to specific paths.
-func ProtectPath(patterns ...string) PolicyOption
-
-// WithGitFetcher sets a custom Git metadata fetcher.
-func WithGitFetcher(fetcher GitFetcher) PolicyOption
-
-// RequireThreshold requires N-of-M signatures for changes.
-func RequireThreshold(n int) PolicyOption
-
-// GitFetcher abstracts gittuf metadata retrieval.
-type GitFetcher interface {
-    // FetchRefs fetches gittuf refs from a repository.
-    FetchRefs(ctx context.Context, repoURL string) (*GittufMetadata, error)
-}
+// WithRefName specifies the Git ref to verify (default: from SLSA provenance).
+func WithRefName(ref string) PolicyOption
 
 // --- Convenience constructors ---
 
 // GitHubRepository creates a policy for a GitHub-hosted repository.
-func GitHubRepository(owner, repo string, opts ...PolicyOption) (*Policy, error)
-
-// WithTrustOnFirstUse enables TOFU for root key discovery.
-// WARNING: Only use for development/testing.
-func WithTrustOnFirstUse() PolicyOption
+func GitHubRepository(owner, repo string, opts ...PolicyOption) (*Policy, error) {
+    url := fmt.Sprintf("https://github.com/%s/%s", owner, repo)
+    return NewPolicy(append([]PolicyOption{WithRepository(url)}, opts...)...)
+}
 ```
 
 ### Error Types
@@ -329,33 +390,33 @@ Blob Consumer
 
 ### Phase 1: Core Integration (MVP)
 
-- [ ] Create `policy/gittuf` package structure
-- [ ] Implement basic verification against local gittuf metadata
-- [ ] Add Git protocol fetcher for `refs/gittuf/*`
-- [ ] Support extraction of source commit from SLSA provenance
-- [ ] Add comprehensive tests with gittuf test repositories
+- [ ] Create `policy/gittuf` Go module with dependency on `github.com/gittuf/gittuf`
+- [ ] Implement `registry.Policy` using `gittuf.Clone()` + `repo.VerifyRef()`
+- [ ] Add source commit/ref extraction from SLSA provenance attestations
+- [ ] Support `WithRootKeys()` using `gittuf.LoadPublicKey()` (SSH, GPG, Fulcio)
+- [ ] Add comprehensive tests with gittuf-enabled test repositories
 
 ### Phase 2: Production Hardening
 
-- [ ] Add caching for gittuf metadata (with TTL)
-- [ ] Implement GitHub API fallback fetcher
-- [ ] Add metrics and observability hooks
-- [ ] Create troubleshooting guide and error messages
-- [ ] Performance optimization (parallel fetching)
+- [ ] Add caching for cloned repositories (with TTL-based invalidation)
+- [ ] Implement shallow/sparse clone for faster verification
+- [ ] Add structured logging and error messages
+- [ ] Performance benchmarks and optimization
+- [ ] Handle network failures with retry logic
 
 ### Phase 3: Advanced Features
 
-- [ ] Support for bundled gittuf attestations (self-contained verification)
-- [ ] Threshold signature requirements in policy
-- [ ] Path-specific policies (e.g., stricter rules for `/security/*`)
-- [ ] Integration with gittuf attestations for code review verification
+- [ ] Support `repo.VerifyRefFromEntry()` for pinning to specific RSL entry
+- [ ] `repo.VerifyMergeable()` for PR-style workflows
+- [ ] Path-specific policies using gittuf's delegation rules
+- [ ] Integration with gittuf GitHub App attestations
 
 ### Phase 4: Ecosystem
 
-- [ ] GitHub Action for creating gittuf-aware archives
+- [ ] GitHub Action for creating gittuf-aware Blob archives
 - [ ] Documentation and tutorials
 - [ ] Example workflows for common scenarios
-- [ ] Upstream collaboration on gittuf Go SDK
+- [ ] Explore bundled gittuf metadata for air-gapped verification
 
 ## Alternatives Considered
 
@@ -397,15 +458,19 @@ Blob Consumer
 
 ## Open Questions
 
-1. **SDK availability**: Will gittuf export a verification SDK, or should we vendor/wrap?
+1. **~~SDK availability~~**: ✅ Resolved - `experimental/gittuf` package provides full public API
 2. **Attestation bundling**: Should gittuf metadata be bundled with archives for air-gapped verification?
 3. **Incremental adoption**: How to handle repos transitioning to gittuf (partial coverage)?
 4. **Key distribution**: Best practices for distributing/rotating root keys to consumers?
+5. **Experimental stability**: The package is in `experimental/` - what's the stability guarantee?
+6. **Performance**: Clone-based verification may be slow; explore shallow/sparse clone options
 
 ## References
 
 - [gittuf website](https://gittuf.dev/)
 - [gittuf GitHub repository](https://github.com/gittuf/gittuf)
+- [gittuf experimental/gittuf package](https://github.com/gittuf/gittuf/tree/main/experimental/gittuf)
+- [gittuf Go documentation](https://pkg.go.dev/github.com/gittuf/gittuf/experimental/gittuf)
 - [gittuf design document](https://github.com/gittuf/gittuf/blob/main/docs/design-document.md)
 - [LWN: Securing Git repositories with gittuf](https://lwn.net/Articles/972467/)
 - [TUF specification](https://theupdateframework.io/)
@@ -413,10 +478,17 @@ Blob Consumer
 
 ## Conclusion
 
-Integrating gittuf with Blob is **feasible and strategically valuable**. It would complete Blob's provenance story by adding source authorization verification alongside existing build provenance. The main technical challenge is gittuf's internal-only Go packages, which should be addressed through upstream collaboration.
+Integrating gittuf with Blob is **feasible and straightforward**. The `experimental/gittuf` package provides a complete public Go API including `Clone()`, `LoadRepository()`, `VerifyRef()`, and key management functions - everything needed for integration without upstream negotiation or CLI wrapping.
+
+This would complete Blob's provenance story:
+- **Sigstore**: WHO signed the archive
+- **SLSA**: HOW the archive was built
+- **Gittuf**: WHETHER source changes were authorized
 
 Recommended next steps:
-1. Open discussion with gittuf maintainers about SDK export
-2. Prototype basic integration using CLI wrapper
-3. Develop comprehensive test suite with gittuf-enabled repositories
-4. Iterate toward production-quality implementation
+1. Create `policy/gittuf` Go module with gittuf dependency
+2. Implement `registry.Policy` using `gittuf.Clone()` and `repo.VerifyRef()`
+3. Add source commit extraction from SLSA provenance
+4. Develop test suite with gittuf-enabled test repositories
+5. Optimize for performance (caching, shallow clones)
+6. Document root key distribution best practices
