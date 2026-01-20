@@ -208,6 +208,82 @@ manifest, err := c.Fetch(ctx, ref,
 )
 ```
 
+## Inspect Operations (Metadata + File Index)
+
+Use `Inspect` to retrieve both manifest metadata and the file index without downloading the data blob. This is more comprehensive than `Fetch` and lets you examine archive contents:
+
+```go
+result, err := c.Inspect(ctx, "ghcr.io/myorg/myarchive:v1.0.0")
+if err != nil {
+	return err
+}
+
+// Access manifest metadata
+fmt.Printf("Digest: %s\n", result.Digest())
+fmt.Printf("Created: %s\n", result.Created())
+
+// Access archive statistics
+fmt.Printf("Files: %d\n", result.FileCount())
+fmt.Printf("Data blob size: %d bytes\n", result.DataBlobSize())
+fmt.Printf("Uncompressed size: %d bytes\n", result.TotalUncompressedSize())
+fmt.Printf("Compression ratio: %.2f\n", result.CompressionRatio())
+
+// List all files without downloading any data
+for entry := range result.Index().Entries() {
+	fmt.Printf("  %s (%d bytes)\n", entry.Path(), entry.OriginalSize())
+}
+```
+
+### Fetch vs Inspect vs Pull
+
+| Operation | Downloads | Use Case |
+|-----------|-----------|----------|
+| `Fetch` | Manifest only | Check if archive exists, get digest |
+| `Inspect` | Manifest + file index | Browse files, check sizes, pre-flight validation |
+| `Pull` | Manifest + index (+ data on demand) | Read file contents |
+
+### Fetching Referrers (Signatures, Attestations)
+
+`Inspect` provides lazy access to referrer artifacts like Sigstore signatures and SLSA attestations:
+
+```go
+result, err := c.Inspect(ctx, ref)
+if err != nil {
+	return err
+}
+
+// Fetch all referrers
+referrers, err := result.Referrers(ctx, "")
+if err != nil {
+	if errors.Is(err, blob.ErrReferrersUnsupported) {
+		fmt.Println("Registry does not support referrers API")
+	}
+	return err
+}
+
+for _, ref := range referrers {
+	fmt.Printf("Referrer: %s (type: %s)\n", ref.Digest, ref.ArtifactType)
+}
+
+// Filter by artifact type
+signatures, _ := result.Referrers(ctx, "application/vnd.dev.sigstore.bundle.v0.3+json")
+fmt.Printf("Found %d signatures\n", len(signatures))
+```
+
+### Inspect Options
+
+```go
+// Skip all caches for fresh data
+result, err := c.Inspect(ctx, ref,
+	blob.InspectWithSkipCache(),
+)
+
+// Limit index size (for untrusted registries)
+result, err := c.Inspect(ctx, ref,
+	blob.InspectWithMaxIndexSize(4 << 20), // 4 MB limit
+)
+```
+
 ## Tag Operations
 
 Create or update a tag pointing to an existing manifest:

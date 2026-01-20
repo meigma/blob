@@ -115,3 +115,46 @@ func BuildTestIndexWithMetadata(tb testing.TB, entries []TestEntry, meta *IndexM
 	builder.Finish(indexOffset)
 	return builder.FinishedBytes()
 }
+
+// MakeMinimalIndex creates a minimal valid index with one empty entry.
+// Useful for tests that just need a parseable index.
+func MakeMinimalIndex() []byte {
+	builder := flatbuffers.NewBuilder(256)
+
+	// Create a minimal entry
+	pathOffset := builder.CreateString("test.txt")
+
+	fb.EntryStartHashVector(builder, 32)
+	for range 32 {
+		builder.PrependByte(0)
+	}
+	hashOffset := builder.EndVector(32)
+
+	fb.EntryStart(builder)
+	fb.EntryAddPath(builder, pathOffset)
+	fb.EntryAddDataOffset(builder, 0)
+	fb.EntryAddDataSize(builder, 0)
+	fb.EntryAddOriginalSize(builder, 0)
+	fb.EntryAddHash(builder, hashOffset)
+	fb.EntryAddMode(builder, 0o644)
+	fb.EntryAddUid(builder, 0)
+	fb.EntryAddGid(builder, 0)
+	fb.EntryAddMtimeNs(builder, 0)
+	fb.EntryAddCompression(builder, fb.CompressionNone)
+	entryOffset := fb.EntryEnd(builder)
+
+	// Create entries vector
+	fb.IndexStartEntriesVector(builder, 1)
+	builder.PrependUOffsetT(entryOffset)
+	entriesOffset := builder.EndVector(1)
+
+	// Build index
+	fb.IndexStart(builder)
+	fb.IndexAddVersion(builder, 1)
+	fb.IndexAddHashAlgorithm(builder, fb.HashAlgorithmSHA256)
+	fb.IndexAddEntries(builder, entriesOffset)
+	indexOffset := fb.IndexEnd(builder)
+
+	builder.Finish(indexOffset)
+	return builder.FinishedBytes()
+}
