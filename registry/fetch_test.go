@@ -17,7 +17,9 @@ import (
 	"github.com/meigma/blob/registry/cache"
 )
 
-// mockOCIClient is a test mock for OCIClient.
+// mockOCIClient is a minimal test mock for OCIClient that implements only
+// the methods needed for Fetch tests. Methods can be configured via function
+// fields or will return errNotImplemented by default.
 type mockOCIClient struct {
 	ResolveFunc       func(ctx context.Context, repoRef, ref string) (ocispec.Descriptor, error)
 	FetchManifestFunc func(ctx context.Context, repoRef string, expected *ocispec.Descriptor) (ocispec.Manifest, []byte, error)
@@ -81,7 +83,8 @@ func (m *mockOCIClient) InvalidateAuthHeaders(string) error {
 	return errNotImplemented
 }
 
-// testManifest creates a valid blob archive manifest for testing.
+// testManifest creates a valid blob archive manifest for testing with
+// standard index and data layers, config, and created annotation.
 func testManifest() ocispec.Manifest {
 	return ocispec.Manifest{
 		MediaType:    ocispec.MediaTypeImageManifest,
@@ -118,7 +121,8 @@ func mustMarshalManifest(t *testing.T, manifest ocispec.Manifest) []byte {
 	return raw
 }
 
-// memRefCache is a simple in-memory RefCache for testing.
+// memRefCache is a simple in-memory RefCache for testing that stores
+// reference-to-digest mappings in a map without any eviction policy.
 type memRefCache struct {
 	data map[string]string
 }
@@ -146,7 +150,8 @@ func (c *memRefCache) MaxBytes() int64            { return 0 }
 func (c *memRefCache) SizeBytes() int64           { return 0 }
 func (c *memRefCache) Prune(int64) (int64, error) { return 0, nil }
 
-// memManifestCache is a simple in-memory ManifestCache for testing.
+// memManifestCache is a simple in-memory ManifestCache for testing that
+// stores raw manifest bytes keyed by digest without any eviction policy.
 type memManifestCache struct {
 	data map[string][]byte
 }
@@ -181,7 +186,8 @@ func (c *memManifestCache) MaxBytes() int64            { return 0 }
 func (c *memManifestCache) SizeBytes() int64           { return 0 }
 func (c *memManifestCache) Prune(int64) (int64, error) { return 0, nil }
 
-// memIndexCache is a simple in-memory IndexCache for testing.
+// memIndexCache is a simple in-memory IndexCache for testing that
+// stores index bytes keyed by digest without any eviction policy.
 type memIndexCache struct {
 	data map[string][]byte
 }

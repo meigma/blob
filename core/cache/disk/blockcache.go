@@ -20,14 +20,16 @@ import (
 )
 
 // BlockCache provides a disk-backed block cache for ByteSources.
+// Blocks are stored as individual files in a directory hierarchy with optional
+// sharding by key prefix. The cache is safe for concurrent use.
 type BlockCache struct {
-	dir            string
-	shardPrefixLen int
-	dirPerm        os.FileMode
-	maxBytes       int64
-	bytes          atomic.Int64
-	fetchGroup     singleflight.Group
-	pruneMu        sync.Mutex
+	dir            string             // root directory for cached blocks
+	shardPrefixLen int                // number of hex chars for subdirectory sharding
+	dirPerm        os.FileMode        // permissions for created directories
+	maxBytes       int64              // maximum cache size (0 = unlimited)
+	bytes          atomic.Int64       // current total size of cached blocks
+	fetchGroup     singleflight.Group // deduplicates concurrent fetches for same block
+	pruneMu        sync.Mutex         // serializes prune operations
 }
 
 // BlockCacheOption configures a disk-backed block cache.
@@ -196,8 +198,8 @@ func (s *cachedSource) ReadAt(p []byte, off int64) (int, error) {
 			return int(n), io.ErrUnexpectedEOF
 		}
 
-		copyStart := maxInt64(off, blockStart)
-		copyEnd := minInt64(off+expected, blockEnd)
+		copyStart := max(off, blockStart)
+		copyEnd := min(off+expected, blockEnd)
 		srcOffset := copyStart - blockStart
 		dstOffset := copyStart - off
 		length := copyEnd - copyStart
@@ -396,18 +398,4 @@ func (c *BlockCache) ensureCapacity(need int64) (bool, error) {
 		return false, err
 	}
 	return c.SizeBytes()+need <= c.maxBytes, nil
-}
-
-func minInt64(a, b int64) int64 {
-	if a < b {
-		return a
-	}
-	return b
-}
-
-func maxInt64(a, b int64) int64 {
-	if a > b {
-		return a
-	}
-	return b
 }

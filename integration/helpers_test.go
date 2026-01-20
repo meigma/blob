@@ -23,7 +23,7 @@ import (
 var (
 	registryOnce sync.Once
 	registryAddr string
-	registryErr  error
+	errRegistry  error
 )
 
 // getRegistry returns the shared registry address, starting the container if needed.
@@ -37,11 +37,11 @@ func getRegistry(tb testing.TB) string {
 
 	registryOnce.Do(func() {
 		ctx := context.Background()
-		registryAddr, registryErr = startRegistryContainer(ctx)
+		registryAddr, errRegistry = startRegistryContainer(ctx)
 	})
 
-	if registryErr != nil {
-		tb.Fatalf("start registry container: %v", registryErr)
+	if errRegistry != nil {
+		tb.Fatalf("start registry container: %v", errRegistry)
 	}
 
 	return registryAddr
@@ -79,6 +79,7 @@ func startRegistryContainer(ctx context.Context) (string, error) {
 	return fmt.Sprintf("%s:%s", host, port.Port()), nil
 }
 
+// isOKStatus returns true if the HTTP status code indicates success (2xx range).
 func isOKStatus(status int) bool {
 	return status >= 200 && status < 300
 }
@@ -86,7 +87,9 @@ func isOKStatus(status int) bool {
 // --- Test Client Factory ---
 
 // newTestClient creates a client configured for the local test registry.
-func newTestClient(tb testing.TB, registryAddr string, opts ...blob.Option) *blob.Client {
+// The registryAddr parameter is accepted for API consistency but not used directly
+// since the client discovers the registry from the reference URL.
+func newTestClient(tb testing.TB, _ string, opts ...blob.Option) *blob.Client {
 	tb.Helper()
 
 	// Always use plain HTTP for local registry
@@ -105,7 +108,7 @@ func testRef(registryAddr, testName string) string {
 	return fmt.Sprintf("%s/test/%s:latest", registryAddr, testName)
 }
 
-// testRefWithTag generates a reference with a specific tag.
+// testRefWithTag generates a unique reference with a specific tag for a test.
 func testRefWithTag(registryAddr, testName, tag string) string {
 	return fmt.Sprintf("%s/test/%s:%s", registryAddr, testName, tag)
 }

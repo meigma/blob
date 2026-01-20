@@ -1,4 +1,3 @@
-// Package file provides internal file reading operations for the blob package.
 package file
 
 import "github.com/meigma/blob/core/internal/blobtype"

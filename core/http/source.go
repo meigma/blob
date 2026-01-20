@@ -1,4 +1,3 @@
-// Package http provides a ByteSource backed by HTTP range requests.
 package http //nolint:revive // intentional naming for domain clarity
 
 import (
@@ -107,7 +106,10 @@ func (s *Source) SourceID() string {
 	return s.sourceID
 }
 
-// ReadRange returns a reader for the specified byte range.
+// ReadRange returns a reader for the specified byte range [off, off+length).
+// It returns an error if offset or length is negative. If the offset is at or
+// beyond the content size, it returns io.EOF. The returned reader must be closed
+// by the caller to release the underlying HTTP connection.
 func (s *Source) ReadRange(off, length int64) (io.ReadCloser, error) {
 	if length < 0 {
 		return nil, fmt.Errorf("read range length %d: negative length", length)
@@ -158,7 +160,9 @@ func (s *Source) ReadRange(off, length int64) (io.ReadCloser, error) {
 	}, nil
 }
 
-// ReadAt reads data from the remote at the given offset using HTTP range requests.
+// ReadAt reads len(p) bytes from the remote at the given offset using HTTP range requests.
+// It implements [io.ReaderAt]. If fewer bytes are available than requested, it returns
+// the number of bytes read along with io.EOF.
 func (s *Source) ReadAt(p []byte, off int64) (int, error) {
 	if len(p) == 0 {
 		return 0, nil
@@ -214,6 +218,7 @@ func (s *Source) ReadAt(p []byte, off int64) (int, error) {
 	return n, nil
 }
 
+// defaultSourceID builds a source identifier from the URL and available metadata.
 func (s *Source) defaultSourceID() string {
 	if s.etag != "" {
 		return fmt.Sprintf("url:%s|etag:%s", s.url, s.etag)
@@ -224,6 +229,8 @@ func (s *Source) defaultSourceID() string {
 	return fmt.Sprintf("url:%s|size:%d", s.url, s.size)
 }
 
+// fetchMetadata retrieves content size and cache validators from the remote server.
+// It first attempts a HEAD request, then verifies with a range probe.
 func (s *Source) fetchMetadata() (size int64, etag, lastModified string, err error) {
 	size = -1
 
@@ -250,6 +257,7 @@ func (s *Source) fetchMetadata() (size int64, etag, lastModified string, err err
 	return rangeSize, etag, lastModified, nil
 }
 
+// rangeProbe verifies range request support and extracts content size from Content-Range.
 func (s *Source) rangeProbe() (size int64, etag, lastModified string, err error) {
 	req, err := s.newRequest(nethttp.MethodGet, false)
 	if err != nil {
@@ -285,6 +293,7 @@ func (s *Source) rangeProbe() (size int64, etag, lastModified string, err error)
 	return size, resp.Header.Get("ETag"), resp.Header.Get("Last-Modified"), nil
 }
 
+// doHead performs a HEAD request to retrieve metadata without body content.
 func (s *Source) doHead() (*nethttp.Response, error) {
 	req, err := s.newRequest(nethttp.MethodHead, false)
 	if err != nil {
@@ -293,6 +302,7 @@ func (s *Source) doHead() (*nethttp.Response, error) {
 	return s.client.Do(req)
 }
 
+// newRequest creates an HTTP request with configured headers and optional conditional headers.
 func (s *Source) newRequest(method string, withConditions bool) (*nethttp.Request, error) {
 	req, err := nethttp.NewRequestWithContext(context.Background(), method, s.url, nethttp.NoBody)
 	if err != nil {
@@ -317,6 +327,7 @@ func (s *Source) newRequest(method string, withConditions bool) (*nethttp.Reques
 	return req, nil
 }
 
+// rangeRequest performs a GET request for the specified byte range.
 func (s *Source) rangeRequest(off, end int64, withConditions bool) (*nethttp.Response, error) {
 	req, err := s.newRequest(nethttp.MethodGet, withConditions)
 	if err != nil {
@@ -326,6 +337,7 @@ func (s *Source) rangeRequest(off, end int64, withConditions bool) (*nethttp.Res
 	return s.client.Do(req)
 }
 
+// hasConditionalHeaders reports whether conditional headers are enabled and available.
 func (s *Source) hasConditionalHeaders() bool {
 	if !s.useConditionalHeaders {
 		return false
@@ -333,20 +345,26 @@ func (s *Source) hasConditionalHeaders() bool {
 	return s.etag != "" || s.lastModified != ""
 }
 
+// rangeReadCloser wraps an HTTP response body with a limit reader.
+// It drains the body on close to enable connection reuse.
 type rangeReadCloser struct {
 	body   io.ReadCloser
 	reader io.Reader
 }
 
+// Read reads from the underlying limit reader.
 func (r *rangeReadCloser) Read(p []byte) (int, error) {
 	return r.reader.Read(p)
 }
 
+// Close drains and closes the underlying response body.
 func (r *rangeReadCloser) Close() error {
 	_, _ = io.Copy(io.Discard, r.body) //nolint:errcheck // best-effort drain for connection reuse
 	return r.body.Close()
 }
 
+// parseContentRange extracts the total size from a Content-Range header value.
+// It expects the format "bytes start-end/size" and returns the size portion.
 func parseContentRange(value string) (int64, error) {
 	value = strings.TrimSpace(value)
 	if !strings.HasPrefix(value, "bytes ") {

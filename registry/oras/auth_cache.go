@@ -12,6 +12,8 @@ const (
 )
 
 // authHeaderCache is an LRU cache for auth headers with TTL expiration.
+// It provides thread-safe access to cached authorization headers, evicting
+// entries based on both time-to-live and least-recently-used policies.
 type authHeaderCache struct {
 	mu      sync.Mutex
 	ttl     time.Duration
@@ -20,16 +22,22 @@ type authHeaderCache struct {
 	order   *list.List // front = most recently used
 }
 
+// cachedAuthHeader represents a single cached authorization header entry.
 type cachedAuthHeader struct {
 	host    string
 	value   string
 	expires time.Time
 }
 
+// newAuthHeaderCache creates a new auth header cache with the specified TTL
+// and the default maximum size. Returns nil if ttl is zero or negative.
 func newAuthHeaderCache(ttl time.Duration) *authHeaderCache {
 	return newAuthHeaderCacheWithSize(ttl, defaultAuthHeaderCacheMaxSize)
 }
 
+// newAuthHeaderCacheWithSize creates a new auth header cache with the specified
+// TTL and maximum size. Returns nil if ttl is zero or negative. If maxSize is
+// zero or negative, the default maximum size is used.
 func newAuthHeaderCacheWithSize(ttl time.Duration, maxSize int) *authHeaderCache {
 	if ttl <= 0 {
 		return nil
@@ -45,6 +53,10 @@ func newAuthHeaderCacheWithSize(ttl time.Duration, maxSize int) *authHeaderCache
 	}
 }
 
+// get retrieves the cached authorization header for the given host.
+// Returns the header value and true if found and not expired, or an empty
+// string and false otherwise. Accessing an entry promotes it to the front
+// of the LRU list.
 func (c *authHeaderCache) get(host string) (string, bool) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -65,6 +77,9 @@ func (c *authHeaderCache) get(host string) (string, bool) {
 	return entry.value, true
 }
 
+// set stores an authorization header for the given host. If an entry already
+// exists, it is updated and promoted to the front. If the cache is at capacity,
+// the least recently used entry is evicted before adding the new one.
 func (c *authHeaderCache) set(host, value string) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -98,6 +113,8 @@ func (c *authHeaderCache) set(host, value string) {
 	c.entries[host] = elem
 }
 
+// invalidate removes the cached authorization header for the given host.
+// It is safe to call this method even if the host is not in the cache.
 func (c *authHeaderCache) invalidate(host string) {
 	c.mu.Lock()
 	defer c.mu.Unlock()

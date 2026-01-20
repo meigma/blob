@@ -1,7 +1,3 @@
-// Package oci provides a generic OCI client layer wrapping ORAS.
-//
-// Client provides blob-agnostic operations for interacting with OCI registries,
-// handling authentication and OCI 1.0/1.1 compatibility transparently.
 package oras
 
 import (
@@ -66,8 +62,8 @@ func New(opts ...Option) *Client {
 	return c
 }
 
-// repository creates a Repository for the given reference.
-// Uses the shared auth client to reuse tokens across requests.
+// repository creates a remote.Repository for the given reference string.
+// It uses the shared auth client to reuse tokens across requests.
 func (c *Client) repository(ref string) (*remote.Repository, error) {
 	repo, err := remote.NewRepository(ref)
 	if err != nil {
@@ -80,7 +76,8 @@ func (c *Client) repository(ref string) (*remote.Repository, error) {
 	return repo, nil
 }
 
-// parseRef parses a full reference into registry, repository, and tag/digest.
+// parseRef parses a full OCI reference string into a registry.Reference
+// containing the registry host, repository path, and tag or digest.
 func parseRef(ref string) (registry.Reference, error) {
 	r, err := registry.ParseReference(ref)
 	if err != nil {
@@ -380,13 +377,16 @@ func (c *Client) InvalidateAuthHeaders(repoRef string) error {
 	return nil
 }
 
-// basicAuth returns the basic auth header value.
+// basicAuth returns a Basic authentication header value for the given
+// username and password in the format "Basic <base64-encoded credentials>".
 func basicAuth(username, password string) string {
 	creds := username + ":" + password
 	return "Basic " + base64.StdEncoding.EncodeToString([]byte(creds))
 }
 
-// validateDescriptor checks that a descriptor is valid for use.
+// validateDescriptor checks that the given descriptor is valid for use in
+// OCI operations. It returns an error if the descriptor is nil, has a negative
+// size, or has an empty or malformed digest.
 func validateDescriptor(desc *ocispec.Descriptor) error {
 	if desc == nil {
 		return fmt.Errorf("%w: descriptor is nil", ErrInvalidDescriptor)
@@ -403,7 +403,9 @@ func validateDescriptor(desc *ocispec.Descriptor) error {
 	return nil
 }
 
-// mapError maps ORAS errors to our sentinel errors.
+// mapError maps ORAS library errors to the package's sentinel errors.
+// It translates errdef.ErrNotFound and HTTP status codes (401, 403, 404)
+// to the corresponding ErrNotFound, ErrUnauthorized, and ErrForbidden errors.
 func mapError(err error) error {
 	if err == nil {
 		return nil
