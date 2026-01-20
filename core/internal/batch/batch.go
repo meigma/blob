@@ -150,12 +150,14 @@ func (p *Processor) Process(entries []*Entry, sink Sink) error {
 	return p.processGroupsSequential(groups, sink)
 }
 
+// groupTask represents a pending group read operation for the pipeline.
 type groupTask struct {
 	index int
 	group rangeGroup
 	size  int64
 }
 
+// groupResult holds the completed read data for a group.
 type groupResult struct {
 	index int
 	group rangeGroup
@@ -163,6 +165,7 @@ type groupResult struct {
 	size  int64
 }
 
+// processGroupsSequential processes groups one at a time without pipelining.
 func (p *Processor) processGroupsSequential(groups []rangeGroup, sink Sink) error {
 	for _, group := range groups {
 		if err := p.processGroup(group, sink); err != nil {
@@ -308,6 +311,7 @@ func (p *Processor) processGroup(group rangeGroup, sink Sink) error {
 	return p.processGroupWithData(group, data, sink)
 }
 
+// processGroupWithData processes all entries in a group using pre-fetched data.
 func (p *Processor) processGroupWithData(group rangeGroup, data []byte, sink Sink) error {
 	if len(group.entries) == 0 {
 		return nil
@@ -337,6 +341,7 @@ func (p *Processor) readGroupData(group rangeGroup) ([]byte, error) {
 	return data, nil
 }
 
+// groupSize returns the total byte size of a group as int64.
 func groupSize(group rangeGroup) (int64, error) {
 	size := group.end - group.start
 	return sizing.ToInt64(size, blobtype.ErrSizeOverflow)
@@ -441,6 +446,7 @@ func (p *Processor) processEntry(entry *Entry, groupData []byte, groupStart uint
 	return nil
 }
 
+// writeVerifyUncompressed verifies uncompressed data and writes it to w.
 func (p *Processor) writeVerifyUncompressed(entry *Entry, data []byte, w io.Writer) error {
 	if err := p.verifyUncompressed(entry, data); err != nil {
 		return err
@@ -448,6 +454,7 @@ func (p *Processor) writeVerifyUncompressed(entry *Entry, data []byte, w io.Writ
 	return writeAll(w, data)
 }
 
+// verifyUncompressed checks size and hash for uncompressed data.
 func (p *Processor) verifyUncompressed(entry *Entry, data []byte) error {
 	if uint64(len(data)) != entry.OriginalSize {
 		return fmt.Errorf("%w: size mismatch", blobtype.ErrDecompression)
@@ -461,6 +468,7 @@ func (p *Processor) verifyUncompressed(entry *Entry, data []byte) error {
 	return nil
 }
 
+// decompress decompresses entry data based on its compression type.
 func (p *Processor) decompress(entry *Entry, data []byte) ([]byte, error) {
 	switch entry.Compression {
 	case blobtype.CompressionNone:
@@ -587,6 +595,7 @@ func (p *Processor) workerCount(entries []*Entry) int {
 	return workers
 }
 
+// writeAll writes all data to w, handling partial writes.
 func writeAll(w io.Writer, data []byte) error {
 	for len(data) > 0 {
 		n, err := w.Write(data)

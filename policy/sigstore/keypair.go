@@ -61,7 +61,8 @@ func NewStaticKeypair(key crypto.Signer) (*StaticKeypair, error) {
 	}, nil
 }
 
-// detectAlgorithm determines the PublicKeyDetails from a crypto.Signer.
+// detectAlgorithm determines the PublicKeyDetails from a crypto.Signer
+// by inspecting the underlying key type.
 func detectAlgorithm(key crypto.Signer) (protocommon.PublicKeyDetails, error) {
 	switch k := key.(type) {
 	case *ecdsa.PrivateKey:
@@ -76,6 +77,8 @@ func detectAlgorithm(key crypto.Signer) (protocommon.PublicKeyDetails, error) {
 	}
 }
 
+// detectECDSAAlgorithm returns the appropriate PublicKeyDetails for an ECDSA
+// key based on its curve.
 func detectECDSAAlgorithm(key *ecdsa.PrivateKey) (protocommon.PublicKeyDetails, error) {
 	switch key.Curve {
 	case elliptic.P256():
@@ -90,6 +93,8 @@ func detectECDSAAlgorithm(key *ecdsa.PrivateKey) (protocommon.PublicKeyDetails, 
 	}
 }
 
+// detectRSAAlgorithm returns the appropriate PublicKeyDetails for an RSA key
+// based on its bit size.
 func detectRSAAlgorithm(key *rsa.PrivateKey) (protocommon.PublicKeyDetails, error) {
 	bits := key.N.BitLen()
 	switch {

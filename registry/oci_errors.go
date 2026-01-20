@@ -7,6 +7,7 @@ import (
 	"github.com/meigma/blob/registry/oras"
 )
 
+// mapOCIError translates low-level ORAS errors to client-level sentinel errors.
 func mapOCIError(err error) error {
 	if err == nil {
 		return nil

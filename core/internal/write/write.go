@@ -52,6 +52,7 @@ func File(ctx context.Context, f *os.File, w io.Writer, enc *zstd.Encoder, buf [
 	return cw.N, cr.N, hasher.Sum(nil), nil
 }
 
+// wrapOverflowErr converts internal overflow errors to the public sentinel.
 func wrapOverflowErr(err error) error {
 	if errors.Is(err, file.ErrOverflow) {
 		return blobtype.ErrSizeOverflow

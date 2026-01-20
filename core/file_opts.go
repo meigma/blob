@@ -7,6 +7,7 @@ type createBlobConfig struct {
 	createOpts []CreateOption
 }
 
+// getIndexName returns the configured index file name or the default.
 func (c *createBlobConfig) getIndexName() string {
 	if c.indexName == "" {
 		return DefaultIndexName
@@ -14,6 +15,7 @@ func (c *createBlobConfig) getIndexName() string {
 	return c.indexName
 }
 
+// getDataName returns the configured data file name or the default.
 func (c *createBlobConfig) getDataName() string {
 	if c.dataName == "" {
 		return DefaultDataName

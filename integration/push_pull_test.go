@@ -151,7 +151,7 @@ func TestPush_WithMaxFiles(t *testing.T) {
 
 	// Create more files than the limit
 	manyFiles := make(map[string][]byte)
-	for i := 0; i < 10; i++ {
+	for i := range 10 {
 		manyFiles[filepath.Join("dir", strings.Repeat("x", i+1)+".txt")] = []byte("content")
 	}
 
@@ -578,7 +578,7 @@ func TestPushArchive_PreCreated(t *testing.T) {
 // makeManySmallFiles creates a map of n small files.
 func makeManySmallFiles(n int) map[string][]byte {
 	files := make(map[string][]byte, n)
-	for i := 0; i < n; i++ {
+	for i := range n {
 		dir := filepath.Join("dir"+string(rune('a'+i%26)), "subdir")
 		name := filepath.Join(dir, fmt.Sprintf("file%d.txt", i))
 		files[name] = []byte(fmt.Sprintf("content %d", i))
@@ -591,6 +591,7 @@ type memSource struct {
 	data []byte
 }
 
+// ReadAt reads len(p) bytes into p starting at offset off in the underlying data.
 func (m *memSource) ReadAt(p []byte, off int64) (int, error) {
 	if off >= int64(len(m.data)) {
 		return 0, io.EOF
@@ -602,10 +603,12 @@ func (m *memSource) ReadAt(p []byte, off int64) (int, error) {
 	return n, nil
 }
 
+// Size returns the total size of the in-memory data.
 func (m *memSource) Size() int64 {
 	return int64(len(m.data))
 }
 
+// SourceID returns a fixed identifier for the memory source.
 func (m *memSource) SourceID() string {
 	return "memory"
 }

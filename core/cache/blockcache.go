@@ -5,12 +5,22 @@ import "io"
 // ByteSource provides random access to data for block caching.
 type ByteSource interface {
 	io.ReaderAt
+
+	// Size returns the total size of the data source in bytes.
 	Size() int64
+
+	// SourceID returns a unique identifier for this data source.
+	// The ID is used as part of the cache key, so it must be stable
+	// across calls and unique across different sources.
 	SourceID() string
 }
 
 // RangeReader provides range reads for block cache fetches.
+// Types implementing both ByteSource and RangeReader allow the block cache
+// to use more efficient range-based fetching instead of ReadAt.
 type RangeReader interface {
+	// ReadRange returns a ReadCloser for reading length bytes starting at off.
+	// The caller is responsible for closing the returned ReadCloser.
 	ReadRange(off, length int64) (io.ReadCloser, error)
 }
 
@@ -21,6 +31,9 @@ type RangeReader interface {
 // caching can add overhead; DefaultMaxBlocksPerRead provides a conservative bypass
 // to avoid caching large ranges.
 type BlockCache interface {
+	// Wrap returns a ByteSource that caches reads from src in fixed-size blocks.
+	// The returned ByteSource also implements RangeReader if the underlying
+	// cache supports it.
 	Wrap(src ByteSource, opts ...WrapOption) (ByteSource, error)
 
 	// MaxBytes returns the configured cache size limit (0 = unlimited).
@@ -42,7 +55,14 @@ const DefaultMaxBlocksPerRead = 4
 
 // WrapConfig controls block cache wrapping behavior.
 type WrapConfig struct {
-	BlockSize        int64
+	// BlockSize is the size in bytes of each cached block.
+	// Smaller blocks improve cache hit rates for random reads but increase
+	// metadata overhead. Larger blocks are more efficient for sequential reads.
+	BlockSize int64
+
+	// MaxBlocksPerRead is the maximum number of blocks that will be cached
+	// for a single ReadAt call. Reads spanning more blocks than this limit
+	// bypass the cache entirely. Use 0 to disable the limit.
 	MaxBlocksPerRead int
 }
 

@@ -1,4 +1,3 @@
-// Package disk provides disk-backed implementations of client cache interfaces.
 package disk
 
 import (
@@ -67,6 +66,7 @@ func WithRefCacheTTL(ttl time.Duration) Option {
 	}
 }
 
+// defaultConfig returns the default cache configuration.
 func defaultConfig() config {
 	return config{
 		shardPrefixLen: defaultShardPrefixLen,
@@ -264,6 +264,7 @@ func (c *RefCache) SizeBytes() int64 {
 }
 
 // Prune removes cached entries until the cache is at or below targetBytes.
+// It returns the number of bytes freed.
 func (c *RefCache) Prune(targetBytes int64) (int64, error) {
 	if targetBytes < 0 {
 		targetBytes = 0
@@ -548,6 +549,7 @@ func (c *ManifestCache) SizeBytes() int64 {
 }
 
 // Prune removes cached entries until the cache is at or below targetBytes.
+// It returns the number of bytes freed.
 func (c *ManifestCache) Prune(targetBytes int64) (int64, error) {
 	if targetBytes < 0 {
 		targetBytes = 0
@@ -792,6 +794,7 @@ func (c *IndexCache) SizeBytes() int64 {
 }
 
 // Prune removes cached entries until the cache is at or below targetBytes.
+// It returns the number of bytes freed.
 func (c *IndexCache) Prune(targetBytes int64) (int64, error) {
 	if targetBytes < 0 {
 		targetBytes = 0

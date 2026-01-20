@@ -15,10 +15,10 @@ type TokenProvider func(ctx context.Context) (string, error)
 
 // Signature holds a cryptographic signature and its format metadata.
 type Signature struct {
-	// Data contains the signature bytes (sigstore bundle JSON).
+	// Data contains the raw signature bytes in sigstore bundle JSON format.
 	Data []byte
 
-	// MediaType indicates the signature format.
+	// MediaType indicates the signature format, typically SignatureArtifactType.
 	MediaType string
 }
 
