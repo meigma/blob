@@ -1,8 +1,26 @@
 # Blob
 
-A file archive format for OCI container registries with random access via HTTP range requests.
+[![CI](https://github.com/meigma/blob/actions/workflows/ci.yml/badge.svg?branch=master)](https://github.com/meigma/blob/actions/workflows/ci.yml)
+[![Docs](https://img.shields.io/badge/docs-blob.meigma.dev-blue)](https://blob.meigma.dev)
+[![Go Reference](https://pkg.go.dev/badge/github.com/meigma/blob.svg)](https://pkg.go.dev/github.com/meigma/blob)
+[![Release](https://img.shields.io/github/v/release/meigma/blob)](https://github.com/meigma/blob/releases)
+[![License](https://img.shields.io/badge/license-Apache--2.0%2FMIT-blue)](LICENSE-MIT)
 
-Blob stores files in two OCI blobs: a small index containing metadata, and a data blob containing file contents sorted by path. This design enables reading individual files without downloading entire archives, efficient directory fetches with single range requests, and content-addressed caching with automatic deduplication.
+> Sign and attest file archives in OCI registries. Carry cryptographic provenance wherever they go.
+
+You sign your container images. What about everything else? Config files, ML models, deployment artifacts, and certificates move between systems with no provenance, no integrity verification, and full downloads every time. Blob brings the same supply chain security guarantees to file archives.
+
+## How It Works
+
+Blob stores archives as two OCI blobs bound by a signed manifest:
+
+```
+Signed → Manifest → Index → Per-file SHA256
+```
+
+Every file inherits the signature above it. Tamper with a single byte and verification fails instantly.
+
+The index blob is small (~1MB for 10K files) and contains file metadata. The data blob stores file contents sorted by path. This separation enables reading individual files via HTTP range requests without downloading entire archives—read a 64KB config from a 1GB archive and transfer only 64KB.
 
 ## Installation
 
@@ -12,9 +30,7 @@ go get github.com/meigma/blob
 
 Requires Go 1.25 or later.
 
-## Usage
-
-### Push and Pull Archives
+## Quick Start
 
 ```go
 import (
@@ -24,65 +40,18 @@ import (
 
 ctx := context.Background()
 
-// Create client with Docker credentials
-c, err := blob.NewClient(blob.WithDockerConfig())
-
 // Push a directory to registry
-err = c.Push(ctx, "ghcr.io/myorg/myarchive:v1", "./src",
+c, _ := blob.NewClient(blob.WithDockerConfig())
+c.Push(ctx, "ghcr.io/org/configs:v1", "./src",
     blob.PushWithCompression(blob.CompressionZstd),
 )
 
-// Pull and read files lazily via HTTP range requests
-archive, err := c.Pull(ctx, "ghcr.io/myorg/myarchive:v1")
-content, err := archive.ReadFile("config/app.json")
-entries, err := archive.ReadDir("src")
+// Pull and read files lazily—only downloads what you access
+archive, _ := c.Pull(ctx, "ghcr.io/org/configs:v1")
+content, _ := archive.ReadFile("config/app.json")
 ```
 
-### Caching
-
-```go
-// Enable all caches with a single option
-c, err := blob.NewClient(
-    blob.WithDockerConfig(),
-    blob.WithCacheDir("/var/cache/blob"),
-)
-
-// Subsequent pulls and reads use cached data
-archive, err := c.Pull(ctx, "ghcr.io/myorg/myarchive:v1")
-```
-
-### Low-Level Archive Creation
-
-```go
-import (
-    "bytes"
-    "context"
-    blobcore "github.com/meigma/blob/core"
-)
-
-var indexBuf, dataBuf bytes.Buffer
-err := blobcore.Create(context.Background(), "/path/to/source", &indexBuf, &dataBuf)
-```
-
-### Low-Level Archive Reading
-
-```go
-import (
-    blobcore "github.com/meigma/blob/core"
-    blobhttp "github.com/meigma/blob/core/http"
-)
-
-// Create HTTP source for data blob
-source, err := blobhttp.NewSource(dataURL,
-    blobhttp.WithHeader("Authorization", "Bearer "+token),
-)
-
-// Open archive with index data and byte source
-archive, err := blobcore.New(indexData, source)
-content, err := archive.ReadFile("config/app.json")
-```
-
-### Supply Chain Security
+## Supply Chain Security
 
 Verify archive provenance with Sigstore signatures and SLSA attestations:
 
@@ -94,39 +63,48 @@ import (
     "github.com/meigma/blob/policy/slsa"
 )
 
-// Verify signatures and provenance from GitHub Actions
+// Require signatures from GitHub Actions
 sigPolicy, _ := sigstore.GitHubActionsPolicy("myorg/myrepo",
     sigstore.AllowBranches("main"),
     sigstore.AllowTags("v*"),
 )
+
+// Require SLSA provenance from a specific workflow
 slsaPolicy, _ := slsa.GitHubActionsWorkflow("myorg/myrepo")
 
+// Pull fails if verification fails
 c, _ := blob.NewClient(
     blob.WithDockerConfig(),
     blob.WithPolicy(policy.RequireAll(sigPolicy, slsaPolicy)),
 )
-
-// Pull fails if verification fails
-archive, err := c.Pull(ctx, "ghcr.io/myorg/myarchive:v1")
+archive, err := c.Pull(ctx, "ghcr.io/org/configs:v1")
 ```
+
+## Performance
+
+| Metric | Value |
+|--------|-------|
+| Bandwidth saved | 99.99% (64KB from 1GB archive) |
+| Index lookup | 26 ns (constant time) |
+| Cache speedup | 43x faster reads |
+
+Path-sorted storage means directories fetch with a single range request. Content-addressed caching deduplicates across archives automatically.
 
 ## Features
 
-- **Random access** - Read any file without downloading the entire archive
-- **Directory fetches** - Path-sorted storage enables single-request directory reads
-- **Integrity verification** - Per-file SHA256 hashes
-- **Supply chain security** - Sigstore signing and SLSA provenance with simple verification helpers
-- **Compression** - Per-file zstd compression preserves random access
-- **Content-addressed caching** - Automatic deduplication across archives
-- **Standard interfaces** - Implements `fs.FS`, `fs.ReadFileFS`, `fs.ReadDirFS`
+- **Prove origin** — Sigstore signatures and SLSA attestations
+- **Verify on read** — Per-file SHA256 hashes checked automatically
+- **Fetch only what you use** — HTTP range requests for individual files
+- **Directory fetches** — Single-request reads for entire directories
+- **Compression** — Per-file zstd compression preserves random access
+- **Caching** — Content-addressed deduplication across archives
+- **Standard interfaces** — Implements `fs.FS`, `fs.ReadFileFS`, `fs.ReadDirFS`
 
 ## Documentation
 
-Full documentation is available at the [documentation site](docs/docs/index.md):
-
-- [Getting Started](docs/docs/getting-started.md) - Complete tutorial
-- [Architecture](docs/docs/explanation/architecture.md) - Design decisions and trade-offs
-- [API Reference](docs/docs/reference/api.md) - Complete API documentation
+- [Getting Started](https://blob.meigma.dev/docs/getting-started) — Complete tutorial
+- [Architecture](https://blob.meigma.dev/docs/explanation/architecture) — Design decisions and trade-offs
+- [API Reference](https://blob.meigma.dev/docs/reference/api) — Complete API documentation
 
 ## License
 
