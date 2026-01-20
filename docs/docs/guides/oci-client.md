@@ -301,6 +301,72 @@ err = c.Tag(ctx, "ghcr.io/myorg/myarchive:latest", manifest.Digest())
 
 > **Note:** For tagging during push, use `blob.PushWithTags()` which is more reliable as it applies tags atomically with the push operation.
 
+## Sign Operations
+
+Sign a manifest with Sigstore and attach the signature as an OCI 1.1 referrer:
+
+```go
+import "github.com/meigma/blob/policy/sigstore"
+
+// Create a signer (keyless, for CI environments)
+signer, err := sigstore.NewSigner(
+	sigstore.WithEphemeralKey(),
+	sigstore.WithFulcio("https://fulcio.sigstore.dev"),
+	sigstore.WithRekor("https://rekor.sigstore.dev"),
+	sigstore.WithAmbientCredentials(),
+)
+if err != nil {
+	return err
+}
+
+// Sign the manifest (after pushing)
+sigDigest, err := c.Sign(ctx, "ghcr.io/myorg/myarchive:v1.0.0", signer)
+if err != nil {
+	return err
+}
+fmt.Printf("Signature digest: %s\n", sigDigest)
+```
+
+The signature is attached as an OCI referrer artifact. Consumers can discover it via the Referrers API and verify it using a `sigstore.Policy`.
+
+### Complete Push and Sign Workflow
+
+```go
+func pushAndSign(ctx context.Context, ref, srcDir string) error {
+	c, err := blob.NewClient(blob.WithDockerConfig())
+	if err != nil {
+		return err
+	}
+
+	// Push the archive
+	if err := c.Push(ctx, ref, srcDir,
+		blob.PushWithCompression(blob.CompressionZstd),
+	); err != nil {
+		return fmt.Errorf("push: %w", err)
+	}
+
+	// Create keyless signer
+	signer, err := sigstore.NewSigner(
+		sigstore.WithEphemeralKey(),
+		sigstore.WithFulcio("https://fulcio.sigstore.dev"),
+		sigstore.WithRekor("https://rekor.sigstore.dev"),
+		sigstore.WithAmbientCredentials(),
+	)
+	if err != nil {
+		return fmt.Errorf("create signer: %w", err)
+	}
+
+	// Sign the manifest
+	if _, err := c.Sign(ctx, ref, signer); err != nil {
+		return fmt.Errorf("sign: %w", err)
+	}
+
+	return nil
+}
+```
+
+For detailed signing options and verification, see [Provenance & Signing](provenance).
+
 ## Error Handling
 
 The client provides sentinel errors for common failure cases:
@@ -409,4 +475,5 @@ func main() {
 
 - [Creating Archives](creating-archives) - Archive creation options
 - [Caching](caching) - Cache configuration and sizing
+- [Provenance & Signing](provenance) - Signing archives and verification policies
 - [OCI Storage](../explanation/oci-storage) - How blob archives are stored in OCI registries

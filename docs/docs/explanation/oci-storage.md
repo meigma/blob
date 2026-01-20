@@ -186,9 +186,73 @@ This means:
 
 ## OCI Signing Compatibility
 
-Blob archives work with standard OCI signing tools:
+Blob archives work with standard OCI signing tools and the library's built-in signing.
 
-### Cosign
+### Built-in Signing
+
+The blob library provides programmatic signing via `Client.Sign()`:
+
+```go
+signer, _ := sigstore.NewSigner(
+    sigstore.WithEphemeralKey(),
+    sigstore.WithFulcio("https://fulcio.sigstore.dev"),
+    sigstore.WithRekor("https://rekor.sigstore.dev"),
+    sigstore.WithAmbientCredentials(),
+)
+
+sigDigest, err := client.Sign(ctx, "ghcr.io/myorg/myarchive:v1.0.0", signer)
+```
+
+### OCI 1.1 Referrer Pattern
+
+Signatures are attached as **OCI 1.1 referrer artifacts**. This pattern links auxiliary artifacts (signatures, attestations) to a manifest via the `subject` field:
+
+```json
+{
+  "schemaVersion": 2,
+  "mediaType": "application/vnd.oci.image.manifest.v1+json",
+  "artifactType": "application/vnd.dev.sigstore.bundle.v0.3+json",
+  "config": { "...": "empty config" },
+  "layers": [
+    {
+      "mediaType": "application/vnd.dev.sigstore.bundle.v0.3+json",
+      "digest": "sha256:...",
+      "size": 5432
+    }
+  ],
+  "subject": {
+    "mediaType": "application/vnd.oci.image.manifest.v1+json",
+    "digest": "sha256:abc123...",
+    "size": 1024
+  }
+}
+```
+
+The `subject` field points to the signed manifest. Registries index these referrers, making them discoverable via the Referrers API:
+
+```
+GET /v2/{repository}/referrers/{digest}
+```
+
+### Signature Discovery
+
+The `InspectResult.Referrers()` method discovers attached signatures:
+
+```go
+result, _ := client.Inspect(ctx, "ghcr.io/myorg/myarchive:v1.0.0")
+
+// Find all Sigstore signatures
+signatures, _ := result.Referrers(ctx, "application/vnd.dev.sigstore.bundle.v0.3+json")
+for _, sig := range signatures {
+    fmt.Printf("Signature: %s\n", sig.Digest)
+}
+```
+
+### External Signing Tools
+
+Blob archives also work with standard CLI tools:
+
+**Cosign:**
 
 ```bash
 # Sign the manifest
@@ -198,7 +262,7 @@ cosign sign ghcr.io/myorg/myarchive:v1.0.0
 cosign verify ghcr.io/myorg/myarchive:v1.0.0
 ```
 
-### Notation
+**Notation:**
 
 ```bash
 # Sign the manifest
@@ -207,6 +271,14 @@ notation sign ghcr.io/myorg/myarchive:v1.0.0
 # Verify signature
 notation verify ghcr.io/myorg/myarchive:v1.0.0
 ```
+
+### Signature Artifact Types
+
+| Artifact Type | Description |
+|---------------|-------------|
+| `application/vnd.dev.sigstore.bundle.v0.3+json` | Sigstore bundle (Fulcio cert + Rekor entry) |
+| `application/vnd.cncf.notary.signature` | Notation signature |
+| `application/vnd.in-toto+json` | In-toto attestation |
 
 The signature covers the manifest digest, which transitively covers all blob digests and file hashes.
 

@@ -301,3 +301,7 @@ func (m *inspectMockOCIClient) AuthHeaders(context.Context, string) (http.Header
 func (m *inspectMockOCIClient) InvalidateAuthHeaders(string) error {
 	return errors.New("not implemented")
 }
+
+func (m *inspectMockOCIClient) PushManifestByDigest(context.Context, string, *ocispec.Manifest) (ocispec.Descriptor, error) {
+	return ocispec.Descriptor{}, errors.New("not implemented")
+}

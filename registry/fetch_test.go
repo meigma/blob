@@ -83,6 +83,10 @@ func (m *mockOCIClient) InvalidateAuthHeaders(string) error {
 	return errNotImplemented
 }
 
+func (m *mockOCIClient) PushManifestByDigest(context.Context, string, *ocispec.Manifest) (ocispec.Descriptor, error) {
+	return ocispec.Descriptor{}, errNotImplemented
+}
+
 // testManifest creates a valid blob archive manifest for testing with
 // standard index and data layers, config, and created annotation.
 func testManifest() ocispec.Manifest {

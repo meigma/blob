@@ -34,6 +34,133 @@ Per-file SHA256 Hashes
 
 Sigstore signatures bind the manifest to a verified identity. The manifest contains digests for the index and data blobs. The index contains per-file hashes. This chain ensures that any tampering—at any level—is detectable.
 
+## Signing Archives
+
+The blob package provides built-in signing via the `Client.Sign()` method. This creates Sigstore signatures and attaches them as OCI 1.1 referrer artifacts.
+
+### Keyless Signing (Recommended for CI)
+
+For GitHub Actions workflows, use keyless signing with ambient OIDC credentials:
+
+```go
+import (
+    "github.com/meigma/blob"
+    "github.com/meigma/blob/policy/sigstore"
+)
+
+// Create signer with keyless configuration
+signer, err := sigstore.NewSigner(
+    sigstore.WithEphemeralKey(),                    // Generate ephemeral keypair
+    sigstore.WithFulcio("https://fulcio.sigstore.dev"),  // Get certificate from Fulcio
+    sigstore.WithRekor("https://rekor.sigstore.dev"),    // Record in transparency log
+    sigstore.WithAmbientCredentials(),              // Auto-detect OIDC from CI
+)
+if err != nil {
+    return err
+}
+
+client, err := blob.NewClient(blob.WithDockerConfig())
+if err != nil {
+    return err
+}
+
+// Push the archive
+err = client.Push(ctx, "ghcr.io/myorg/archive:v1", "./assets")
+if err != nil {
+    return err
+}
+
+// Sign the manifest (creates OCI 1.1 referrer)
+sigDigest, err := client.Sign(ctx, "ghcr.io/myorg/archive:v1", signer)
+if err != nil {
+    return err
+}
+fmt.Printf("Signed! Signature digest: %s\n", sigDigest)
+```
+
+The signature is attached to the manifest as an OCI referrer artifact, which can be discovered and verified by consumers.
+
+### Signer Options
+
+| Option | Description |
+|--------|-------------|
+| `WithEphemeralKey()` | Generate ephemeral keypair (recommended for keyless signing) |
+| `WithFulcio(url)` | Enable Fulcio certificate issuance |
+| `WithRekor(url)` | Enable Rekor transparency log |
+| `WithAmbientCredentials()` | Auto-detect OIDC token from CI environment |
+| `WithIDToken(token)` | Use static OIDC token |
+| `WithPrivateKey(key)` | Use existing `crypto.Signer` |
+| `WithPrivateKeyPEM(data, password)` | Use PEM-encoded private key |
+
+### Key-Based Signing
+
+For environments without OIDC, use a private key:
+
+```go
+import (
+    "crypto/ecdsa"
+    "crypto/elliptic"
+    "crypto/rand"
+)
+
+// Generate or load a private key
+key, _ := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+
+signer, err := sigstore.NewSigner(
+    sigstore.WithPrivateKey(key),
+    sigstore.WithRekor("https://rekor.sigstore.dev"),
+)
+```
+
+Or load from a PEM file:
+
+```go
+pemData, _ := os.ReadFile("private-key.pem")
+signer, err := sigstore.NewSigner(
+    sigstore.WithPrivateKeyPEM(pemData, nil), // nil password for unencrypted
+    sigstore.WithRekor("https://rekor.sigstore.dev"),
+)
+```
+
+### Complete Push and Sign Workflow
+
+```go
+func pushAndSign(ctx context.Context, ref, srcDir string) error {
+    // Create client
+    client, err := blob.NewClient(blob.WithDockerConfig())
+    if err != nil {
+        return fmt.Errorf("create client: %w", err)
+    }
+
+    // Push archive with compression
+    err = client.Push(ctx, ref, srcDir, blob.PushWithCompression(blob.CompressionZstd))
+    if err != nil {
+        return fmt.Errorf("push: %w", err)
+    }
+
+    // Create keyless signer (CI environment)
+    signer, err := sigstore.NewSigner(
+        sigstore.WithEphemeralKey(),
+        sigstore.WithFulcio("https://fulcio.sigstore.dev"),
+        sigstore.WithRekor("https://rekor.sigstore.dev"),
+        sigstore.WithAmbientCredentials(),
+    )
+    if err != nil {
+        return fmt.Errorf("create signer: %w", err)
+    }
+
+    // Sign the manifest
+    sigDigest, err := client.Sign(ctx, ref, signer)
+    if err != nil {
+        return fmt.Errorf("sign: %w", err)
+    }
+
+    fmt.Printf("Pushed and signed: %s\n", ref)
+    fmt.Printf("Signature digest: %s\n", sigDigest)
+    return nil
+}
+```
+
 ## Quick Start
 
 For archives built and signed in GitHub Actions, use the high-level helpers:
@@ -359,7 +486,7 @@ deny contains msg if {
 
 ### GitHub Actions Workflow
 
-A complete workflow for building, signing, and attesting archives:
+A complete workflow for building and signing archives using the blob library's built-in signing:
 
 ```yaml
 name: Release
@@ -371,8 +498,7 @@ on:
 permissions:
   contents: read
   packages: write
-  id-token: write      # Required for keyless signing
-  attestations: write  # Required for attestations
+  id-token: write  # Required for keyless signing
 
 jobs:
   release:
@@ -384,12 +510,54 @@ jobs:
         with:
           go-version-file: go.mod
 
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build, push, and sign archive
+        run: |
+          # Build your CLI tool that uses client.Push() and client.Sign()
+          go build -o release-tool ./cmd/release
+
+          # Push and sign with --sign flag (using Client.Sign() internally)
+          ./release-tool push \
+            --ref ghcr.io/${{ github.repository }}/archive:${{ github.ref_name }} \
+            --sign
+```
+
+The `--sign` flag triggers `Client.Sign()` with keyless signing. In your CLI tool:
+
+```go
+// In your push command implementation
+if cfg.sign {
+    signer, err := sigstore.NewSigner(
+        sigstore.WithEphemeralKey(),
+        sigstore.WithFulcio("https://fulcio.sigstore.dev"),
+        sigstore.WithRekor("https://rekor.sigstore.dev"),
+        sigstore.WithAmbientCredentials(), // Detects GitHub Actions OIDC
+    )
+    if err != nil {
+        return err
+    }
+    _, err = client.Sign(ctx, ref, signer)
+    if err != nil {
+        return err
+    }
+}
+```
+
+### Using External Tools (Alternative)
+
+You can also use external signing tools like Cosign or GitHub's attestation action:
+
+```yaml
       - name: Build and push archive
         id: push
         run: |
-          # Build your archive and push to registry
           go run ./cmd/push --ref ghcr.io/${{ github.repository }}/archive:${{ github.ref_name }}
-          # Output the digest for attestation
           echo "digest=sha256:..." >> "$GITHUB_OUTPUT"
 
       - name: Sign with Cosign
@@ -406,11 +574,11 @@ jobs:
 
 ### Required Permissions
 
-| Permission | Purpose |
-|------------|---------|
-| `id-token: write` | OIDC token for keyless Sigstore signing |
-| `attestations: write` | Attach SLSA attestations to artifacts |
-| `packages: write` | Push to GitHub Container Registry |
+| Permission | Purpose | Required For |
+|------------|---------|--------------|
+| `id-token: write` | OIDC token for keyless Sigstore signing | `Client.Sign()` with `WithAmbientCredentials()` |
+| `packages: write` | Push to GitHub Container Registry | `Client.Push()` and `Client.Sign()` |
+| `attestations: write` | Attach SLSA attestations | `actions/attest-build-provenance` (optional) |
 
 ## Complete Example
 
@@ -466,24 +634,53 @@ This is appropriate for local testing but should never be used in production.
 
 ## Troubleshooting
 
-### "no signature found"
+### Signing Errors
 
-The archive has no Sigstore signature attached. Ensure your CI pipeline includes the cosign signing step.
+#### "no keypair configured"
 
-### "signature verification failed"
+When creating a signer, you must configure a keypair using `WithEphemeralKey()` or `WithPrivateKey()`:
+
+```go
+signer, err := sigstore.NewSigner(
+    sigstore.WithEphemeralKey(),  // Required
+    // ... other options
+)
+```
+
+#### "sigstore get token" errors
+
+The signer couldn't obtain an OIDC token. Ensure:
+- You're running in a CI environment with OIDC support (GitHub Actions)
+- The `id-token: write` permission is set in your workflow
+- `WithAmbientCredentials()` or `WithIDToken()` is configured
+
+#### "push signature blob" or "push referrer manifest" errors
+
+Registry access issues. Check:
+- You're authenticated to the registry (`WithDockerConfig()`)
+- The registry supports OCI 1.1 referrers
+- You have write access to the repository
+
+### Verification Errors
+
+#### "no signature found"
+
+The archive has no Sigstore signature attached. Ensure your CI pipeline includes `Client.Sign()` or the cosign signing step.
+
+#### "signature verification failed"
 
 The signature exists but verification failed. Check:
 - The repository in `GitHubActionsPolicy` matches your signing workflow
 - The branch/tag restrictions match where the workflow ran
 - The Sigstore transparency log is accessible
 
-### "policy evaluation failed: allow = false"
+#### "policy evaluation failed: allow = false"
 
 The OPA policy denied the attestation. Check:
 - Attestations are attached to the manifest
 - The attestation predicate type matches your policy
 - The builder/repository constraints in your policy match the attestation
 
-### "no attestations found"
+#### "no attestations found"
 
 No SLSA attestations are attached. Ensure your CI pipeline includes the `actions/attest-build-provenance` step with `push-to-registry: true`.

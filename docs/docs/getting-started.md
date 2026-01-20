@@ -361,7 +361,35 @@ Now that you have the basics, explore these guides:
 
 ## Production Security
 
-For production deployments, add supply chain security to verify archive provenance:
+For production deployments, add supply chain security with signing and verification.
+
+### Signing Archives (CI/CD)
+
+Sign archives during build and push to create a verifiable chain of trust:
+
+```go
+import (
+    "github.com/meigma/blob"
+    "github.com/meigma/blob/policy/sigstore"
+)
+
+// Create keyless signer (uses GitHub Actions OIDC)
+signer, _ := sigstore.NewSigner(
+    sigstore.WithEphemeralKey(),
+    sigstore.WithFulcio("https://fulcio.sigstore.dev"),
+    sigstore.WithRekor("https://rekor.sigstore.dev"),
+    sigstore.WithAmbientCredentials(),
+)
+
+// Push and sign
+c, _ := blob.NewClient(blob.WithDockerConfig())
+c.Push(ctx, ref, srcDir, blob.PushWithCompression(blob.CompressionZstd))
+c.Sign(ctx, ref, signer)  // Creates OCI 1.1 referrer signature
+```
+
+### Verifying Archives (Consumers)
+
+Configure policies to verify signatures and provenance on pull:
 
 ```go
 import (
@@ -377,7 +405,7 @@ sigPolicy, _ := sigstore.GitHubActionsPolicy("myorg/myrepo",
     sigstore.AllowTags("v*"),
 )
 
-// Validate SLSA provenance
+// Validate SLSA provenance (optional)
 slsaPolicy, _ := slsa.GitHubActionsWorkflow("myorg/myrepo",
     slsa.WithWorkflowPath(".github/workflows/release.yml"),
 )

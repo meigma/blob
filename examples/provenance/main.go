@@ -2,6 +2,7 @@
 //
 // This example shows:
 //   - Creating and pushing blob archives to OCI registries
+//   - Signing manifests using sigstore (keyless signing with Fulcio/Rekor)
 //   - Pulling archives with sigstore signature verification
 //   - Validating SLSA provenance attestations using Go-native policies
 //
@@ -56,6 +57,7 @@ Commands:
 Push Options:
   --ref <reference>    OCI reference with tag (required)
   --assets <dir>       Directory to archive (default: ./assets)
+  --sign               Sign with sigstore (keyless, requires OIDC token)
   --plain-http         Use plain HTTP for local registries
 
 Pull Options:
@@ -67,8 +69,11 @@ Pull Options:
   --plain-http         Use plain HTTP for local registries
 
 Examples:
-  # Push to ttl.sh (anonymous, temporary)
+  # Push to ttl.sh (anonymous, temporary, no signing)
   provenance push --ref ttl.sh/my-archive:1h
+
+  # Push with sigstore signing (CI environment with OIDC)
+  provenance push --ref ghcr.io/myorg/archive:v1 --sign
 
   # Pull without verification (local testing)
   provenance pull --ref ttl.sh/my-archive:1h --skip-sig --skip-attest

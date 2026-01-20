@@ -8,11 +8,13 @@ import (
 	"os"
 
 	"github.com/meigma/blob"
+	"github.com/meigma/blob/policy/sigstore"
 )
 
 type pushConfig struct {
 	ref       string
 	assets    string
+	sign      bool
 	plainHTTP bool
 }
 
@@ -24,6 +26,7 @@ func runPush(args []string) error {
 	fs := flag.NewFlagSet("push", flag.ExitOnError)
 	fs.StringVar(&cfg.ref, "ref", "", "OCI reference with tag (required)")
 	fs.StringVar(&cfg.assets, "assets", cfg.assets, "directory to archive")
+	fs.BoolVar(&cfg.sign, "sign", false, "sign with sigstore (keyless, requires OIDC)")
 	fs.BoolVar(&cfg.plainHTTP, "plain-http", false, "use plain HTTP")
 	if err := fs.Parse(args); err != nil {
 		return err
@@ -77,6 +80,29 @@ func push(cfg pushConfig) error {
 
 	fmt.Printf("Pushed successfully!\n")
 	fmt.Printf("Digest: %s\n", manifest.Digest())
+
+	// Sign if requested
+	if cfg.sign {
+		fmt.Println("Signing with sigstore (keyless)...")
+
+		signer, err := sigstore.NewSigner(
+			sigstore.WithEphemeralKey(),
+			sigstore.WithFulcio("https://fulcio.sigstore.dev"),
+			sigstore.WithRekor("https://rekor.sigstore.dev"),
+			sigstore.WithAmbientCredentials(),
+		)
+		if err != nil {
+			return fmt.Errorf("create signer: %w", err)
+		}
+
+		sigDigest, err := client.Sign(ctx, cfg.ref, signer)
+		if err != nil {
+			return fmt.Errorf("sign: %w", err)
+		}
+
+		fmt.Printf("Signed! Signature digest: %s\n", sigDigest)
+	}
+
 	fmt.Printf("\nTo pull this archive:\n")
 	fmt.Printf("  provenance pull --ref %s\n", cfg.ref)
 

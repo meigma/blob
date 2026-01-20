@@ -167,6 +167,40 @@ func (c *Client) PushManifest(ctx context.Context, repoRef, tag string, manifest
 	return desc, nil
 }
 
+// PushManifestByDigest pushes a manifest without a tag.
+//
+// The manifest is referenced only by its digest, which is useful for
+// OCI 1.1 referrer artifacts that don't need a tag.
+func (c *Client) PushManifestByDigest(ctx context.Context, repoRef string, manifest *ocispec.Manifest) (ocispec.Descriptor, error) {
+	if manifest == nil {
+		return ocispec.Descriptor{}, fmt.Errorf("%w: manifest is nil", ErrManifestInvalid)
+	}
+	repo, err := c.repository(repoRef)
+	if err != nil {
+		return ocispec.Descriptor{}, err
+	}
+
+	// Serialize manifest
+	manifestJSON, err := json.Marshal(manifest)
+	if err != nil {
+		return ocispec.Descriptor{}, fmt.Errorf("marshal manifest: %w", err)
+	}
+
+	dgst := digest.FromBytes(manifestJSON)
+	desc := ocispec.Descriptor{
+		MediaType: ocispec.MediaTypeImageManifest,
+		Digest:    dgst,
+		Size:      int64(len(manifestJSON)),
+	}
+
+	// Push without tag (by digest only)
+	if err := repo.Push(ctx, desc, bytes.NewReader(manifestJSON)); err != nil {
+		return ocispec.Descriptor{}, mapError(err)
+	}
+
+	return desc, nil
+}
+
 // FetchManifest fetches a manifest from the repository by descriptor.
 //
 // Call Resolve first and pass the resolved descriptor to avoid extra lookups.

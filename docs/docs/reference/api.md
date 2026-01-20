@@ -170,6 +170,61 @@ Tag creates or updates a tag pointing to an existing manifest.
 | ref | `string` | OCI reference with new tag |
 | digest | `string` | Digest of existing manifest |
 
+#### Sign
+
+```go
+func (c *Client) Sign(ctx context.Context, ref string, signer ManifestSigner, opts ...SignOption) (string, error)
+```
+
+Sign creates a signature for a manifest and attaches it as an OCI 1.1 referrer artifact.
+
+The ref must include a tag or digest. The signer creates the signature bundle, which is pushed as an OCI referrer artifact linked to the manifest. This enables signature verification during Pull/Fetch operations.
+
+**Parameters:**
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| ctx | `context.Context` | Context for cancellation |
+| ref | `string` | OCI reference with tag or digest |
+| signer | `ManifestSigner` | Signer implementation (e.g., `sigstore.Signer`) |
+| opts | `...SignOption` | Sign configuration options |
+
+**Returns:**
+
+| Return | Type | Description |
+|--------|------|-------------|
+| digest | `string` | Digest of the signature manifest |
+| err | `error` | Non-nil if signing fails |
+
+**Example:**
+
+```go
+// Create signer for keyless signing (recommended for CI)
+signer, err := sigstore.NewSigner(
+    sigstore.WithEphemeralKey(),
+    sigstore.WithFulcio("https://fulcio.sigstore.dev"),
+    sigstore.WithRekor("https://rekor.sigstore.dev"),
+    sigstore.WithAmbientCredentials(), // Uses OIDC from CI environment
+)
+if err != nil {
+    return err
+}
+
+// Push archive first
+client, _ := blob.NewClient(blob.WithDockerConfig())
+err = client.Push(ctx, "ghcr.io/myorg/myarchive:v1", "./assets")
+if err != nil {
+    return err
+}
+
+// Sign the manifest (creates OCI 1.1 referrer)
+sigDigest, err := client.Sign(ctx, "ghcr.io/myorg/myarchive:v1", signer)
+if err != nil {
+    return err
+}
+fmt.Printf("Signed! Signature digest: %s\n", sigDigest)
+```
+
 ---
 
 ### Archive
@@ -432,6 +487,16 @@ type InspectOption func(*inspectConfig)
 
 ---
 
+### Sign Options
+
+```go
+type SignOption func(*signConfig)
+```
+
+Currently reserved for future options. The signing behavior is controlled primarily through the `ManifestSigner` implementation.
+
+---
+
 ### Types
 
 #### Entry
@@ -536,6 +601,22 @@ type Policy = registry.Policy
 ```
 
 Policy evaluates whether a manifest is trusted.
+
+#### ManifestSigner
+
+```go
+type ManifestSigner interface {
+    SignManifest(ctx context.Context, payload []byte) (data []byte, mediaType string, err error)
+}
+```
+
+ManifestSigner signs OCI manifest payloads. Implementations create signature bundles from raw manifest bytes.
+
+| Method | Description |
+|--------|-------------|
+| `SignManifest(ctx, payload)` | Signs the payload and returns signature data, media type, and error |
+
+The `policy/sigstore.Signer` type implements this interface.
 
 ---
 
@@ -1077,6 +1158,85 @@ policy, _ := sigstore.NewPolicy(
     ),
 )
 ```
+
+#### Signer
+
+```go
+type Signer struct {
+    // contains filtered or unexported fields
+}
+```
+
+Signer creates Sigstore bundles for signing OCI manifests. It implements the `blob.ManifestSigner` interface, allowing it to be used directly with `Client.Sign()`.
+
+##### NewSigner
+
+```go
+func NewSigner(opts ...SignerOption) (*Signer, error)
+```
+
+NewSigner creates a sigstore-based signer. At minimum, a keypair must be configured using `WithEphemeralKey()` or `WithPrivateKey()`.
+
+**Returns:**
+
+| Return | Type | Description |
+|--------|------|-------------|
+| signer | `*Signer` | The configured signer |
+| err | `error` | Non-nil if configuration is invalid |
+
+##### Signer Methods
+
+| Method | Description |
+|--------|-------------|
+| `Sign(ctx, payload) (*Signature, error)` | Creates a Sigstore bundle for the payload |
+| `SignManifest(ctx, payload) (data, mediaType, error)` | Satisfies `blob.ManifestSigner` interface |
+
+##### SignerOption
+
+| Option | Description |
+|--------|-------------|
+| `WithEphemeralKey()` | Generate ephemeral keypair (recommended for keyless signing) |
+| `WithPrivateKey(key crypto.Signer)` | Use existing private key |
+| `WithPrivateKeyPEM(pemData, password []byte)` | Parse and use PEM-encoded private key |
+| `WithFulcio(baseURL string)` | Enable Fulcio certificate issuance for keyless signing |
+| `WithRekor(baseURL string)` | Enable Rekor transparency log recording |
+| `WithIDToken(token string)` | Set static OIDC token for Fulcio authentication |
+| `WithAmbientCredentials()` | Auto-detect OIDC token from CI environment (GitHub Actions) |
+
+##### Signing Examples
+
+**Keyless signing (recommended for CI):**
+
+```go
+signer, err := sigstore.NewSigner(
+    sigstore.WithEphemeralKey(),
+    sigstore.WithFulcio("https://fulcio.sigstore.dev"),
+    sigstore.WithRekor("https://rekor.sigstore.dev"),
+    sigstore.WithAmbientCredentials(), // Uses OIDC from GitHub Actions
+)
+if err != nil {
+    return err
+}
+
+client, _ := blob.NewClient(blob.WithDockerConfig())
+sigDigest, err := client.Sign(ctx, "ghcr.io/myorg/archive:v1", signer)
+```
+
+**Key-based signing:**
+
+```go
+key, _ := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+signer, err := sigstore.NewSigner(
+    sigstore.WithPrivateKey(key),
+    sigstore.WithRekor("https://rekor.sigstore.dev"),
+)
+```
+
+#### Constants
+
+| Constant | Value | Description |
+|----------|-------|-------------|
+| `SignatureArtifactType` | `application/vnd.dev.sigstore.bundle.v0.3+json` | OCI artifact type for sigstore bundles |
 
 ---
 
