@@ -12,7 +12,8 @@ Blob integrates with the OCI ecosystem's supply chain security tools to provide 
 
 - **Sigstore signing**: Keyless signatures using GitHub Actions OIDC tokens
 - **SLSA provenance**: Build attestations describing how archives were created
-- **OPA policies**: Flexible policy evaluation for attestation validation
+- **Policy helpers**: Simple APIs for common verification patterns
+- **OPA policies**: Flexible Rego-based policy evaluation for advanced use cases
 
 These capabilities ensure that archives come from trusted sources and were built through authorized processes.
 
@@ -33,67 +34,200 @@ Per-file SHA256 Hashes
 
 Sigstore signatures bind the manifest to a verified identity. The manifest contains digests for the index and data blobs. The index contains per-file hashes. This chain ensures that any tampering—at any level—is detectable.
 
-## Signing with Sigstore
+## Quick Start
 
-The `policy/sigstore` package verifies Sigstore signatures attached to OCI manifests as referrers.
-
-### Basic Signature Verification
+For archives built and signed in GitHub Actions, use the high-level helpers:
 
 ```go
 import (
     "github.com/meigma/blob"
+    "github.com/meigma/blob/policy"
     "github.com/meigma/blob/policy/sigstore"
+    "github.com/meigma/blob/policy/slsa"
 )
 
-// Create a signature verification policy
-sigPolicy, err := sigstore.NewPolicy()
+// Verify both signature and provenance
+sigPolicy, err := sigstore.GitHubActionsPolicy("myorg/myrepo")
+if err != nil {
+    return err
+}
+slsaPolicy, err := slsa.GitHubActionsWorkflow("myorg/myrepo")
 if err != nil {
     return err
 }
 
-// Create client with policy
 c, err := blob.NewClient(
     blob.WithDockerConfig(),
-    blob.WithPolicy(sigPolicy),
+    blob.WithPolicy(policy.RequireAll(sigPolicy, slsaPolicy)),
 )
 if err != nil {
     return err
 }
 
-// Pull verifies the signature automatically
+// Pull fails if verification fails
 archive, err := c.Pull(ctx, "ghcr.io/myorg/myarchive:v1")
-if err != nil {
-    // Fails if signature is missing or invalid
-    return err
-}
 ```
 
-### Requiring Specific Identities
+This covers the most common case: verifying that archives come from your GitHub Actions workflows.
 
-For production, require signatures from specific issuers and subjects:
+## Sigstore Signature Verification
+
+The `policy/sigstore` package verifies Sigstore signatures attached to OCI manifests.
+
+### GitHub Actions Signatures
+
+For workflows using keyless signing with GitHub Actions OIDC:
+
+```go
+import "github.com/meigma/blob/policy/sigstore"
+
+// Accept any workflow from the repo
+sigPolicy, err := sigstore.GitHubActionsPolicy("myorg/myrepo")
+
+// Restrict to specific branches
+sigPolicy, err := sigstore.GitHubActionsPolicy("myorg/myrepo",
+    sigstore.AllowBranches("main", "release/*"),
+)
+
+// Restrict to release tags only
+sigPolicy, err := sigstore.GitHubActionsPolicy("myorg/myrepo",
+    sigstore.AllowTags("v*"),
+)
+
+// Combine branch and tag restrictions
+sigPolicy, err := sigstore.GitHubActionsPolicy("myorg/myrepo",
+    sigstore.AllowBranches("main"),
+    sigstore.AllowTags("v*"),
+)
+```
+
+The `AllowBranches` and `AllowTags` options accept simple wildcards (`*` matches any characters).
+
+### Advanced: Custom Identity Verification
+
+For non-GitHub-Actions signers or custom OIDC providers, use `NewPolicy` with `WithIdentity`:
 
 ```go
 sigPolicy, err := sigstore.NewPolicy(
     sigstore.WithIdentity(
-        "https://token.actions.githubusercontent.com",  // GitHub Actions OIDC
-        "https://github.com/myorg/myrepo/.github/workflows/release.yml@refs/heads/main",
+        "https://accounts.google.com",           // OIDC issuer
+        "ci-bot@mycompany.iam.gserviceaccount.com",  // Subject
     ),
 )
 ```
 
-This ensures archives are signed by a specific GitHub Actions workflow, not just any valid Sigstore signature.
+For GitHub Actions, the issuer is `https://token.actions.githubusercontent.com` and the subject follows the pattern `https://github.com/OWNER/REPO/.github/workflows/WORKFLOW@REF`.
 
-## SLSA Attestations with OPA
+## SLSA Provenance Verification
 
-The `policy/opa` package validates SLSA provenance attestations using Open Policy Agent.
+The `policy/slsa` package validates SLSA provenance attestations attached to OCI manifests.
 
-### Basic Attestation Verification
+### GitHub Actions Workflows
+
+Validate that archives were built by specific GitHub Actions workflows:
 
 ```go
-import (
-    "github.com/meigma/blob"
-    "github.com/meigma/blob/policy/opa"
+import "github.com/meigma/blob/policy/slsa"
+
+// Accept any workflow from the repo
+slsaPolicy, err := slsa.GitHubActionsWorkflow("myorg/myrepo")
+
+// Require a specific workflow file
+slsaPolicy, err := slsa.GitHubActionsWorkflow("myorg/myrepo",
+    slsa.WithWorkflowPath(".github/workflows/release.yml"),
 )
+
+// Restrict to specific branches
+slsaPolicy, err := slsa.GitHubActionsWorkflow("myorg/myrepo",
+    slsa.WithWorkflowBranches("main"),
+)
+
+// Restrict to release tags
+slsaPolicy, err := slsa.GitHubActionsWorkflow("myorg/myrepo",
+    slsa.WithWorkflowTags("v*"),
+)
+
+// Full example with all restrictions
+slsaPolicy, err := slsa.GitHubActionsWorkflow("myorg/myrepo",
+    slsa.WithWorkflowPath(".github/workflows/release.yml"),
+    slsa.WithWorkflowBranches("main"),
+    slsa.WithWorkflowTags("v*"),
+)
+```
+
+### Builder and Source Validation
+
+For more granular control over provenance requirements:
+
+```go
+// Require a specific SLSA builder
+builderPolicy := slsa.RequireBuilder(
+    "https://github.com/slsa-framework/slsa-github-generator/.github/workflows/generator_generic_slsa3.yml@refs/tags/v2.0.0",
+)
+
+// Require builds from a specific source repository
+sourcePolicy := slsa.RequireSource("https://github.com/myorg/myrepo",
+    slsa.WithBranches("main", "release/*"),
+    slsa.WithTags("v*"),
+)
+```
+
+## Composing Policies
+
+The `policy` package provides utilities for combining multiple policies.
+
+### Require All Policies Pass (AND)
+
+```go
+import "github.com/meigma/blob/policy"
+
+// Both signature AND provenance must be valid
+combined := policy.RequireAll(sigPolicy, slsaPolicy)
+
+c, err := blob.NewClient(
+    blob.WithDockerConfig(),
+    blob.WithPolicy(combined),
+)
+```
+
+Policies are evaluated in order. Evaluation stops at the first failure.
+
+### Accept Any Matching Policy (OR)
+
+```go
+// Accept archives from either repository
+multiSource := policy.RequireAny(
+    slsa.GitHubActionsWorkflow("myorg/repo1"),
+    slsa.GitHubActionsWorkflow("myorg/repo2"),
+)
+```
+
+### Nested Composition
+
+```go
+// Require signature, AND accept provenance from any of multiple repos
+combined := policy.RequireAll(
+    sigPolicy,
+    policy.RequireAny(
+        slsa.GitHubActionsWorkflow("myorg/repo1"),
+        slsa.GitHubActionsWorkflow("myorg/repo2"),
+    ),
+)
+```
+
+## Advanced: Custom Policies with OPA
+
+For validation logic beyond what the built-in helpers provide, use OPA with custom Rego policies. This is useful when you need:
+
+- Complex conditional logic
+- Custom attestation formats
+- Organization-specific policy rules
+- Multi-tenant verification requirements
+
+### Basic OPA Policy
+
+```go
+import "github.com/meigma/blob/policy/opa"
 
 // Create an OPA policy from a Rego file
 opaPolicy, err := opa.NewPolicy(
@@ -103,34 +237,13 @@ if err != nil {
     return err
 }
 
-// Create client with policy
 c, err := blob.NewClient(
     blob.WithDockerConfig(),
     blob.WithPolicy(opaPolicy),
 )
-if err != nil {
-    return err
-}
-
-// Pull evaluates the policy against attestations
-archive, err := c.Pull(ctx, "ghcr.io/myorg/myarchive:v1")
 ```
 
-### Combining Policies
-
-Use both signature and attestation verification together:
-
-```go
-c, _ := blob.NewClient(
-    blob.WithDockerConfig(),
-    blob.WithPolicy(sigPolicy),   // Verify signature first
-    blob.WithPolicy(opaPolicy),   // Then check attestations
-)
-```
-
-Policies are evaluated in order. If any policy fails, the pull is rejected.
-
-## Writing OPA Policies
+### Writing Rego Policies
 
 OPA policies are written in Rego. The policy engine provides attestations as input:
 
@@ -210,7 +323,7 @@ The OPA policy receives this input structure:
 }
 ```
 
-### Common Policy Patterns
+### Common Rego Patterns
 
 **Require specific workflows:**
 
@@ -303,8 +416,31 @@ jobs:
 
 The repository includes a complete provenance example at [`examples/provenance/`](https://github.com/meigma/blob/tree/main/examples/provenance):
 
+```go
+// From examples/provenance/pull.go
+sigPolicy, err := sigstore.GitHubActionsPolicy(repo)
+if err != nil {
+    return err
+}
+slsaPolicy, err := slsa.GitHubActionsWorkflow(repo)
+if err != nil {
+    return err
+}
+
+c, err := blob.NewClient(
+    blob.WithDockerConfig(),
+    blob.WithPolicy(policy.RequireAll(sigPolicy, slsaPolicy)),
+)
+if err != nil {
+    return err
+}
+
+archive, err := c.Pull(ctx, ref)
+```
+
+Run the example:
+
 ```bash
-# Clone and build
 git clone https://github.com/meigma/blob
 cd blob/examples/provenance
 go build -o provenance .
@@ -313,17 +449,8 @@ go build -o provenance .
 ./provenance push --ref ttl.sh/my-test-$(date +%s):1h
 
 # Pull with verification (requires signed archive)
-./provenance pull \
-  --ref ghcr.io/meigma/blob/provenance-example:latest \
-  --policy ./policy/policy.rego
+./provenance pull --ref ghcr.io/meigma/blob/provenance-example:latest
 ```
-
-The example includes:
-
-- **`push.go`**: Archive creation and registry push
-- **`pull.go`**: Pull with Sigstore and OPA policy verification
-- **`policy/policy.rego`**: Sample SLSA validation policy
-- **`.github/workflows/provenance.yml`**: Complete CI/CD workflow
 
 ## Skipping Verification
 
@@ -346,8 +473,8 @@ The archive has no Sigstore signature attached. Ensure your CI pipeline includes
 ### "signature verification failed"
 
 The signature exists but verification failed. Check:
-- The signing identity matches your `WithIdentity()` configuration
-- The signature hasn't expired
+- The repository in `GitHubActionsPolicy` matches your signing workflow
+- The branch/tag restrictions match where the workflow ran
 - The Sigstore transparency log is accessible
 
 ### "policy evaluation failed: allow = false"

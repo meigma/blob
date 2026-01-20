@@ -817,6 +817,49 @@ Package disk provides disk-backed cache implementations for the registry client.
 
 ---
 
+### Package blob/policy
+
+```
+import "github.com/meigma/blob/policy"
+```
+
+Package policy provides composition utilities for combining multiple policies.
+
+#### Functions
+
+##### RequireAll
+
+```go
+func RequireAll(policies ...registry.Policy) registry.Policy
+```
+
+RequireAll returns a policy that passes only if all given policies pass (AND logic). Policies are evaluated in order; evaluation stops at the first failure.
+
+**Example:**
+
+```go
+combined := policy.RequireAll(sigPolicy, slsaPolicy)
+```
+
+##### RequireAny
+
+```go
+func RequireAny(policies ...registry.Policy) registry.Policy
+```
+
+RequireAny returns a policy that passes if at least one policy passes (OR logic).
+
+**Example:**
+
+```go
+multiSource := policy.RequireAny(
+    slsa.GitHubActionsWorkflow("myorg/repo1"),
+    slsa.GitHubActionsWorkflow("myorg/repo2"),
+)
+```
+
+---
+
 ### Package blob/policy/sigstore
 
 ```
@@ -827,17 +870,167 @@ Package sigstore provides Sigstore signature verification policies.
 
 #### Functions
 
+##### GitHubActionsPolicy
+
 ```go
-func NewPolicy(opts ...Option) (Policy, error)
+func GitHubActionsPolicy(repo string, opts ...GitHubActionsOption) (*Policy, error)
 ```
 
-NewPolicy creates a Sigstore verification policy.
+GitHubActionsPolicy creates a policy requiring signatures from GitHub Actions workflows in the specified repository. The repo parameter should be in "owner/repo" format.
 
-#### Options
+**Parameters:**
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| repo | `string` | GitHub repository in "owner/repo" format |
+| opts | `...GitHubActionsOption` | Optional restrictions |
+
+**Options:**
 
 | Option | Description |
 |--------|-------------|
-| `WithIdentity(issuer, subject string)` | Require signatures from specific issuer/subject |
+| `AllowBranches(branches ...string)` | Restrict to specific branches (without "refs/heads/" prefix). Supports wildcards: "release/*" |
+| `AllowTags(tags ...string)` | Restrict to specific tags (without "refs/tags/" prefix). Supports wildcards: "v*" |
+| `AllowRefs(refs ...string)` | Restrict to arbitrary refs (full path like "refs/heads/main") |
+
+**Example:**
+
+```go
+// Accept any ref
+policy, _ := sigstore.GitHubActionsPolicy("myorg/myrepo")
+
+// Accept main branch and release tags
+policy, _ := sigstore.GitHubActionsPolicy("myorg/myrepo",
+    sigstore.AllowBranches("main"),
+    sigstore.AllowTags("v*"),
+)
+```
+
+##### NewPolicy (Advanced)
+
+```go
+func NewPolicy(opts ...Option) (*Policy, error)
+```
+
+NewPolicy creates a Sigstore verification policy with custom identity requirements. Use this for non-GitHub-Actions signers or custom OIDC providers.
+
+**Options:**
+
+| Option | Description |
+|--------|-------------|
+| `WithIdentity(issuer, subject string)` | Require signatures from specific OIDC issuer and subject |
+
+**Example:**
+
+```go
+policy, _ := sigstore.NewPolicy(
+    sigstore.WithIdentity(
+        "https://token.actions.githubusercontent.com",
+        "https://github.com/myorg/myrepo/.github/workflows/release.yml@refs/heads/main",
+    ),
+)
+```
+
+---
+
+### Package blob/policy/slsa
+
+```
+import "github.com/meigma/blob/policy/slsa"
+```
+
+Package slsa provides SLSA provenance validation policies.
+
+#### Functions
+
+##### GitHubActionsWorkflow
+
+```go
+func GitHubActionsWorkflow(repo string, opts ...GitHubActionsWorkflowOption) (*Policy, error)
+```
+
+GitHubActionsWorkflow creates a policy validating SLSA provenance from GitHub Actions workflows.
+
+**Parameters:**
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| repo | `string` | GitHub repository in "owner/repo" format |
+| opts | `...GitHubActionsWorkflowOption` | Optional restrictions |
+
+**Options:**
+
+| Option | Description |
+|--------|-------------|
+| `WithWorkflowPath(path string)` | Require specific workflow file (e.g., ".github/workflows/release.yml") |
+| `WithWorkflowBranches(branches ...string)` | Restrict to specific branches. Supports wildcards. |
+| `WithWorkflowTags(tags ...string)` | Restrict to specific tags. Supports wildcards. |
+
+**Example:**
+
+```go
+policy, _ := slsa.GitHubActionsWorkflow("myorg/myrepo",
+    slsa.WithWorkflowPath(".github/workflows/release.yml"),
+    slsa.WithWorkflowBranches("main"),
+    slsa.WithWorkflowTags("v*"),
+)
+```
+
+##### RequireBuilder
+
+```go
+func RequireBuilder(builderID string) *Policy
+```
+
+RequireBuilder creates a policy requiring a specific builder ID.
+
+**Example:**
+
+```go
+policy := slsa.RequireBuilder(
+    "https://github.com/slsa-framework/slsa-github-generator/.github/workflows/generator_generic_slsa3.yml@refs/tags/v2.0.0",
+)
+```
+
+##### RequireSource
+
+```go
+func RequireSource(repo string, opts ...SourceOption) *Policy
+```
+
+RequireSource creates a policy requiring a specific source repository.
+
+**Options:**
+
+| Option | Description |
+|--------|-------------|
+| `WithRef(ref string)` | Require exact ref match |
+| `WithBranches(branches ...string)` | Allow specific branches (supports wildcards) |
+| `WithTags(tags ...string)` | Allow specific tags (supports wildcards) |
+
+**Example:**
+
+```go
+policy := slsa.RequireSource("https://github.com/myorg/myrepo",
+    slsa.WithBranches("main"),
+    slsa.WithTags("v*"),
+)
+```
+
+##### NewPolicy (Advanced)
+
+```go
+func NewPolicy(opts ...PolicyOption) (*Policy, error)
+```
+
+NewPolicy creates an SLSA policy with custom validators.
+
+**Options:**
+
+| Option | Description |
+|--------|-------------|
+| `WithLogger(logger *slog.Logger)` | Set custom logger |
+| `WithArtifactTypes(types ...string)` | Set OCI artifact types to search for attestations |
 
 ---
 
@@ -847,7 +1040,9 @@ NewPolicy creates a Sigstore verification policy.
 import "github.com/meigma/blob/policy/opa"
 ```
 
-Package opa provides OPA-based policy evaluation for SLSA attestations.
+Package opa provides OPA-based policy evaluation for custom attestation validation using Rego.
+
+> **Note:** For common GitHub Actions verification, prefer the `sigstore` and `slsa` packages which provide simpler APIs. Use OPA when you need custom Rego logic for complex validation requirements.
 
 #### Functions
 
@@ -862,4 +1057,6 @@ NewPolicy creates an OPA policy evaluator.
 | Option | Description |
 |--------|-------------|
 | `WithPolicyFile(path string)` | Load Rego policy from file |
-| `WithPolicyString(rego string)` | Use inline Rego policy |
+| `WithPolicy(rego string)` | Use inline Rego policy |
+| `WithPredicateTypes(types ...string)` | Filter attestations by predicate type |
+| `WithLogger(logger *slog.Logger)` | Set custom logger |

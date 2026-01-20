@@ -1,15 +1,13 @@
 package main
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"flag"
 	"fmt"
 	"os"
 
-	blob "github.com/meigma/blob/core"
-	"github.com/meigma/blob/registry"
+	"github.com/meigma/blob"
 )
 
 type pushConfig struct {
@@ -52,43 +50,27 @@ func push(cfg pushConfig) error {
 
 	fmt.Printf("Creating archive from %s...\n", cfg.assets)
 
-	// Create archive with zstd compression
-	var indexBuf, dataBuf bytes.Buffer
-	err = blob.Create(ctx, cfg.assets, &indexBuf, &dataBuf,
-		blob.CreateWithCompression(blob.CompressionZstd),
-	)
-	if err != nil {
-		return fmt.Errorf("create archive: %w", err)
-	}
-
-	fmt.Printf("Archive created: index=%d bytes, data=%d bytes\n",
-		indexBuf.Len(), dataBuf.Len())
-
-	// Create blob from buffers for push
-	// We need a ByteSource implementation for the data buffer
-	dataBytes := dataBuf.Bytes()
-	b, err := blob.New(indexBuf.Bytes(), &memSource{data: dataBytes})
-	if err != nil {
-		return fmt.Errorf("load archive: %w", err)
-	}
-
 	// Create client with appropriate options
-	var opts []registry.Option
-	opts = append(opts, registry.WithDockerConfig())
+	var opts []blob.Option
+	opts = append(opts, blob.WithDockerConfig())
 	if cfg.plainHTTP {
-		opts = append(opts, registry.WithPlainHTTP(true))
+		opts = append(opts, blob.WithPlainHTTP(true))
 	}
-	c := registry.New(opts...)
+
+	client, err := blob.NewClient(opts...)
+	if err != nil {
+		return fmt.Errorf("create client: %w", err)
+	}
 
 	fmt.Printf("Pushing to %s...\n", cfg.ref)
 
-	err = c.Push(ctx, cfg.ref, b)
+	err = client.Push(ctx, cfg.ref, cfg.assets, blob.PushWithCompression(blob.CompressionZstd))
 	if err != nil {
 		return fmt.Errorf("push: %w", err)
 	}
 
 	// Fetch to get the digest
-	manifest, err := c.Fetch(ctx, cfg.ref)
+	manifest, err := client.Fetch(ctx, cfg.ref)
 	if err != nil {
 		return fmt.Errorf("fetch manifest: %w", err)
 	}
@@ -99,25 +81,4 @@ func push(cfg pushConfig) error {
 	fmt.Printf("  provenance pull --ref %s\n", cfg.ref)
 
 	return nil
-}
-
-// memSource implements blob.ByteSource for in-memory data.
-type memSource struct {
-	data []byte
-}
-
-func (m *memSource) ReadAt(p []byte, off int64) (int, error) {
-	if off >= int64(len(m.data)) {
-		return 0, fmt.Errorf("offset %d exceeds data length %d", off, len(m.data))
-	}
-	n := copy(p, m.data[off:])
-	return n, nil
-}
-
-func (m *memSource) Size() int64 {
-	return int64(len(m.data))
-}
-
-func (m *memSource) SourceID() string {
-	return "memory"
 }

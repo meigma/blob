@@ -14,7 +14,7 @@ Blob enables random access to individual files via HTTP range requests without d
 - **OCI-native**: Push and pull archives to any OCI 1.1 registry
 - **Lazy loading**: Read any file via HTTP range requests without downloading the entire archive
 - **Integrity**: Per-file SHA256 hashes protect against corruption
-- **Supply chain security**: Sigstore signing and SLSA provenance with OPA policy verification
+- **Supply chain security**: Sigstore signing and SLSA provenance with simple verification helpers
 - **Directory fetches**: Efficiently retrieve all files in a directory with a single request
 - **Content-addressed caching**: Automatic deduplication across archives
 

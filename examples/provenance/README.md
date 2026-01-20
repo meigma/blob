@@ -27,9 +27,8 @@ go build -o provenance .
 The included workflow (`.github/workflows/provenance.yml`) demonstrates the full provenance flow:
 
 1. **Build and Push**: Archives assets and pushes to GHCR
-2. **Sign**: Uses Sigstore cosign with GitHub OIDC (keyless)
-3. **Attest**: Attaches SLSA provenance via `actions/attest-build-provenance`
-4. **Verify**: Pulls with full policy enforcement
+2. **Attest**: Attaches SLSA provenance via `actions/attest-build-provenance`
+3. **Verify**: Pulls with full policy enforcement
 
 ### Workflow Triggers
 
@@ -51,50 +50,78 @@ permissions:
 After the workflow runs, verify manually:
 
 ```bash
-# Pull with signature verification
+# Pull with full verification (signature + SLSA provenance)
 go run . pull \
   --ref ghcr.io/meigma/blob/provenance-example:latest \
-  --policy ./policy/policy.rego
+  --repo meigma/blob
 
-# Specify expected signer identity
+# Pull from a different repository
 go run . pull \
-  --ref ghcr.io/meigma/blob/provenance-example:latest \
-  --issuer https://token.actions.githubusercontent.com \
-  --subject https://github.com/meigma/blob/.github/workflows/provenance.yml@refs/heads/main
+  --ref ghcr.io/myorg/myrepo/archive:v1 \
+  --repo myorg/myrepo
 ```
 
-## Policy Customization
+## Policy Configuration
 
-The OPA policy in `policy/policy.rego` validates SLSA provenance. Customize it for your needs:
+Verification uses Go-native policies instead of OPA/Rego:
 
-### Allow Specific Organizations
+- **Sigstore Policy**: Verifies signatures from GitHub Actions OIDC
+- **SLSA Policy**: Validates SLSA provenance attestations
 
-```rego
-# Only allow builds from your organization
-allowed_orgs := {
-    "your-org",
-}
+### Sigstore Verification
+
+The `sigstore.GitHubActionsPolicy()` helper automatically configures:
+- GitHub Actions OIDC issuer (`https://token.actions.githubusercontent.com`)
+- Repository-scoped subject matching
+
+```go
+// Verify signatures from any workflow in the repository
+policy, _ := sigstore.GitHubActionsPolicy("myorg/myrepo")
+
+// Restrict to specific branches
+policy, _ := sigstore.GitHubActionsPolicy("myorg/myrepo",
+    sigstore.AllowBranches("main", "release/*"),
+)
+
+// Restrict to specific tags
+policy, _ := sigstore.GitHubActionsPolicy("myorg/myrepo",
+    sigstore.AllowTags("v*"),
+)
 ```
 
-### Add Custom Builders
+### SLSA Provenance Verification
 
-```rego
-# Trust additional builders
-trusted_builders := {
-    "https://github.com/actions/runner/github-hosted",
-    "https://your-custom-builder.example.com",
-}
+The `slsa.GitHubActionsWorkflow()` helper validates:
+- Build was run by GitHub Actions
+- Source repository matches expected value
+- Optional: workflow path and ref restrictions
+
+```go
+// Verify SLSA provenance from any workflow
+policy, _ := slsa.GitHubActionsWorkflow("myorg/myrepo")
+
+// Restrict to specific workflow
+policy, _ := slsa.GitHubActionsWorkflow("myorg/myrepo",
+    slsa.WithWorkflowPath(".github/workflows/release.yml"),
+)
+
+// Restrict to specific branches/tags
+policy, _ := slsa.GitHubActionsWorkflow("myorg/myrepo",
+    slsa.WithWorkflowBranches("main"),
+    slsa.WithWorkflowTags("v*"),
+)
 ```
 
-### Require Specific Workflows
+### Combining Policies
 
-```rego
-# Only allow builds from specific workflows
-allow if {
-    some att in input.attestations
-    is_slsa_provenance(att)
-    att.predicate.buildDefinition.externalParameters.workflow.path == ".github/workflows/release.yml"
-}
+Use `policy.RequireAll()` to combine multiple policies:
+
+```go
+combined := policy.RequireAll(
+    sigstorePolicy,  // Signature verification
+    slsaPolicy,      // Provenance verification
+)
+client, _ := blob.NewClient(blob.WithPolicy(combined))
 ```
 
 ## Architecture
@@ -103,30 +130,30 @@ allow if {
 ┌─────────────────────────────────────────────────────────────────────┐
 │                         GitHub Actions                               │
 ├─────────────────────────────────────────────────────────────────────┤
-│  1. Build Archive      2. Sign (Cosign)     3. Attest (SLSA)        │
-│  ┌──────────────┐      ┌──────────────┐     ┌──────────────┐        │
-│  │ blob.Create  │─────▶│ cosign sign  │────▶│ attest-build │        │
-│  │ client.Push  │      │ (keyless)    │     │ -provenance  │        │
-│  └──────────────┘      └──────────────┘     └──────────────┘        │
-│         │                     │                    │                 │
-│         ▼                     ▼                    ▼                 │
-│  ┌────────────────────────────────────────────────────────────┐     │
-│  │                    OCI Registry (GHCR)                      │     │
-│  │  ┌─────────────┐  ┌─────────────┐  ┌─────────────────────┐ │     │
-│  │  │  Manifest   │  │  Sigstore   │  │ SLSA Attestation    │ │     │
-│  │  │  (archive)  │◀─│  Bundle     │  │ (in-toto)           │ │     │
-│  │  └─────────────┘  └─────────────┘  └─────────────────────┘ │     │
-│  │        ▲              referrer         referrer             │     │
-│  └────────┼────────────────────────────────────────────────────┘     │
-└───────────┼─────────────────────────────────────────────────────────┘
+│  1. Build Archive           2. Attest (SLSA)                         │
+│  ┌──────────────┐           ┌──────────────┐                         │
+│  │ blob.Create  │──────────▶│ attest-build │                         │
+│  │ client.Push  │           │ -provenance  │                         │
+│  └──────────────┘           └──────────────┘                         │
+│         │                          │                                  │
+│         ▼                          ▼                                  │
+│  ┌────────────────────────────────────────────────────────────┐      │
+│  │                    OCI Registry (GHCR)                      │      │
+│  │  ┌─────────────┐  ┌─────────────────────────────────────┐  │      │
+│  │  │  Manifest   │  │ SLSA Attestation (Sigstore Bundle)  │  │      │
+│  │  │  (archive)  │◀─│ - SLSA provenance                   │  │      │
+│  │  └─────────────┘  │ - Sigstore signature                │  │      │
+│  │        ▲          └─────────────────────────────────────┘  │      │
+│  └────────┼───────────────────────────────────────────────────┘      │
+└───────────┼──────────────────────────────────────────────────────────┘
             │
             ▼
 ┌─────────────────────────────────────────────────────────────────────┐
 │                           Consumer                                   │
 ├─────────────────────────────────────────────────────────────────────┤
 │  ┌──────────────┐      ┌──────────────┐     ┌──────────────┐        │
-│  │ client.Pull  │─────▶│ sigstore     │────▶│ opa.Policy   │        │
-│  │              │      │ .Policy      │     │ (SLSA check) │        │
+│  │ client.Pull  │─────▶│ sigstore     │────▶│ slsa.Policy  │        │
+│  │              │      │ .Policy      │     │ (Go-native)  │        │
 │  └──────────────┘      └──────────────┘     └──────────────┘        │
 │         │                                          │                 │
 │         │◀─────────── Verification Passed ─────────┘                 │
@@ -145,15 +172,12 @@ allow if {
 | `push.go` | Archive creation and push logic |
 | `pull.go` | Pull with policy verification |
 | `assets/` | Sample files to archive |
-| `policy/policy.rego` | OPA policy for SLSA validation |
 
 ## Dependencies
 
-- `github.com/meigma/blob` - Archive creation
-- `github.com/meigma/blob/client` - OCI registry operations
+- `github.com/meigma/blob` - High-level archive client
 - `github.com/meigma/blob/policy/sigstore` - Signature verification
-- `github.com/meigma/blob/policy/opa` - Attestation policy engine
+- `github.com/meigma/blob/policy/slsa` - SLSA provenance validation
 
 External tools (CI only):
-- [cosign](https://github.com/sigstore/cosign) - Keyless signing
-- [actions/attest-build-provenance](https://github.com/actions/attest-build-provenance) - SLSA attestation
+- [actions/attest-build-provenance](https://github.com/actions/attest-build-provenance) - SLSA attestation with Sigstore signing

@@ -492,10 +492,12 @@ c, _ := blob.NewClient(blob.WithDockerConfig())
 c.Push(ctx, "ghcr.io/org/configs:v1", "./src")
 
 // Pull with verification policies
+sigPolicy, _ := sigstore.GitHubActionsPolicy("myorg/myrepo")
+slsaPolicy, _ := slsa.GitHubActionsWorkflow("myorg/myrepo")
+
 c, _ := blob.NewClient(
     blob.WithDockerConfig(),
-    blob.WithPolicy(sigstore.NewPolicy(...)),
-    blob.WithPolicy(opa.NewPolicy(...)),
+    blob.WithPolicy(policy.RequireAll(sigPolicy, slsaPolicy)),
 )
 
 // Lazy load - only downloads what you read

@@ -340,34 +340,32 @@ For production deployments, add supply chain security to verify archive provenan
 ```go
 import (
     "github.com/meigma/blob"
+    "github.com/meigma/blob/policy"
     "github.com/meigma/blob/policy/sigstore"
-    "github.com/meigma/blob/policy/opa"
+    "github.com/meigma/blob/policy/slsa"
 )
 
-// Verify Sigstore signatures
-sigPolicy, _ := sigstore.NewPolicy(
-    sigstore.WithIdentity(
-        "https://token.actions.githubusercontent.com",
-        "https://github.com/myorg/myrepo/.github/workflows/release.yml@refs/heads/main",
-    ),
+// Verify signatures from GitHub Actions
+sigPolicy, _ := sigstore.GitHubActionsPolicy("myorg/myrepo",
+    sigstore.AllowBranches("main"),
+    sigstore.AllowTags("v*"),
 )
 
-// Validate SLSA provenance with OPA
-opaPolicy, _ := opa.NewPolicy(
-    opa.WithPolicyFile("./policy.rego"),
+// Validate SLSA provenance
+slsaPolicy, _ := slsa.GitHubActionsWorkflow("myorg/myrepo",
+    slsa.WithWorkflowPath(".github/workflows/release.yml"),
 )
 
-// Create client with both policies
+// Combine policies (both must pass)
 c, _ := blob.NewClient(
     blob.WithDockerConfig(),
-    blob.WithPolicy(sigPolicy),
-    blob.WithPolicy(opaPolicy),
+    blob.WithPolicy(policy.RequireAll(sigPolicy, slsaPolicy)),
 )
 
 // Pull rejects archives that fail verification
 archive, err := c.Pull(ctx, ref)
 ```
 
-This ensures archives are signed by trusted identities and built through authorized CI/CD pipelines.
+This ensures archives are signed by trusted workflows and built through authorized CI/CD pipelines.
 
-See the [Provenance & Signing](guides/provenance) guide for complete implementation details, including OPA policy examples and CI/CD integration.
+See the [Provenance & Signing](guides/provenance) guide for complete implementation details, including custom OPA policies for advanced use cases.

@@ -119,7 +119,7 @@ jobs:
           echo "Pulling with attestation verification: $REF"
           ./provenance pull \
             --ref "$REF" \
-            --policy ./policy/policy.rego \
+            --repo "meigma/blob" \
             --output ./verified-output
 
       - name: Verify extraction
