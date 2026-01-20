@@ -4,6 +4,9 @@ import blobcore "github.com/meigma/blob/core"
 
 // --- Re-exports from core ---
 
+// IndexView provides read-only access to archive file metadata.
+type IndexView = blobcore.IndexView
+
 // Compression identifies the compression algorithm used for a file.
 type Compression = blobcore.Compression
 

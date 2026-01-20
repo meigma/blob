@@ -16,8 +16,9 @@ This tutorial walks through the complete workflow of creating a blob archive, pu
 
 We will create a simple program that:
 1. Creates and pushes an archive in a single call
-2. Pulls the archive and reads files lazily
-3. Adds caching for improved performance
+2. Inspects archive metadata without downloading data
+3. Pulls the archive and reads files lazily
+4. Adds caching for improved performance
 
 ## Step 1: Create a Project
 
@@ -133,7 +134,32 @@ c, err := blob.NewClient(
 )
 ```
 
-## Step 4: Pull and Read Files Lazily
+## Step 4: Inspect Archive Metadata
+
+Before pulling the full archive, you can inspect its metadata without downloading the data blob:
+
+```go
+// Inspect fetches only manifest and file index (no data blob)
+result, err := c.Inspect(ctx, ref)
+if err != nil {
+	return fmt.Errorf("inspect archive: %w", err)
+}
+
+fmt.Printf("Archive digest: %s\n", result.Digest())
+fmt.Printf("Files: %d\n", result.FileCount())
+fmt.Printf("Data size: %d bytes\n", result.DataBlobSize())
+fmt.Printf("Compression ratio: %.2f\n", result.CompressionRatio())
+
+// List all files without downloading any data
+fmt.Println("\nFiles in archive:")
+for entry := range result.Index().Entries() {
+	fmt.Printf("  %s (%d bytes)\n", entry.Path(), entry.OriginalSize())
+}
+```
+
+This is useful for checking archive contents before deciding to pull, or for building file browsers that don't need the actual file data.
+
+## Step 5: Pull and Read Files Lazily
 
 Pull the archive and read files. Data is fetched on demand via HTTP range requests:
 
@@ -171,7 +197,7 @@ for _, entry := range entries {
 }
 ```
 
-## Step 5: Add Caching
+## Step 6: Add Caching
 
 Add caching with a single option. `WithCacheDir` enables all cache layers:
 

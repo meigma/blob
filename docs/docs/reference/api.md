@@ -131,6 +131,29 @@ Fetch retrieves manifest metadata without downloading data. Use to check if an a
 | manifest | `*Manifest` | Manifest metadata |
 | err | `error` | Non-nil if fetch fails |
 
+#### Inspect
+
+```go
+func (c *Client) Inspect(ctx context.Context, ref string, opts ...InspectOption) (*InspectResult, error)
+```
+
+Inspect retrieves archive metadata (manifest and file index) without downloading the data blob. Use to examine archive contents, file listings, and statistics before deciding to pull.
+
+**Parameters:**
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| ctx | `context.Context` | Context for cancellation |
+| ref | `string` | OCI reference (e.g., "ghcr.io/org/repo:v1") |
+| opts | `...InspectOption` | Inspect configuration options |
+
+**Returns:**
+
+| Return | Type | Description |
+|--------|------|-------------|
+| result | `*InspectResult` | Archive metadata with manifest and file index |
+| err | `error` | Non-nil if inspect fails |
+
 #### Tag
 
 ```go
@@ -172,6 +195,115 @@ type Manifest = registry.BlobManifest
 ```
 
 Manifest represents a blob archive manifest from an OCI registry. This is an alias for `registry.BlobManifest`.
+
+---
+
+### InspectResult
+
+```go
+type InspectResult struct {
+    // contains filtered or unexported fields
+}
+```
+
+InspectResult contains metadata about a blob archive without the data blob. It provides access to the manifest, file index, and computed statistics.
+
+**Methods:**
+
+| Method | Return Type | Description |
+|--------|-------------|-------------|
+| `Manifest()` | `*Manifest` | Returns the OCI manifest metadata |
+| `Index()` | `*IndexView` | Returns the file index view |
+| `Digest()` | `string` | Returns the manifest digest |
+| `Created()` | `time.Time` | Returns the archive creation time |
+| `FileCount()` | `int` | Returns the number of files in the archive |
+| `DataBlobSize()` | `int64` | Returns the size of the data blob (compressed) |
+| `IndexBlobSize()` | `int64` | Returns the size of the index blob |
+| `TotalUncompressedSize()` | `uint64` | Returns sum of all uncompressed file sizes (cached) |
+| `TotalCompressedSize()` | `uint64` | Returns sum of all compressed file sizes (cached) |
+| `CompressionRatio()` | `float64` | Returns compressed/uncompressed ratio (cached) |
+| `Referrers(ctx, artifactType)` | `([]Referrer, error)` | Fetches referrer artifacts (signatures, attestations) |
+
+**Example:**
+
+```go
+result, err := c.Inspect(ctx, "ghcr.io/myorg/myarchive:v1.0.0")
+if err != nil {
+    return err
+}
+
+fmt.Printf("Digest: %s\n", result.Digest())
+fmt.Printf("Files: %d\n", result.FileCount())
+fmt.Printf("Data size: %d bytes\n", result.DataBlobSize())
+fmt.Printf("Compression ratio: %.2f\n", result.CompressionRatio())
+
+// List files without downloading data
+for entry := range result.Index().Entries() {
+    fmt.Printf("  %s (%d bytes)\n", entry.Path(), entry.OriginalSize())
+}
+
+// Fetch signatures (lazy, on-demand)
+referrers, err := result.Referrers(ctx, "")
+if err == nil {
+    fmt.Printf("Found %d referrers\n", len(referrers))
+}
+```
+
+---
+
+### IndexView
+
+```go
+type IndexView struct {
+    // contains filtered or unexported fields
+}
+```
+
+IndexView provides read-only access to archive file metadata without the data blob. It exposes index iteration and lookup for inspecting archive contents.
+
+**Methods:**
+
+| Method | Return Type | Description |
+|--------|-------------|-------------|
+| `Len()` | `int` | Returns the number of files in the archive |
+| `Version()` | `uint32` | Returns the index format version |
+| `DataHash()` | `([]byte, bool)` | Returns the SHA256 hash of the data blob |
+| `DataSize()` | `(uint64, bool)` | Returns the size of the data blob in bytes |
+| `Entry(path)` | `(EntryView, bool)` | Returns a read-only view of the entry for the given path |
+| `Entries()` | `iter.Seq[EntryView]` | Returns an iterator over all file entries |
+| `EntriesWithPrefix(prefix)` | `iter.Seq[EntryView]` | Returns an iterator over entries with the given prefix |
+| `IndexData()` | `[]byte` | Returns the raw FlatBuffers-encoded index |
+
+---
+
+### Referrer
+
+```go
+type Referrer struct {
+    Digest       string
+    Size         int64
+    MediaType    string
+    ArtifactType string
+    Annotations  map[string]string
+}
+```
+
+Referrer describes an artifact that references the manifest, such as signatures or attestations.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| Digest | `string` | Content-addressable identifier (e.g., "sha256:abc123...") |
+| Size | `int64` | Size of the referrer content in bytes |
+| MediaType | `string` | Format of the referrer content |
+| ArtifactType | `string` | Type of artifact (e.g., signature, attestation) |
+| Annotations | `map[string]string` | Optional metadata key-value pairs |
+
+**Common Artifact Types:**
+
+| Type | Description |
+|------|-------------|
+| `application/vnd.dev.sigstore.bundle.v0.3+json` | Sigstore signature bundle |
+| `application/vnd.in-toto+json` | In-toto attestation |
 
 ---
 
@@ -284,6 +416,19 @@ type FetchOption func(*fetchConfig)
 | Option | Description | Default |
 |--------|-------------|---------|
 | `FetchWithSkipCache()` | Bypass ref and manifest caches | false |
+
+---
+
+### Inspect Options
+
+```go
+type InspectOption func(*inspectConfig)
+```
+
+| Option | Description | Default |
+|--------|-------------|---------|
+| `InspectWithSkipCache()` | Bypass ref, manifest, and index caches | false |
+| `InspectWithMaxIndexSize(maxBytes int64)` | Limit index blob size | 8 MB |
 
 ---
 
@@ -748,6 +893,7 @@ Package registry provides direct OCI registry operations.
 |------|-------------|
 | `*Client` | Registry operations client |
 | `*BlobManifest` | Archive manifest from registry |
+| `*InspectResult` | Manifest and index data from Inspect |
 
 #### Key Functions
 
@@ -762,6 +908,7 @@ Package registry provides direct OCI registry operations.
 | `Push(ctx, ref string, b *blob.Blob, opts ...PushOption) error` | Push archive to registry |
 | `Pull(ctx, ref string, opts ...PullOption) (*blob.Blob, error)` | Pull archive from registry |
 | `Fetch(ctx, ref string, opts ...FetchOption) (*BlobManifest, error)` | Fetch manifest metadata |
+| `Inspect(ctx, ref string, opts ...InspectOption) (*InspectResult, error)` | Fetch manifest and index data |
 | `Tag(ctx, ref, digest string) error` | Create or update a tag |
 | `Resolve(ctx, ref string) (string, error)` | Resolve tag to digest |
 
