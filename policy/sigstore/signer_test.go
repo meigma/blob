@@ -81,3 +81,19 @@ func TestWithMultipleRekorInstances(t *testing.T) {
 	require.NoError(t, err)
 	assert.Len(t, signer.opts.TransparencyLogs, 2)
 }
+
+func TestSigner_SignManifest(t *testing.T) {
+	t.Parallel()
+
+	signer, err := NewSigner(WithEphemeralKey())
+	require.NoError(t, err)
+
+	ctx := context.Background()
+	payload := []byte(`{"schemaVersion":2,"mediaType":"application/vnd.oci.image.manifest.v1+json"}`)
+
+	data, mediaType, err := signer.SignManifest(ctx, payload)
+
+	require.NoError(t, err)
+	assert.NotEmpty(t, data)
+	assert.Equal(t, SignatureArtifactType, mediaType)
+}

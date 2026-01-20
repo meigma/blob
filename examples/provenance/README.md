@@ -3,9 +3,9 @@
 This example demonstrates end-to-end provenance verification for blob archives, including:
 
 - Creating and pushing archives to OCI registries
-- Signing with Sigstore (keyless via GitHub OIDC)
-- Attaching SLSA provenance attestations
-- Pulling with policy-based verification
+- Signing manifests using sigstore (keyless via GitHub OIDC)
+- Pulling with policy-based signature verification
+- Validating SLSA provenance attestations (optional)
 
 ## Quick Start (Local Testing)
 
@@ -27,8 +27,8 @@ go build -o provenance .
 The included workflow (`.github/workflows/provenance.yml`) demonstrates the full provenance flow:
 
 1. **Build and Push**: Archives assets and pushes to GHCR
-2. **Attest**: Attaches SLSA provenance via `actions/attest-build-provenance`
-3. **Verify**: Pulls with full policy enforcement
+2. **Sign**: Creates sigstore signature using `client.Sign()` with keyless signing
+3. **Verify**: Pulls with signature policy enforcement
 
 ### Workflow Triggers
 
@@ -42,23 +42,38 @@ permissions:
   contents: read       # Checkout repository
   packages: write      # Push to GHCR
   id-token: write      # OIDC token for keyless signing
-  attestations: write  # Attach attestations
 ```
+
+## Signing Archives
+
+The `--sign` flag uses the blob client's built-in sigstore integration:
+
+```bash
+# Push and sign with sigstore (requires OIDC token, e.g., in GitHub Actions)
+./provenance push --ref ghcr.io/myorg/archive:v1 --sign
+```
+
+This creates a signature using:
+- **Fulcio**: Issues short-lived certificates based on OIDC identity
+- **Rekor**: Records the signature in the transparency log
+- **OCI Referrers**: Attaches signature as an OCI 1.1 referrer artifact
 
 ## Manual Verification
 
 After the workflow runs, verify manually:
 
 ```bash
-# Pull with full verification (signature + SLSA provenance)
+# Pull with signature verification
 go run . pull \
   --ref ghcr.io/meigma/blob/provenance-example:latest \
-  --repo meigma/blob
+  --repo meigma/blob \
+  --skip-attest
 
 # Pull from a different repository
 go run . pull \
   --ref ghcr.io/myorg/myrepo/archive:v1 \
-  --repo myorg/myrepo
+  --repo myorg/myrepo \
+  --skip-attest
 ```
 
 ## Policy Configuration
@@ -66,7 +81,7 @@ go run . pull \
 Verification uses Go-native policies instead of OPA/Rego:
 
 - **Sigstore Policy**: Verifies signatures from GitHub Actions OIDC
-- **SLSA Policy**: Validates SLSA provenance attestations
+- **SLSA Policy**: Validates SLSA provenance attestations (optional)
 
 ### Sigstore Verification
 
@@ -89,7 +104,28 @@ policy, _ := sigstore.GitHubActionsPolicy("myorg/myrepo",
 )
 ```
 
-### SLSA Provenance Verification
+### Signing Archives Programmatically
+
+Use `client.Sign()` with a sigstore signer:
+
+```go
+// Create signer for keyless signing
+signer, _ := sigstore.NewSigner(
+    sigstore.WithEphemeralKey(),
+    sigstore.WithFulcio("https://fulcio.sigstore.dev"),
+    sigstore.WithRekor("https://rekor.sigstore.dev"),
+    sigstore.WithAmbientCredentials(), // Uses OIDC from environment
+)
+
+// Push archive
+client, _ := blob.NewClient(blob.WithDockerConfig())
+client.Push(ctx, ref, srcDir)
+
+// Sign the manifest (creates OCI 1.1 referrer)
+sigDigest, _ := client.Sign(ctx, ref, signer)
+```
+
+### SLSA Provenance Verification (Optional)
 
 The `slsa.GitHubActionsWorkflow()` helper validates:
 - Build was run by GitHub Actions
@@ -104,12 +140,6 @@ policy, _ := slsa.GitHubActionsWorkflow("myorg/myrepo")
 policy, _ := slsa.GitHubActionsWorkflow("myorg/myrepo",
     slsa.WithWorkflowPath(".github/workflows/release.yml"),
 )
-
-// Restrict to specific branches/tags
-policy, _ := slsa.GitHubActionsWorkflow("myorg/myrepo",
-    slsa.WithWorkflowBranches("main"),
-    slsa.WithWorkflowTags("v*"),
-)
 ```
 
 ### Combining Policies
@@ -119,7 +149,7 @@ Use `policy.RequireAll()` to combine multiple policies:
 ```go
 combined := policy.RequireAll(
     sigstorePolicy,  // Signature verification
-    slsaPolicy,      // Provenance verification
+    slsaPolicy,      // Provenance verification (optional)
 )
 client, _ := blob.NewClient(blob.WithPolicy(combined))
 ```
@@ -130,20 +160,22 @@ client, _ := blob.NewClient(blob.WithPolicy(combined))
 ┌─────────────────────────────────────────────────────────────────────┐
 │                         GitHub Actions                               │
 ├─────────────────────────────────────────────────────────────────────┤
-│  1. Build Archive           2. Attest (SLSA)                         │
+│  1. Build & Push              2. Sign (Sigstore)                     │
 │  ┌──────────────┐           ┌──────────────┐                         │
-│  │ blob.Create  │──────────▶│ attest-build │                         │
-│  │ client.Push  │           │ -provenance  │                         │
-│  └──────────────┘           └──────────────┘                         │
+│  │ blob.Create  │──────────▶│ client.Sign  │                         │
+│  │ client.Push  │           │ (Fulcio+     │                         │
+│  └──────────────┘           │  Rekor)      │                         │
+│         │                   └──────────────┘                         │
 │         │                          │                                  │
 │         ▼                          ▼                                  │
 │  ┌────────────────────────────────────────────────────────────┐      │
 │  │                    OCI Registry (GHCR)                      │      │
 │  │  ┌─────────────┐  ┌─────────────────────────────────────┐  │      │
-│  │  │  Manifest   │  │ SLSA Attestation (Sigstore Bundle)  │  │      │
-│  │  │  (archive)  │◀─│ - SLSA provenance                   │  │      │
-│  │  └─────────────┘  │ - Sigstore signature                │  │      │
-│  │        ▲          └─────────────────────────────────────┘  │      │
+│  │  │  Manifest   │◀─│ Signature (OCI 1.1 Referrer)        │  │      │
+│  │  │  (archive)  │  │ - Sigstore bundle                   │  │      │
+│  │  └─────────────┘  │ - Fulcio certificate                │  │      │
+│  │        ▲          │ - Rekor inclusion proof             │  │      │
+│  │        │          └─────────────────────────────────────┘  │      │
 │  └────────┼───────────────────────────────────────────────────┘      │
 └───────────┼──────────────────────────────────────────────────────────┘
             │
@@ -151,13 +183,13 @@ client, _ := blob.NewClient(blob.WithPolicy(combined))
 ┌─────────────────────────────────────────────────────────────────────┐
 │                           Consumer                                   │
 ├─────────────────────────────────────────────────────────────────────┤
-│  ┌──────────────┐      ┌──────────────┐     ┌──────────────┐        │
-│  │ client.Pull  │─────▶│ sigstore     │────▶│ slsa.Policy  │        │
-│  │              │      │ .Policy      │     │ (Go-native)  │        │
-│  └──────────────┘      └──────────────┘     └──────────────┘        │
-│         │                                          │                 │
-│         │◀─────────── Verification Passed ─────────┘                 │
-│         ▼                                                            │
+│  ┌──────────────┐      ┌──────────────┐                              │
+│  │ client.Pull  │─────▶│ sigstore     │                              │
+│  │              │      │ .Policy      │                              │
+│  └──────────────┘      └──────────────┘                              │
+│         │                     │                                      │
+│         │◀── Verification ────┘                                      │
+│         ▼        Passed                                              │
 │  ┌──────────────┐                                                    │
 │  │ blob.CopyDir │  Extract verified files                            │
 │  └──────────────┘                                                    │
@@ -169,15 +201,12 @@ client, _ := blob.NewClient(blob.WithPolicy(combined))
 | File | Description |
 |------|-------------|
 | `main.go` | CLI entrypoint with subcommand dispatch |
-| `push.go` | Archive creation and push logic |
+| `push.go` | Archive creation, push, and signing logic |
 | `pull.go` | Pull with policy verification |
 | `assets/` | Sample files to archive |
 
 ## Dependencies
 
-- `github.com/meigma/blob` - High-level archive client
-- `github.com/meigma/blob/policy/sigstore` - Signature verification
-- `github.com/meigma/blob/policy/slsa` - SLSA provenance validation
-
-External tools (CI only):
-- [actions/attest-build-provenance](https://github.com/actions/attest-build-provenance) - SLSA attestation with Sigstore signing
+- `github.com/meigma/blob` - High-level archive client with signing
+- `github.com/meigma/blob/policy/sigstore` - Signature verification and signing
+- `github.com/meigma/blob/policy/slsa` - SLSA provenance validation (optional)

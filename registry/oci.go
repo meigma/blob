@@ -35,6 +35,10 @@ type OCIClient interface {
 	// Tag creates or updates a tag pointing to the given descriptor.
 	Tag(ctx context.Context, repoRef string, desc *ocispec.Descriptor, tag string) error
 
+	// PushManifestByDigest pushes a manifest without a tag, referenced only by digest.
+	// This is used for OCI 1.1 referrer artifacts that don't need a tag.
+	PushManifestByDigest(ctx context.Context, repoRef string, manifest *ocispec.Manifest) (ocispec.Descriptor, error)
+
 	// BlobURL returns the URL for direct blob access via HTTP range requests.
 	BlobURL(repoRef, digest string) (string, error)
 

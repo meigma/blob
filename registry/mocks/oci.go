@@ -5,24 +5,22 @@ package mocks
 
 import (
 	"context"
+	"github.com/meigma/blob/registry"
+	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 	"io"
 	"net/http"
 	"sync"
-
-	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
-
-	"github.com/meigma/blob/registry"
 )
 
 // Ensure, that OCIClientMock does implement registry.OCIClient.
 // If this is not the case, regenerate this file with moq.
 var _ registry.OCIClient = &OCIClientMock{}
 
-// OCIClientMock is a mock implementation of client.OCIClient.
+// OCIClientMock is a mock implementation of registry.OCIClient.
 //
 //	func TestSomethingThatUsesOCIClient(t *testing.T) {
 //
-//		// make and configure a mocked client.OCIClient
+//		// make and configure a mocked registry.OCIClient
 //		mockedOCIClient := &OCIClientMock{
 //			AuthHeadersFunc: func(ctx context.Context, repoRef string) (http.Header, error) {
 //				panic("mock out the AuthHeaders method")
@@ -45,6 +43,9 @@ var _ registry.OCIClient = &OCIClientMock{}
 //			PushManifestFunc: func(ctx context.Context, repoRef string, tag string, manifest *ocispec.Manifest) (ocispec.Descriptor, error) {
 //				panic("mock out the PushManifest method")
 //			},
+//			PushManifestByDigestFunc: func(ctx context.Context, repoRef string, manifest *ocispec.Manifest) (ocispec.Descriptor, error) {
+//				panic("mock out the PushManifestByDigest method")
+//			},
 //			ResolveFunc: func(ctx context.Context, repoRef string, ref string) (ocispec.Descriptor, error) {
 //				panic("mock out the Resolve method")
 //			},
@@ -53,7 +54,7 @@ var _ registry.OCIClient = &OCIClientMock{}
 //			},
 //		}
 //
-//		// use mockedOCIClient in code that requires client.OCIClient
+//		// use mockedOCIClient in code that requires registry.OCIClient
 //		// and then make assertions.
 //
 //	}
@@ -78,6 +79,9 @@ type OCIClientMock struct {
 
 	// PushManifestFunc mocks the PushManifest method.
 	PushManifestFunc func(ctx context.Context, repoRef string, tag string, manifest *ocispec.Manifest) (ocispec.Descriptor, error)
+
+	// PushManifestByDigestFunc mocks the PushManifestByDigest method.
+	PushManifestByDigestFunc func(ctx context.Context, repoRef string, manifest *ocispec.Manifest) (ocispec.Descriptor, error)
 
 	// ResolveFunc mocks the Resolve method.
 	ResolveFunc func(ctx context.Context, repoRef string, ref string) (ocispec.Descriptor, error)
@@ -146,6 +150,15 @@ type OCIClientMock struct {
 			// Manifest is the manifest argument value.
 			Manifest *ocispec.Manifest
 		}
+		// PushManifestByDigest holds details about calls to the PushManifestByDigest method.
+		PushManifestByDigest []struct {
+			// Ctx is the ctx argument value.
+			Ctx context.Context
+			// RepoRef is the repoRef argument value.
+			RepoRef string
+			// Manifest is the manifest argument value.
+			Manifest *ocispec.Manifest
+		}
 		// Resolve holds details about calls to the Resolve method.
 		Resolve []struct {
 			// Ctx is the ctx argument value.
@@ -174,6 +187,7 @@ type OCIClientMock struct {
 	lockInvalidateAuthHeaders sync.RWMutex
 	lockPushBlob              sync.RWMutex
 	lockPushManifest          sync.RWMutex
+	lockPushManifestByDigest  sync.RWMutex
 	lockResolve               sync.RWMutex
 	lockTag                   sync.RWMutex
 }
@@ -447,6 +461,46 @@ func (mock *OCIClientMock) PushManifestCalls() []struct {
 	mock.lockPushManifest.RLock()
 	calls = mock.calls.PushManifest
 	mock.lockPushManifest.RUnlock()
+	return calls
+}
+
+// PushManifestByDigest calls PushManifestByDigestFunc.
+func (mock *OCIClientMock) PushManifestByDigest(ctx context.Context, repoRef string, manifest *ocispec.Manifest) (ocispec.Descriptor, error) {
+	if mock.PushManifestByDigestFunc == nil {
+		panic("OCIClientMock.PushManifestByDigestFunc: method is nil but OCIClient.PushManifestByDigest was just called")
+	}
+	callInfo := struct {
+		Ctx      context.Context
+		RepoRef  string
+		Manifest *ocispec.Manifest
+	}{
+		Ctx:      ctx,
+		RepoRef:  repoRef,
+		Manifest: manifest,
+	}
+	mock.lockPushManifestByDigest.Lock()
+	mock.calls.PushManifestByDigest = append(mock.calls.PushManifestByDigest, callInfo)
+	mock.lockPushManifestByDigest.Unlock()
+	return mock.PushManifestByDigestFunc(ctx, repoRef, manifest)
+}
+
+// PushManifestByDigestCalls gets all the calls that were made to PushManifestByDigest.
+// Check the length with:
+//
+//	len(mockedOCIClient.PushManifestByDigestCalls())
+func (mock *OCIClientMock) PushManifestByDigestCalls() []struct {
+	Ctx      context.Context
+	RepoRef  string
+	Manifest *ocispec.Manifest
+} {
+	var calls []struct {
+		Ctx      context.Context
+		RepoRef  string
+		Manifest *ocispec.Manifest
+	}
+	mock.lockPushManifestByDigest.RLock()
+	calls = mock.calls.PushManifestByDigest
+	mock.lockPushManifestByDigest.RUnlock()
 	return calls
 }
 

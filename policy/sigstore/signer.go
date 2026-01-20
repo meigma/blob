@@ -81,3 +81,14 @@ func (s *Signer) Sign(ctx context.Context, payload []byte) (*Signature, error) {
 		MediaType: SignatureArtifactType,
 	}, nil
 }
+
+// SignManifest signs the payload and returns raw signature data and media type.
+//
+// This method satisfies the blob.ManifestSigner interface.
+func (s *Signer) SignManifest(ctx context.Context, payload []byte) (data []byte, mediaType string, err error) {
+	sig, err := s.Sign(ctx, payload)
+	if err != nil {
+		return nil, "", err
+	}
+	return sig.Data, sig.MediaType, nil
+}

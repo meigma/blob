@@ -6,13 +6,15 @@ on:
       - main
     paths:
       - 'examples/provenance/**'
+  pull_request:
+    branches:
+      - master
   workflow_dispatch:
 
 permissions:
   contents: read
   packages: write
   id-token: write
-  attestations: write
 
 env:
   REGISTRY: ghcr.io
@@ -55,27 +57,22 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Push archive to registry
+      - name: Push and sign archive
         id: push
         working-directory: examples/provenance
         run: |
           REF="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}"
-          ./provenance push --ref "$REF"
+
+          # Push and sign with sigstore (keyless)
+          ./provenance push --ref "$REF" --sign
 
           # Get the digest from the manifest
           DIGEST=$(./provenance push --ref "$REF" 2>&1 | grep "Digest:" | awk '{print $2}')
           echo "digest=$DIGEST" >> "$GITHUB_OUTPUT"
           echo "ref=$REF" >> "$GITHUB_OUTPUT"
 
-          # Also tag as latest
-          ./provenance push --ref "${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest"
-
-      - name: Attest build provenance
-        uses: actions/attest-build-provenance@db473fddc028af60658334401dc6fa3ffd8669fd # v2.3.0
-        with:
-          subject-name: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
-          subject-digest: ${{ steps.push.outputs.digest }}
-          push-to-registry: true
+          # Also tag and sign as latest
+          ./provenance push --ref "${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest" --sign
 
   verify:
     runs-on: ubuntu-latest
@@ -116,10 +113,11 @@ jobs:
         working-directory: examples/provenance
         run: |
           REF="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${{ needs.build-and-push.outputs.digest }}"
-          echo "Pulling with attestation verification: $REF"
+          echo "Pulling with signature verification: $REF"
           ./provenance pull \
             --ref "$REF" \
             --repo "meigma/blob" \
+            --skip-attest \
             --output ./verified-output
 
       - name: Verify extraction
