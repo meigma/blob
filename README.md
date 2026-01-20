@@ -14,67 +14,72 @@ Requires Go 1.25 or later.
 
 ## Usage
 
-### Creating an Archive
+### Push and Pull Archives
 
 ```go
 import (
     "context"
-    "bytes"
-    "github.com/meigma/blob/core"
+    "github.com/meigma/blob"
 )
 
-var indexBuf, dataBuf bytes.Buffer
-err := blob.Create(context.Background(), "/path/to/source", &indexBuf, &dataBuf)
-```
+ctx := context.Background()
 
-### Reading Files
+// Create client with Docker credentials
+c, err := blob.NewClient(blob.WithDockerConfig())
 
-```go
-import "github.com/meigma/blob/core"
+// Push a directory to registry
+err = c.Push(ctx, "ghcr.io/myorg/myarchive:v1", "./src",
+    blob.PushWithCompression(blob.CompressionZstd),
+)
 
-// Open archive with index data and a ByteSource for the data blob
-archive, err := blob.New(indexData, source)
-
-// Read a file
+// Pull and read files lazily via HTTP range requests
+archive, err := c.Pull(ctx, "ghcr.io/myorg/myarchive:v1")
 content, err := archive.ReadFile("config/app.json")
-
-// List directory contents
 entries, err := archive.ReadDir("src")
-
-// Use as fs.FS
-f, err := archive.Open("main.go")
-```
-
-### Remote Archives via HTTP
-
-```go
-import (
-    "github.com/meigma/blob/core"
-    "github.com/meigma/blob/core/http"
-)
-
-source, err := http.NewSource(dataURL,
-    http.WithHeader("Authorization", "Bearer "+token),
-)
-archive, err := blob.New(indexData, source)
 ```
 
 ### Caching
 
 ```go
-import (
-    "github.com/meigma/blob/core/cache"
-    "github.com/meigma/blob/core/cache/disk"
+// Enable all caches with a single option
+c, err := blob.NewClient(
+    blob.WithDockerConfig(),
+    blob.WithCacheDir("/var/cache/blob"),
 )
 
-diskCache, err := disk.New("/var/cache/blob")
-cached := cache.New(archive, diskCache)
+// Subsequent pulls and reads use cached data
+archive, err := c.Pull(ctx, "ghcr.io/myorg/myarchive:v1")
+```
 
-// First read fetches from source and caches
-content, err := cached.ReadFile("lib/utils.go")
+### Low-Level Archive Creation
 
-// Second read returns from cache
-content, err = cached.ReadFile("lib/utils.go")
+```go
+import (
+    "bytes"
+    "context"
+    blobcore "github.com/meigma/blob/core"
+)
+
+var indexBuf, dataBuf bytes.Buffer
+err := blobcore.Create(context.Background(), "/path/to/source", &indexBuf, &dataBuf)
+```
+
+### Low-Level Archive Reading
+
+```go
+import (
+    blobcore "github.com/meigma/blob/core"
+    blobhttp "github.com/meigma/blob/core/http"
+)
+
+// Create HTTP source for data blob
+source, err := blobhttp.NewSource(dataURL,
+    blobhttp.WithHeader("Authorization", "Bearer "+token),
+)
+
+// Open archive with index data and byte source
+archive, err := blobcore.New(indexData, source)
+content, err := archive.ReadFile("config/app.json")
 ```
 
 ## Features
