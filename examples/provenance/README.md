@@ -6,6 +6,7 @@ This example demonstrates end-to-end provenance verification for blob archives, 
 - Signing manifests using sigstore (keyless via GitHub OIDC)
 - Pulling with policy-based signature verification
 - Validating SLSA provenance attestations (optional)
+- Verifying source authorization via gittuf (optional)
 
 ## Quick Start (Local Testing)
 
@@ -142,14 +143,47 @@ policy, _ := slsa.GitHubActionsWorkflow("myorg/myrepo",
 )
 ```
 
+### Gittuf Source Verification (Optional)
+
+The `gittuf.GitHubRepository()` helper verifies that source changes were authorized
+according to the repository's gittuf policy. This adds a third layer to the trust chain:
+
+- **Sigstore**: WHO signed the archive
+- **SLSA**: HOW the archive was built
+- **Gittuf**: WHETHER source changes were authorized
+
+```go
+// Verify source authorization for a GitHub repository
+policy, _ := gittuf.GitHubRepository("myorg", "myrepo")
+
+// Allow gradual adoption (skip if repo doesn't have gittuf)
+policy, _ := gittuf.GitHubRepository("myorg", "myrepo",
+    gittuf.WithAllowMissingGittuf(),
+)
+
+// Full RSL history verification (slower but more thorough)
+policy, _ := gittuf.GitHubRepository("myorg", "myrepo",
+    gittuf.WithFullVerification(),
+)
+```
+
+Gittuf verification works by:
+1. Extracting source info (repo, ref, commit) from SLSA provenance
+2. Cloning the source repository (cached locally)
+3. Verifying the ref against the gittuf Reference State Log (RSL)
+
+For repositories without SLSA provenance, use `WithAllowMissingProvenance()` to
+gracefully skip gittuf verification.
+
 ### Combining Policies
 
 Use `policy.RequireAll()` to combine multiple policies:
 
 ```go
 combined := policy.RequireAll(
-    sigstorePolicy,  // Signature verification
-    slsaPolicy,      // Provenance verification (optional)
+    sigstorePolicy,  // WHO signed the archive
+    slsaPolicy,      // HOW the archive was built (optional)
+    gittufPolicy,    // WHETHER source changes were authorized (optional)
 )
 client, _ := blob.NewClient(blob.WithPolicy(combined))
 ```
@@ -210,3 +244,4 @@ client, _ := blob.NewClient(blob.WithPolicy(combined))
 - `github.com/meigma/blob` - High-level archive client with signing
 - `github.com/meigma/blob/policy/sigstore` - Signature verification and signing
 - `github.com/meigma/blob/policy/slsa` - SLSA provenance validation (optional)
+- `github.com/meigma/blob/policy/gittuf` - Gittuf source verification (optional)

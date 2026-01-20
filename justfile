@@ -5,7 +5,7 @@ set shell := ["bash", "-euo", "pipefail", "-c"]
 gen_dir := "core/internal"
 
 # Policy module directories (separate go.mod files)
-policy_modules := "policy/opa policy/sigstore"
+policy_modules := "policy/opa policy/sigstore policy/gittuf"
 
 # Default recipe: validate code
 default: fmt vet lint test

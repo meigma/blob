@@ -66,6 +66,7 @@ Pull Options:
   --repo <owner/repo>  GitHub repository for verification (default: meigma/blob)
   --skip-sig           Skip signature verification
   --skip-attest        Skip attestation policy
+  --skip-gittuf        Skip gittuf source verification
   --plain-http         Use plain HTTP for local registries
 
 Examples:
