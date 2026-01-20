@@ -3,7 +3,7 @@
 // This example shows:
 //   - Creating and pushing blob archives to OCI registries
 //   - Pulling archives with sigstore signature verification
-//   - Validating SLSA provenance attestations using OPA policies
+//   - Validating SLSA provenance attestations using Go-native policies
 //
 // Usage:
 //
@@ -61,9 +61,7 @@ Push Options:
 Pull Options:
   --ref <reference>    OCI reference to pull (required)
   --output <dir>       Extraction directory (default: ./output)
-  --policy <file>      OPA policy file (default: ./policy/policy.rego)
-  --issuer <url>       Expected OIDC issuer (default: GitHub Actions)
-  --subject <id>       Expected signing identity (optional)
+  --repo <owner/repo>  GitHub repository for verification (default: meigma/blob)
   --skip-sig           Skip signature verification
   --skip-attest        Skip attestation policy
   --plain-http         Use plain HTTP for local registries
@@ -76,5 +74,5 @@ Examples:
   provenance pull --ref ttl.sh/my-archive:1h --skip-sig --skip-attest
 
   # Pull with full verification (CI artifacts)
-  provenance pull --ref ghcr.io/myorg/archive:v1 --policy ./policy/policy.rego`)
+  provenance pull --ref ghcr.io/myorg/archive@sha256:abc... --repo myorg/myrepo`)
 }
