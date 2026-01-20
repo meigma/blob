@@ -4,7 +4,7 @@ go 1.25.4
 
 require (
 	github.com/google/flatbuffers v25.12.19+incompatible
-	github.com/klauspost/compress v1.18.2
+	github.com/klauspost/compress v1.18.3
 	github.com/opencontainers/go-digest v1.0.0
 	github.com/opencontainers/image-spec v1.1.1
 	github.com/stretchr/testify v1.11.1
