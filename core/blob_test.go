@@ -17,6 +17,35 @@ import (
 	"github.com/meigma/blob/core/testutil"
 )
 
+func TestCopyDirRejectsTraversalPaths(t *testing.T) {
+	data := []byte("pwned")
+	hash := sha256.Sum256(data)
+	indexData := testutil.BuildTestIndexWithMetadata(t, []testutil.TestEntry{
+		{
+			Path:         "../pwned.txt",
+			DataOffset:   0,
+			DataSize:     uint64(len(data)),
+			OriginalSize: uint64(len(data)),
+			Hash:         hash[:],
+			Mode:         0o644,
+		},
+	}, &testutil.IndexMetadata{
+		DataSize: uint64(len(data)),
+		DataHash: hash[:],
+	})
+
+	archive, err := New(indexData, testutil.NewMockByteSource(data))
+	require.NoError(t, err)
+
+	destDir := t.TempDir()
+	err = archive.CopyDir(destDir, "")
+	var pathErr *fs.PathError
+	require.ErrorAs(t, err, &pathErr)
+	require.ErrorIs(t, pathErr.Err, fs.ErrInvalid)
+	_, statErr := os.Stat(filepath.Join(destDir, "..", "pwned.txt"))
+	require.Error(t, statErr)
+}
+
 // createTestArchive creates a Blob for testing.
 func createTestArchive(t *testing.T, files map[string][]byte, compression Compression) *Blob {
 	t.Helper()

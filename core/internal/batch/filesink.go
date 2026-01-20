@@ -1,7 +1,11 @@
 package batch
 
 import (
+	"crypto/rand"
+	"encoding/hex"
+	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 )
@@ -72,6 +76,9 @@ func (s *FileSink) ShouldProcess(entry *Entry) bool {
 	if s.overwrite {
 		return true
 	}
+	if !fs.ValidPath(entry.Path) {
+		return false
+	}
 	destPath := filepath.Join(s.destDir, filepath.FromSlash(entry.Path))
 	_, err := os.Stat(destPath)
 	return os.IsNotExist(err)
@@ -79,37 +86,53 @@ func (s *FileSink) ShouldProcess(entry *Entry) bool {
 
 // Writer returns a Committer that writes to a temp file and renames on Commit.
 func (s *FileSink) Writer(entry *Entry) (Committer, error) {
+	if !fs.ValidPath(entry.Path) {
+		return nil, &fs.PathError{Op: "copy", Path: entry.Path, Err: fs.ErrInvalid}
+	}
 	destPath := filepath.Join(s.destDir, filepath.FromSlash(entry.Path))
+	destRel := filepath.FromSlash(entry.Path)
 
 	// Create parent directories
 	dir := filepath.Dir(destPath)
-	if err := os.MkdirAll(dir, 0o750); err != nil {
+	root, err := os.OpenRoot(s.destDir)
+	if err != nil {
+		return nil, fmt.Errorf("open destination root %s: %w", s.destDir, err)
+	}
+	if err := root.MkdirAll(filepath.Dir(destRel), 0o750); err != nil {
+		_ = root.Close() //nolint:errcheck // best-effort cleanup
 		return nil, fmt.Errorf("create directory %s: %w", dir, err)
 	}
 
 	if s.directWrite {
-		file, err := os.OpenFile(destPath, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0o600) //nolint:gosec // destPath is derived from sink's destDir and entry path
+		file, err := root.OpenFile(destRel, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0o600)
 		if err != nil {
+			_ = root.Close() //nolint:errcheck // best-effort cleanup
 			return nil, fmt.Errorf("create file %s: %w", destPath, err)
 		}
 		return &directCommitter{
 			entry:    entry,
 			destPath: destPath,
+			destRel:  destRel,
 			file:     file,
+			root:     root,
 			sink:     s,
 		}, nil
 	}
 
 	// Create temp file in same directory (for atomic rename)
-	tempFile, err := os.CreateTemp(dir, ".blob-*")
+	tempFile, tempRel, err := createTempFile(root, filepath.Dir(destRel), ".blob-")
 	if err != nil {
+		_ = root.Close() //nolint:errcheck // best-effort cleanup
 		return nil, fmt.Errorf("create temp file: %w", err)
 	}
 
 	return &fileCommitter{
 		entry:    entry,
 		destPath: destPath,
+		destRel:  destRel,
 		tempFile: tempFile,
+		tempRel:  tempRel,
+		root:     root,
 		sink:     s,
 	}, nil
 }
@@ -118,7 +141,10 @@ func (s *FileSink) Writer(entry *Entry) (Committer, error) {
 type fileCommitter struct {
 	entry    *Entry
 	destPath string
+	destRel  string
 	tempFile *os.File
+	tempRel  string
+	root     *os.Root
 	sink     *FileSink
 }
 
@@ -129,51 +155,59 @@ func (c *fileCommitter) Write(p []byte) (int, error) {
 
 // Commit closes the temp file, applies metadata, and renames to final path.
 func (c *fileCommitter) Commit() error {
-	tempPath := c.tempFile.Name()
-
 	// Close the temp file
 	if err := c.tempFile.Close(); err != nil {
-		_ = os.Remove(tempPath) //nolint:errcheck // best-effort cleanup
+		_ = c.root.Remove(c.tempRel) //nolint:errcheck // best-effort cleanup
+		_ = c.root.Close()           //nolint:errcheck // best-effort cleanup
 		return fmt.Errorf("close temp file: %w", err)
 	}
 
 	// Apply file mode if requested
 	if c.sink.preserveMode {
-		if err := os.Chmod(tempPath, c.entry.Mode.Perm()); err != nil {
-			_ = os.Remove(tempPath) //nolint:errcheck // best-effort cleanup
+		if err := c.root.Chmod(c.tempRel, c.entry.Mode.Perm()); err != nil {
+			_ = c.root.Remove(c.tempRel) //nolint:errcheck // best-effort cleanup
+			_ = c.root.Close()           //nolint:errcheck // best-effort cleanup
 			return fmt.Errorf("chmod: %w", err)
 		}
 	}
 
 	// Apply modification time if requested
 	if c.sink.preserveTimes {
-		if err := os.Chtimes(tempPath, c.entry.ModTime, c.entry.ModTime); err != nil {
-			_ = os.Remove(tempPath) //nolint:errcheck // best-effort cleanup
+		if err := c.root.Chtimes(c.tempRel, c.entry.ModTime, c.entry.ModTime); err != nil {
+			_ = c.root.Remove(c.tempRel) //nolint:errcheck // best-effort cleanup
+			_ = c.root.Close()           //nolint:errcheck // best-effort cleanup
 			return fmt.Errorf("chtimes: %w", err)
 		}
 	}
 
 	// Atomic rename to final path
-	if err := os.Rename(tempPath, c.destPath); err != nil {
-		_ = os.Remove(tempPath) //nolint:errcheck // best-effort cleanup
+	if err := c.root.Rename(c.tempRel, c.destRel); err != nil {
+		_ = c.root.Remove(c.tempRel) //nolint:errcheck // best-effort cleanup
+		_ = c.root.Close()           //nolint:errcheck // best-effort cleanup
 		return fmt.Errorf("rename to %s: %w", c.destPath, err)
 	}
 
+	_ = c.root.Close() //nolint:errcheck // best-effort cleanup
 	return nil
 }
 
 // Discard closes and removes the temp file.
 func (c *fileCommitter) Discard() error {
-	tempPath := c.tempFile.Name()
 	_ = c.tempFile.Close() //nolint:errcheck // we're cleaning up
-	return os.Remove(tempPath)
+	if err := c.root.Remove(c.tempRel); err != nil {
+		_ = c.root.Close() //nolint:errcheck // best-effort cleanup
+		return err
+	}
+	return c.root.Close()
 }
 
 // directCommitter writes directly to the final path.
 type directCommitter struct {
 	entry    *Entry
 	destPath string
+	destRel  string
 	file     *os.File
+	root     *os.Root
 	sink     *FileSink
 }
 
@@ -185,29 +219,64 @@ func (c *directCommitter) Write(p []byte) (int, error) {
 // Commit closes the file and applies metadata.
 func (c *directCommitter) Commit() error {
 	if err := c.file.Close(); err != nil {
-		_ = os.Remove(c.destPath) //nolint:errcheck // best-effort cleanup
+		_ = c.root.Remove(c.destRel) //nolint:errcheck // best-effort cleanup
+		_ = c.root.Close()           //nolint:errcheck // best-effort cleanup
 		return fmt.Errorf("close file: %w", err)
 	}
 
 	if c.sink.preserveMode {
-		if err := os.Chmod(c.destPath, c.entry.Mode.Perm()); err != nil {
-			_ = os.Remove(c.destPath) //nolint:errcheck // best-effort cleanup
+		if err := c.root.Chmod(c.destRel, c.entry.Mode.Perm()); err != nil {
+			_ = c.root.Remove(c.destRel) //nolint:errcheck // best-effort cleanup
+			_ = c.root.Close()           //nolint:errcheck // best-effort cleanup
 			return fmt.Errorf("chmod: %w", err)
 		}
 	}
 
 	if c.sink.preserveTimes {
-		if err := os.Chtimes(c.destPath, c.entry.ModTime, c.entry.ModTime); err != nil {
-			_ = os.Remove(c.destPath) //nolint:errcheck // best-effort cleanup
+		if err := c.root.Chtimes(c.destRel, c.entry.ModTime, c.entry.ModTime); err != nil {
+			_ = c.root.Remove(c.destRel) //nolint:errcheck // best-effort cleanup
+			_ = c.root.Close()           //nolint:errcheck // best-effort cleanup
 			return fmt.Errorf("chtimes: %w", err)
 		}
 	}
 
+	_ = c.root.Close() //nolint:errcheck // best-effort cleanup
 	return nil
 }
 
 // Discard closes and removes the file.
 func (c *directCommitter) Discard() error {
 	_ = c.file.Close() //nolint:errcheck // best-effort cleanup
-	return os.Remove(c.destPath)
+	if err := c.root.Remove(c.destRel); err != nil {
+		_ = c.root.Close() //nolint:errcheck // best-effort cleanup
+		return err
+	}
+	return c.root.Close()
+}
+
+func createTempFile(root *os.Root, dir, prefix string) (*os.File, string, error) {
+	const attempts = 10
+	for range attempts {
+		name, err := randomSuffix()
+		if err != nil {
+			return nil, "", err
+		}
+		relPath := filepath.Join(dir, prefix+name)
+		f, err := root.OpenFile(relPath, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
+		if err == nil {
+			return f, relPath, nil
+		}
+		if !errors.Is(err, os.ErrExist) {
+			return nil, "", err
+		}
+	}
+	return nil, "", errors.New("create temp file: exhausted retries")
+}
+
+func randomSuffix() (string, error) {
+	var b [8]byte
+	if _, err := rand.Read(b[:]); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(b[:]), nil
 }
