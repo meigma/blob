@@ -13,8 +13,11 @@ type SkipCompressionFunc = write.SkipCompressionFunc
 // and known already-compressed extensions.
 var DefaultSkipCompression = write.DefaultSkipCompression
 
+// Change detection modes.
 const (
+	// ChangeDetectionNone disables file change detection during archive creation.
 	ChangeDetectionNone ChangeDetection = iota
+	// ChangeDetectionStrict verifies files did not change during archive creation.
 	ChangeDetectionStrict
 )
 
@@ -26,7 +29,7 @@ type createConfig struct {
 	maxFiles        int
 }
 
-// CreateOption configures archive creation.
+// CreateOption configures archive creation via the Create function.
 type CreateOption func(*createConfig)
 
 // CreateWithCompression sets the compression algorithm to use.

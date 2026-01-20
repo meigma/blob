@@ -67,6 +67,7 @@ type CopyOption func(*copyConfig)
 // defaultCopyReadConcurrency is used when no CopyWithReadConcurrency option is set.
 const defaultCopyReadConcurrency = 4
 
+// copyConfig holds configuration for CopyTo and CopyDir operations.
 type copyConfig struct {
 	overwrite          bool
 	preserveMode       bool

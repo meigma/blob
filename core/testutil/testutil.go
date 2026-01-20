@@ -1,3 +1,4 @@
+// Note: Package comment is in index.go to avoid duplicate declarations.
 package testutil
 
 import (
@@ -11,12 +12,14 @@ import (
 )
 
 // MockByteSource implements a simple in-memory byte source for tests.
+// It satisfies the ByteSource interface used by Blob.
 type MockByteSource struct {
 	data     []byte
 	sourceID string
 }
 
 // NewMockByteSource returns a byte source backed by the provided data.
+// The source ID is derived from the SHA-256 hash of the data.
 func NewMockByteSource(data []byte) *MockByteSource {
 	sum := sha256.Sum256(data)
 	return &MockByteSource{
@@ -53,13 +56,14 @@ func (m *MockByteSource) Bytes() []byte {
 }
 
 // MockCache implements a basic concurrency-safe cache for tests.
+// It satisfies the cache.Cache interface used by Blob.
 type MockCache struct {
 	mu   sync.RWMutex
 	data map[string][]byte
 	max  int64
 }
 
-// NewMockCache constructs an empty in-memory cache.
+// NewMockCache constructs an empty in-memory cache for testing.
 func NewMockCache() *MockCache {
 	return &MockCache{data: make(map[string][]byte)}
 }
@@ -147,16 +151,18 @@ func (c *MockCache) GetBytes(hash []byte) ([]byte, bool) {
 	return data, ok
 }
 
-// mockCacheFile wraps a bytes.Reader to implement fs.File.
+// mockCacheFile wraps a bytes.Reader to implement fs.File for cached content.
 type mockCacheFile struct {
 	*bytes.Reader
 	size int64
 }
 
+// Stat returns file info with the cached size.
 func (f *mockCacheFile) Stat() (fs.FileInfo, error) {
 	return &mockFileInfo{size: f.size}, nil
 }
 
+// Close is a no-op for in-memory content.
 func (f *mockCacheFile) Close() error {
 	return nil
 }
@@ -166,9 +172,20 @@ type mockFileInfo struct {
 	size int64
 }
 
-func (fi *mockFileInfo) Name() string       { return "" }
-func (fi *mockFileInfo) Size() int64        { return fi.size }
-func (fi *mockFileInfo) Mode() fs.FileMode  { return 0o644 }
+// Name returns an empty string for cached content.
+func (fi *mockFileInfo) Name() string { return "" }
+
+// Size returns the cached content size.
+func (fi *mockFileInfo) Size() int64 { return fi.size }
+
+// Mode returns a default file mode.
+func (fi *mockFileInfo) Mode() fs.FileMode { return 0o644 }
+
+// ModTime returns the zero time.
 func (fi *mockFileInfo) ModTime() time.Time { return time.Time{} }
-func (fi *mockFileInfo) IsDir() bool        { return false }
-func (fi *mockFileInfo) Sys() any           { return nil }
+
+// IsDir returns false for cached content.
+func (fi *mockFileInfo) IsDir() bool { return false }
+
+// Sys returns nil.
+func (fi *mockFileInfo) Sys() any { return nil }

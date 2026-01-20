@@ -38,8 +38,8 @@ type sigstoreBundle struct {
 }
 
 // parseAttestation extracts an in-toto statement from either a DSSE envelope
-// or a Sigstore bundle (which wraps a DSSE envelope).
-// Returns the parsed attestation input or an error if parsing fails.
+// or a Sigstore bundle (which wraps a DSSE envelope). It returns the parsed
+// attestation input or an error if parsing fails.
 func parseAttestation(data []byte) (*AttestationInput, error) {
 	// Try to parse as Sigstore bundle first
 	var bundle sigstoreBundle
@@ -56,7 +56,8 @@ func parseAttestation(data []byte) (*AttestationInput, error) {
 	return parseDSSEEnvelope(&envelope)
 }
 
-// parseDSSEEnvelope extracts an in-toto statement from a DSSE envelope.
+// parseDSSEEnvelope extracts an in-toto statement from a DSSE envelope
+// and returns the parsed attestation input.
 func parseDSSEEnvelope(envelope *dsse.Envelope) (*AttestationInput, error) {
 	// Validate payload type
 	if envelope.PayloadType != DSSEPayloadType {
@@ -97,8 +98,9 @@ func parseDSSEEnvelope(envelope *dsse.Envelope) (*AttestationInput, error) {
 	return att, nil
 }
 
-// matchesPredicateType checks if the attestation matches any of the accepted predicate types.
-// If acceptedTypes is empty, all predicate types are accepted.
+// matchesPredicateType reports whether the attestation matches any of the
+// accepted predicate types. If acceptedTypes is empty, all predicate types
+// are accepted.
 func matchesPredicateType(att *AttestationInput, acceptedTypes []string) bool {
 	if len(acceptedTypes) == 0 {
 		return true
@@ -113,7 +115,8 @@ type ociManifest struct {
 	Layers        []ocispec.Descriptor `json:"layers"`
 }
 
-// parseOCIManifest parses an OCI image manifest to extract layer descriptors.
+// parseOCIManifest parses an OCI image manifest and returns the extracted
+// layer descriptors.
 func parseOCIManifest(data []byte) (*ociManifest, error) {
 	var manifest ociManifest
 	if err := json.Unmarshal(data, &manifest); err != nil {

@@ -14,7 +14,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// createTestBlob creates a minimal valid blob for testing.
+// createTestBlob creates a minimal valid blob for testing containing a
+// single test file. The blob is automatically cleaned up when the test ends.
 func createTestBlob(t *testing.T) *blob.Blob {
 	t.Helper()
 

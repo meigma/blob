@@ -171,6 +171,7 @@ func (f *File) Close() error {
 	}
 }
 
+// init lazily initializes the file reader on first Read.
 func (f *File) init() error {
 	if f.initialized {
 		return f.initErr
@@ -210,6 +211,7 @@ func (f *File) init() error {
 	return nil
 }
 
+// readExtra checks for unexpected extra data after the expected content.
 func (f *File) readExtra() (int, error) {
 	var scratch [1]byte
 	n, err := f.r.Read(scratch[:])
@@ -228,6 +230,7 @@ func (f *File) readExtra() (int, error) {
 	return 0, nil
 }
 
+// verifyHash computes and compares the final hash against the expected value.
 func (f *File) verifyHash() error {
 	if f.verified {
 		return f.verifyErr
@@ -256,12 +259,23 @@ func NewInfo(entry *Entry, name string) (*Info, error) {
 	return &Info{entry: *entry, name: name, size: size}, nil
 }
 
-func (fi *Info) Name() string       { return fi.name }
-func (fi *Info) Size() int64        { return fi.size }
-func (fi *Info) Mode() fs.FileMode  { return fi.entry.Mode }
+// Name returns the base name of the file.
+func (fi *Info) Name() string { return fi.name }
+
+// Size returns the uncompressed file size in bytes.
+func (fi *Info) Size() int64 { return fi.size }
+
+// Mode returns the file mode bits.
+func (fi *Info) Mode() fs.FileMode { return fi.entry.Mode }
+
+// ModTime returns the file modification time.
 func (fi *Info) ModTime() time.Time { return fi.entry.ModTime }
-func (fi *Info) IsDir() bool        { return false }
-func (fi *Info) Sys() any           { return nil }
+
+// IsDir returns false since Info represents a regular file.
+func (fi *Info) IsDir() bool { return false }
+
+// Sys returns nil; no underlying data source is available.
+func (fi *Info) Sys() any { return nil }
 
 // Entry returns the underlying blob entry.
 func (fi *Info) Entry() *Entry {
@@ -278,12 +292,23 @@ func NewDirInfo(name string) *DirInfo {
 	return &DirInfo{name: name}
 }
 
-func (di *DirInfo) Name() string       { return di.name }
-func (di *DirInfo) Size() int64        { return 0 }
-func (di *DirInfo) Mode() fs.FileMode  { return fs.ModeDir | 0o755 }
+// Name returns the directory name.
+func (di *DirInfo) Name() string { return di.name }
+
+// Size returns 0 for directories.
+func (di *DirInfo) Size() int64 { return 0 }
+
+// Mode returns the directory mode (ModeDir | 0755).
+func (di *DirInfo) Mode() fs.FileMode { return fs.ModeDir | 0o755 }
+
+// ModTime returns the zero time for synthetic directories.
 func (di *DirInfo) ModTime() time.Time { return time.Time{} }
-func (di *DirInfo) IsDir() bool        { return true }
-func (di *DirInfo) Sys() any           { return nil }
+
+// IsDir returns true since this represents a directory.
+func (di *DirInfo) IsDir() bool { return true }
+
+// Sys returns nil; no underlying data source is available.
+func (di *DirInfo) Sys() any { return nil }
 
 // DirEntry implements fs.DirEntry by wrapping fs.FileInfo.
 type DirEntry struct {
@@ -296,7 +321,14 @@ func NewDirEntry(info fs.FileInfo, err error) *DirEntry {
 	return &DirEntry{info: info, infoErr: err}
 }
 
-func (de *DirEntry) Name() string               { return de.info.Name() }
-func (de *DirEntry) IsDir() bool                { return de.info.IsDir() }
-func (de *DirEntry) Type() fs.FileMode          { return de.info.Mode().Type() }
+// Name returns the name of the file or directory.
+func (de *DirEntry) Name() string { return de.info.Name() }
+
+// IsDir reports whether the entry describes a directory.
+func (de *DirEntry) IsDir() bool { return de.info.IsDir() }
+
+// Type returns the type bits for the entry.
+func (de *DirEntry) Type() fs.FileMode { return de.info.Mode().Type() }
+
+// Info returns the FileInfo for this entry.
 func (de *DirEntry) Info() (fs.FileInfo, error) { return de.info, de.infoErr }

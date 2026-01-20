@@ -103,6 +103,8 @@ func (p *Policy) Evaluate(ctx context.Context, req registry.PolicyRequest) error
 	return errors.New("sigstore: no valid signatures found")
 }
 
+// ociArtifactManifest represents a minimal OCI artifact manifest structure
+// for extracting layer descriptors that may contain sigstore bundles.
 type ociArtifactManifest struct {
 	SchemaVersion int                  `json:"schemaVersion"`
 	MediaType     string               `json:"mediaType,omitempty"`
@@ -110,6 +112,9 @@ type ociArtifactManifest struct {
 	Blobs         []ocispec.Descriptor `json:"blobs,omitempty"`
 }
 
+// parseOCIArtifactLayers attempts to parse data as an OCI artifact manifest
+// and returns its layer descriptors. The second return value indicates whether
+// the data was successfully parsed as an OCI manifest.
 func parseOCIArtifactLayers(data []byte) ([]ocispec.Descriptor, bool, error) {
 	var manifest ociArtifactManifest
 	if err := json.Unmarshal(data, &manifest); err != nil {
@@ -130,6 +135,9 @@ func parseOCIArtifactLayers(data []byte) ([]ocispec.Descriptor, bool, error) {
 	return layers, true, nil
 }
 
+// verifyBundleData verifies signature data which may be either a raw sigstore
+// bundle or an OCI manifest containing bundle layers.
+//
 //nolint:gocritic // req passed by value to match Evaluate call chain
 func (p *Policy) verifyBundleData(ctx context.Context, req registry.PolicyRequest, data, payload []byte) error {
 	layers, ok, err := parseOCIArtifactLayers(data)
@@ -162,7 +170,8 @@ func (p *Policy) verifyBundleData(ctx context.Context, req registry.PolicyReques
 	return p.verifyBundle(data, payload)
 }
 
-// verifyBundle verifies a sigstore bundle against the payload.
+// verifyBundle verifies a sigstore bundle against the payload using the
+// configured trusted root and identity requirements.
 func (p *Policy) verifyBundle(bundleData, payload []byte) error {
 	var b bundle.Bundle
 	if err := b.UnmarshalJSON(bundleData); err != nil {

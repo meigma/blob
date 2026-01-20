@@ -60,12 +60,13 @@ func Create(ctx context.Context, dir string, indexW, dataW io.Writer, opts ...Cr
 	return err
 }
 
-// writer is the internal writer implementation.
+// writer holds state for archive creation.
 type writer struct {
 	cfg createConfig
 }
 
-// writeData streams file contents to the data writer while populating entries.
+// writeData walks the directory tree and writes file contents to data.
+// Returns the collected entries and total bytes written.
 func (w *writer) writeData(ctx context.Context, root *os.Root, data io.Writer) (entries []Entry, totalBytes uint64, err error) {
 	entries = make([]Entry, 0, 1024)
 	strict := w.cfg.changeDetection == ChangeDetectionStrict
@@ -142,6 +143,7 @@ func (w *writer) processEntry(ctx context.Context, root *os.Root, data io.Writer
 	return entry, false, nil
 }
 
+// writeEntry writes a single file's content to data and returns its metadata.
 func (w *writer) writeEntry(ctx context.Context, root *os.Root, data io.Writer, enc *zstd.Encoder, buf []byte, path, fsPath string, info fs.FileInfo, strict bool) (Entry, error) {
 	f, err := platform.OpenFileNoFollow(root, fsPath)
 	if err != nil {

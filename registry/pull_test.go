@@ -20,7 +20,8 @@ import (
 	blob "github.com/meigma/blob/core"
 )
 
-// pullMockOCIClient extends mockOCIClient with Pull-specific methods.
+// pullMockOCIClient extends mockOCIClient with Pull-specific methods
+// including FetchBlob, BlobURL, and AuthHeaders for testing Pull operations.
 type pullMockOCIClient struct {
 	mockOCIClient
 	FetchBlobFunc   func(ctx context.Context, repoRef string, desc *ocispec.Descriptor) (io.ReadCloser, error)
@@ -53,7 +54,8 @@ func (m *pullMockOCIClient) InvalidateAuthHeaders(string) error {
 	return nil
 }
 
-// createTestBlobData creates a minimal blob archive and returns the index and data bytes.
+// createTestBlobData creates a minimal blob archive containing a single test
+// file and returns the index and data bytes for use in Pull tests.
 func createTestBlobData(t *testing.T) (indexData, dataBytes []byte) {
 	t.Helper()
 
@@ -81,6 +83,8 @@ func createTestBlobData(t *testing.T) (indexData, dataBytes []byte) {
 	return indexData, buf.Bytes()
 }
 
+// manifestForIndexData creates a valid blob archive manifest from index and
+// data bytes, returning the manifest, its raw JSON bytes, and a descriptor.
 func manifestForIndexData(t *testing.T, indexData, dataBytes []byte) (ocispec.Manifest, []byte, ocispec.Descriptor) {
 	t.Helper()
 
@@ -103,7 +107,8 @@ func manifestForIndexData(t *testing.T, indexData, dataBytes []byte) (ocispec.Ma
 	return manifest, raw, desc
 }
 
-// startDataServer starts an HTTP server that serves data with range request support.
+// startDataServer starts an HTTP test server that serves data with HTTP
+// range request support for testing lazy blob data access.
 func startDataServer(t *testing.T, data []byte) *httptest.Server {
 	t.Helper()
 

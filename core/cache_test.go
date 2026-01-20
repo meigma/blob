@@ -257,25 +257,29 @@ func createTestArchiveWithSource(t *testing.T, files map[string][]byte) (*Blob, 
 	return b, source
 }
 
-// countingByteSource wraps a ByteSource and counts ReadAt calls.
+// countingByteSource wraps a ByteSource and counts ReadAt calls for test assertions.
 type countingByteSource struct {
 	source    ByteSource
 	readCount atomic.Int64
 }
 
+// ReadAt delegates to the underlying source while incrementing the read counter.
 func (c *countingByteSource) ReadAt(p []byte, off int64) (int, error) {
 	c.readCount.Add(1)
 	return c.source.ReadAt(p, off)
 }
 
+// Size returns the size of the underlying source.
 func (c *countingByteSource) Size() int64 {
 	return c.source.Size()
 }
 
+// ReadCount returns the number of ReadAt calls made.
 func (c *countingByteSource) ReadCount() int64 {
 	return c.readCount.Load()
 }
 
+// SourceID returns the source identifier from the underlying source.
 func (c *countingByteSource) SourceID() string {
 	return c.source.SourceID()
 }

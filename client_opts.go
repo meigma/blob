@@ -153,7 +153,8 @@ func WithCacheDir(dir string) Option {
 	}
 }
 
-// WithContentCacheDir enables content caching with default size.
+// WithContentCacheDir enables file content caching in the specified directory
+// with the default size limit ([DefaultContentCacheSize]).
 func WithContentCacheDir(dir string) Option {
 	return func(c *Client) error {
 		cache, err := coredisk.New(dir, coredisk.WithMaxBytes(DefaultContentCacheSize))
@@ -165,7 +166,8 @@ func WithContentCacheDir(dir string) Option {
 	}
 }
 
-// WithBlockCacheDir enables block caching with default size.
+// WithBlockCacheDir enables HTTP range block caching in the specified directory
+// with the default size limit ([DefaultBlockCacheSize]).
 func WithBlockCacheDir(dir string) Option {
 	return func(c *Client) error {
 		cache, err := coredisk.NewBlockCache(dir, coredisk.WithBlockMaxBytes(DefaultBlockCacheSize))
@@ -177,7 +179,8 @@ func WithBlockCacheDir(dir string) Option {
 	}
 }
 
-// WithRefCacheDir enables reference caching with default size.
+// WithRefCacheDir enables tag-to-digest reference caching in the specified directory
+// with the default size limit ([DefaultRefCacheSize]).
 func WithRefCacheDir(dir string) Option {
 	return func(c *Client) error {
 		cache, err := registrydisk.NewRefCache(dir, registrydisk.WithMaxBytes(DefaultRefCacheSize))
@@ -189,7 +192,8 @@ func WithRefCacheDir(dir string) Option {
 	}
 }
 
-// WithManifestCacheDir enables manifest caching with default size.
+// WithManifestCacheDir enables manifest caching in the specified directory
+// with the default size limit ([DefaultManifestCacheSize]).
 func WithManifestCacheDir(dir string) Option {
 	return func(c *Client) error {
 		cache, err := registrydisk.NewManifestCache(dir, registrydisk.WithMaxBytes(DefaultManifestCacheSize))
@@ -201,7 +205,8 @@ func WithManifestCacheDir(dir string) Option {
 	}
 }
 
-// WithIndexCacheDir enables index caching with default size.
+// WithIndexCacheDir enables index blob caching in the specified directory
+// with the default size limit ([DefaultIndexCacheSize]).
 func WithIndexCacheDir(dir string) Option {
 	return func(c *Client) error {
 		cache, err := registrydisk.NewIndexCache(dir, registrydisk.WithMaxBytes(DefaultIndexCacheSize))
