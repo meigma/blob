@@ -168,9 +168,6 @@ func buildGittufPolicy(repo string, logger *slog.Logger) (*gittuf.Policy, error)
 		// Use latest-only verification for faster checks (default)
 		// Full RSL history verification can be enabled with gittuf.WithFullVerification()
 
-		// Allow missing gittuf during gradual adoption - remove once all repos have gittuf
-		gittuf.WithAllowMissingGittuf(),
-
 		// Allow missing SLSA provenance - gittuf extracts source info (repo, ref, commit)
 		// from SLSA provenance. When provenance is missing, verification is skipped.
 		// In production, use SLSA generators to create provenance attestations.
