@@ -297,7 +297,7 @@ func TestGitHubActionsWorkflow(t *testing.T) {
 	tests := []struct {
 		name         string
 		repo         string
-		opts         []GitHubActionsWorkflowOption
+		opts         []any
 		gotRepo      string
 		gotRef       string
 		workflowPath string
@@ -322,7 +322,7 @@ func TestGitHubActionsWorkflow(t *testing.T) {
 		{
 			name:         "with workflow path - matches",
 			repo:         "myorg/myrepo",
-			opts:         []GitHubActionsWorkflowOption{WithWorkflowPath(".github/workflows/release.yml")},
+			opts:         []any{WithWorkflowPath(".github/workflows/release.yml")},
 			gotRepo:      "https://github.com/myorg/myrepo",
 			gotRef:       "refs/heads/main",
 			workflowPath: ".github/workflows/release.yml",
@@ -331,7 +331,7 @@ func TestGitHubActionsWorkflow(t *testing.T) {
 		{
 			name:         "with workflow path - mismatch",
 			repo:         "myorg/myrepo",
-			opts:         []GitHubActionsWorkflowOption{WithWorkflowPath(".github/workflows/release.yml")},
+			opts:         []any{WithWorkflowPath(".github/workflows/release.yml")},
 			gotRepo:      "https://github.com/myorg/myrepo",
 			gotRef:       "refs/heads/main",
 			workflowPath: ".github/workflows/ci.yml",
@@ -340,7 +340,7 @@ func TestGitHubActionsWorkflow(t *testing.T) {
 		{
 			name:         "with branches - matches",
 			repo:         "myorg/myrepo",
-			opts:         []GitHubActionsWorkflowOption{WithWorkflowBranches("main", "release/*")},
+			opts:         []any{WithWorkflowBranches("main", "release/*")},
 			gotRepo:      "https://github.com/myorg/myrepo",
 			gotRef:       "refs/heads/release/v1",
 			workflowPath: ".github/workflows/build.yml",
@@ -349,7 +349,7 @@ func TestGitHubActionsWorkflow(t *testing.T) {
 		{
 			name:         "with branches - no match",
 			repo:         "myorg/myrepo",
-			opts:         []GitHubActionsWorkflowOption{WithWorkflowBranches("main")},
+			opts:         []any{WithWorkflowBranches("main")},
 			gotRepo:      "https://github.com/myorg/myrepo",
 			gotRef:       "refs/heads/develop",
 			workflowPath: ".github/workflows/build.yml",
@@ -358,7 +358,7 @@ func TestGitHubActionsWorkflow(t *testing.T) {
 		{
 			name:         "with tags - matches",
 			repo:         "myorg/myrepo",
-			opts:         []GitHubActionsWorkflowOption{WithWorkflowTags("v*")},
+			opts:         []any{WithWorkflowTags("v*")},
 			gotRepo:      "https://github.com/myorg/myrepo",
 			gotRef:       "refs/tags/v1.0.0",
 			workflowPath: ".github/workflows/build.yml",

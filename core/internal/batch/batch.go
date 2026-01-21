@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"runtime"
 	"slices"
 	"sync"
@@ -47,6 +48,15 @@ type Processor struct {
 	readConcurrency  int
 	readAheadBytes   uint64
 	readAheadEnabled bool
+	logger           *slog.Logger
+}
+
+// log returns the logger, falling back to a discard logger if nil.
+func (p *Processor) log() *slog.Logger {
+	if p.logger == nil {
+		return slog.New(slog.DiscardHandler)
+	}
+	return p.logger
 }
 
 // ProcessorOption configures a Processor.
@@ -78,6 +88,14 @@ func WithReadAheadBytes(limit uint64) ProcessorOption {
 	return func(p *Processor) {
 		p.readAheadBytes = limit
 		p.readAheadEnabled = limit > 0
+	}
+}
+
+// WithProcessorLogger sets the logger for batch processing operations.
+// If not set, logging is disabled.
+func WithProcessorLogger(logger *slog.Logger) ProcessorOption {
+	return func(p *Processor) {
+		p.logger = logger
 	}
 }
 
@@ -144,6 +162,8 @@ func (p *Processor) Process(entries []*Entry, sink Sink) error {
 
 	// Group adjacent entries and process each group
 	groups := groupAdjacentEntries(toProcess)
+	p.log().Debug("batch processing", "entries", len(toProcess), "groups", len(groups))
+
 	if len(groups) > 1 && (p.readConcurrency > 1 || p.readAheadEnabled) {
 		return p.processGroupsPipelined(groups, sink)
 	}

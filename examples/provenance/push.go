@@ -5,6 +5,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"log/slog"
 	"os"
 
 	"github.com/meigma/blob"
@@ -53,9 +54,13 @@ func push(cfg pushConfig) error {
 
 	fmt.Printf("Creating archive from %s...\n", cfg.assets)
 
+	// Create debug logger
+	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{
+		Level: slog.LevelDebug,
+	}))
+
 	// Create client with appropriate options
-	var opts []blob.Option
-	opts = append(opts, blob.WithDockerConfig())
+	opts := []blob.Option{blob.WithDockerConfig(), blob.WithLogger(logger)}
 	if cfg.plainHTTP {
 		opts = append(opts, blob.WithPlainHTTP(true))
 	}

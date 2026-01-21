@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	nethttp "net/http"
 	"strconv"
 	"strings"
@@ -22,6 +23,15 @@ type Source struct {
 	lastModified          string
 	sourceID              string
 	useConditionalHeaders bool
+	logger                *slog.Logger
+}
+
+// log returns the logger, falling back to a discard logger if nil.
+func (s *Source) log() *slog.Logger {
+	if s.logger == nil {
+		return slog.New(slog.DiscardHandler)
+	}
+	return s.logger
 }
 
 // Option configures a Source.
@@ -69,6 +79,14 @@ func WithConditionalHeaders() Option {
 	}
 }
 
+// WithLogger sets the logger for HTTP source operations.
+// If not set, logging is disabled.
+func WithLogger(logger *slog.Logger) Option {
+	return func(s *Source) {
+		s.logger = logger
+	}
+}
+
 // NewSource creates a Source backed by HTTP range requests.
 // It probes the remote to determine the content size.
 func NewSource(url string, opts ...Option) (*Source, error) {
@@ -83,6 +101,7 @@ func NewSource(url string, opts ...Option) (*Source, error) {
 		s.client = nethttp.DefaultClient
 	}
 
+	s.log().Debug("fetching metadata", "url", s.url)
 	size, etag, lastModified, err := s.fetchMetadata()
 	if err != nil {
 		return nil, err
@@ -126,6 +145,8 @@ func (s *Source) ReadRange(off, length int64) (io.ReadCloser, error) {
 	if length > s.size-off {
 		length = s.size - off
 	}
+
+	s.log().Debug("reading range", "offset", off, "length", length)
 
 	end := off + length - 1
 	resp, err := s.rangeRequest(off, end, true)

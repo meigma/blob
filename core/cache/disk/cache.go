@@ -5,6 +5,7 @@ import (
 	"errors"
 	"io"
 	"io/fs"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"sync"
@@ -26,6 +27,15 @@ type Cache struct {
 	maxBytes       int64        // maximum cache size (0 = unlimited)
 	bytes          atomic.Int64 // current total size of cached files
 	pruneMu        sync.Mutex   // serializes prune operations
+	logger         *slog.Logger
+}
+
+// log returns the logger, falling back to a discard logger if nil.
+func (c *Cache) log() *slog.Logger {
+	if c.logger == nil {
+		return slog.New(slog.DiscardHandler)
+	}
+	return c.logger
 }
 
 // Option configures a disk cache.
@@ -51,6 +61,14 @@ func WithDirPerm(mode os.FileMode) Option {
 func WithMaxBytes(n int64) Option {
 	return func(c *Cache) {
 		c.maxBytes = n
+	}
+}
+
+// WithLogger sets the logger for cache operations.
+// If not set, logging is disabled.
+func WithLogger(logger *slog.Logger) Option {
+	return func(c *Cache) {
+		c.logger = logger
 	}
 }
 
@@ -81,6 +99,7 @@ func New(dir string, opts ...Option) (*Cache, error) {
 	} else {
 		return nil, err
 	}
+	c.log().Info("cache initialized", "dir", dir, "max_bytes", c.maxBytes, "current_bytes", c.bytes.Load())
 	return c, nil
 }
 
@@ -93,8 +112,10 @@ func (c *Cache) Get(hash []byte) (fs.File, bool) {
 	}
 	f, err := os.Open(path) //nolint:gosec // path is derived from hash, not user input
 	if err != nil {
+		c.log().Debug("cache miss", "hash", hex.EncodeToString(hash[:min(4, len(hash))]))
 		return nil, false
 	}
+	c.log().Debug("cache hit", "hash", hex.EncodeToString(hash[:min(4, len(hash))]))
 	return f, true
 }
 
@@ -148,6 +169,7 @@ func (c *Cache) Put(hash []byte, f fs.File) error {
 		return err
 	}
 	c.bytes.Add(written)
+	c.log().Debug("cache put", "hash", hex.EncodeToString(hash[:min(4, len(hash))]), "size", written)
 	return nil
 }
 
@@ -199,6 +221,9 @@ func (c *Cache) Prune(targetBytes int64) (int64, error) {
 		return 0, err
 	}
 	c.bytes.Store(remaining)
+	if freed > 0 {
+		c.log().Info("cache pruned", "bytes_freed", freed, "remaining_bytes", remaining)
+	}
 	return freed, nil
 }
 

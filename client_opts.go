@@ -1,6 +1,7 @@
 package blob
 
 import (
+	"log/slog"
 	"os"
 	"path/filepath"
 	"time"
@@ -295,6 +296,16 @@ func WithPolicies(policies ...Policy) Option {
 				c.policies = append(c.policies, p)
 			}
 		}
+		return nil
+	}
+}
+
+// WithLogger sets a logger for the client.
+// The logger is propagated to the underlying registry client.
+// If nil, a discard logger is used (default behavior).
+func WithLogger(logger *slog.Logger) Option {
+	return func(c *Client) error {
+		c.logger = logger
 		return nil
 	}
 }

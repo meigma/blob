@@ -1,6 +1,10 @@
 package blob
 
-import "github.com/meigma/blob/core/cache"
+import (
+	"log/slog"
+
+	"github.com/meigma/blob/core/cache"
+)
 
 // Option configures a Blob.
 type Option func(*Blob)
@@ -58,6 +62,14 @@ func WithVerifyOnClose(enabled bool) Option {
 func WithCache(c cache.Cache) Option {
 	return func(b *Blob) {
 		b.cache = c
+	}
+}
+
+// WithLogger sets the logger for blob operations.
+// If not set, logging is disabled.
+func WithLogger(logger *slog.Logger) Option {
+	return func(b *Blob) {
+		b.logger = logger
 	}
 }
 

@@ -67,6 +67,7 @@ func NewPolicy(opts ...PolicyOption) (*Policy, error) {
 
 // GitHubRepository creates a policy for a GitHub-hosted repository.
 // This is a convenience constructor that sets the repository URL.
+// All [PolicyOption] values (like [WithLogger]) are forwarded to [NewPolicy].
 func GitHubRepository(owner, repo string, opts ...PolicyOption) (*Policy, error) {
 	url := fmt.Sprintf("https://github.com/%s/%s", owner, repo)
 	return NewPolicy(append([]PolicyOption{WithRepository(url)}, opts...)...)

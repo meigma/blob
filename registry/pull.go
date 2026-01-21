@@ -32,6 +32,8 @@ func (c *Client) Pull(ctx context.Context, ref string, opts ...PullOption) (*blo
 		opt(&cfg)
 	}
 
+	c.log().Info("pulling archive", "ref", ref)
+
 	// Step 1: Fetch manifest (handles caching internally)
 	var fetchOpts []FetchOption
 	if cfg.skipCache {
@@ -53,6 +55,7 @@ func (c *Client) Pull(ctx context.Context, ref string, opts ...PullOption) (*blo
 	if err != nil {
 		return nil, err
 	}
+	c.log().Debug("created data source", "url", source.SourceID())
 
 	// Step 4: Create Blob with index data and lazy data source
 	return blob.New(indexData, source, cfg.blobOpts...)
@@ -107,6 +110,7 @@ func (c *Client) tryIndexCache(indexDigest string, indexDesc *ocispec.Descriptor
 
 	cached, ok := c.indexCache.GetIndex(indexDigest)
 	if !ok {
+		c.log().Debug("index cache miss", "digest", indexDigest[:min(16, len(indexDigest))])
 		return nil, false
 	}
 
@@ -115,10 +119,12 @@ func (c *Client) tryIndexCache(indexDigest string, indexDesc *ocispec.Descriptor
 	}
 
 	if !c.validateCachedIndex(cached, indexDesc) {
+		c.log().Warn("corrupted index cache entry deleted", "digest", indexDigest[:min(16, len(indexDigest))])
 		_ = c.indexCache.Delete(indexDigest) //nolint:errcheck // best-effort cleanup
 		return nil, false
 	}
 
+	c.log().Debug("index cache hit", "digest", indexDigest[:min(16, len(indexDigest))], "size", len(cached))
 	return cached, true
 }
 
@@ -139,6 +145,10 @@ func (c *Client) verifyIndexDigest(indexData []byte, indexDesc *ocispec.Descript
 		return fmt.Errorf("read index blob: %w: invalid digest %q: %v", ErrInvalidManifest, indexDesc.Digest, err)
 	}
 	if computed := indexDesc.Digest.Algorithm().FromBytes(indexData); computed != indexDesc.Digest {
+		c.log().Warn("index digest verification failed",
+			"expected", indexDesc.Digest.String(),
+			"computed", computed.String(),
+		)
 		return fmt.Errorf("read index blob: %w: expected %s, got %s", ErrDigestMismatch, indexDesc.Digest, computed)
 	}
 	return nil

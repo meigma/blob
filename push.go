@@ -22,9 +22,14 @@ func (c *Client) Push(ctx context.Context, ref, srcDir string, opts ...PushOptio
 		opt(&cfg)
 	}
 
+	c.log().Info("pushing to registry", "ref", ref, "src_dir", srcDir)
+
 	// Create archive in memory
 	var indexBuf, dataBuf bytes.Buffer
 	createOpts := cfg.createOpts
+	if c.logger != nil {
+		createOpts = append(createOpts, blobcore.CreateWithLogger(c.logger))
+	}
 	if err := blobcore.Create(ctx, srcDir, &indexBuf, &dataBuf, createOpts...); err != nil {
 		return fmt.Errorf("create archive: %w", err)
 	}
@@ -69,6 +74,9 @@ func (c *Client) pushArchive(ctx context.Context, ref string, archive *blobcore.
 	}
 	for _, p := range c.policies {
 		regOpts = append(regOpts, registry.WithPolicy(p))
+	}
+	if c.logger != nil {
+		regOpts = append(regOpts, registry.WithLogger(c.logger))
 	}
 
 	regClient := registry.New(regOpts...)

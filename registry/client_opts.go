@@ -1,6 +1,8 @@
 package registry
 
 import (
+	"log/slog"
+
 	"github.com/meigma/blob/registry/cache"
 	"github.com/meigma/blob/registry/oras"
 )
@@ -92,5 +94,14 @@ func WithPolicies(policies ...Policy) Option {
 func WithOrasOptions(opts ...oras.Option) Option {
 	return func(c *Client) {
 		c.orasOpts = append(c.orasOpts, opts...)
+	}
+}
+
+// WithLogger sets a logger for the client.
+// The logger is propagated to the underlying ORAS client.
+// If nil, a discard logger is used (default behavior).
+func WithLogger(logger *slog.Logger) Option {
+	return func(c *Client) {
+		c.logger = logger
 	}
 }

@@ -58,14 +58,19 @@ func (c *Client) Fetch(ctx context.Context, ref string, opts ...FetchOption) (*B
 func (c *Client) resolveDigest(ctx context.Context, ref, reference string, skipCache bool) (string, error) {
 	// If already a digest, return it directly
 	if isDigest(reference) {
+		c.log().Debug("resolving reference", "ref", ref, "type", "digest")
 		return reference, nil
 	}
+
+	c.log().Debug("resolving reference", "ref", ref, "type", "tag")
 
 	// Try ref cache for tag -> digest
 	if !skipCache && c.refCache != nil {
 		if digest, ok := c.refCache.GetDigest(ref); ok {
+			c.log().Debug("ref cache hit", "ref", ref, "digest", digest[:min(16, len(digest))])
 			return digest, nil
 		}
+		c.log().Debug("ref cache miss", "ref", ref)
 	}
 
 	// Resolve via network
@@ -92,9 +97,11 @@ func (c *Client) fetchManifestByDigest(ctx context.Context, ref, dgst string, sk
 	// Try manifest cache
 	if !skipCache && c.manifestCache != nil {
 		if cached, ok := c.manifestCache.GetManifest(dgst); ok {
+			c.log().Debug("manifest cache hit", "digest", dgst[:min(16, len(dgst))])
 			manifest, err = parseBlobManifest(cached, dgst)
 			return manifest, nil, true, err
 		}
+		c.log().Debug("manifest cache miss", "digest", dgst[:min(16, len(dgst))])
 	}
 
 	// Fetch via network

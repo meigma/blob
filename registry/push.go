@@ -37,14 +37,27 @@ func (c *Client) Push(ctx context.Context, ref string, b *blob.Blob, opts ...Pus
 		return fmt.Errorf("%w: reference must include a tag", ErrInvalidReference)
 	}
 
+	// Build data descriptor first to get size for logging
+	dataDesc, err := dataDescriptor(b)
+	if err != nil {
+		return err
+	}
+
+	indexData := b.IndexData()
+	c.log().Info("pushing archive",
+		"ref", ref,
+		"index_size", len(indexData),
+		"data_size", dataDesc.Size,
+	)
+
 	// Step 1: Push empty config blob (required by OCI spec)
 	configDesc, err := c.pushEmptyConfig(ctx, ref)
 	if err != nil {
 		return fmt.Errorf("push config: %w", err)
 	}
+	c.log().Debug("pushed config blob", "digest", configDesc.Digest.String())
 
 	// Step 2: Push index blob
-	indexData := b.IndexData()
 	indexDesc := ocispec.Descriptor{
 		MediaType: MediaTypeIndex,
 		Digest:    digest.FromBytes(indexData),
@@ -53,30 +66,28 @@ func (c *Client) Push(ctx context.Context, ref string, b *blob.Blob, opts ...Pus
 	if pushErr := c.oci.PushBlob(ctx, ref, &indexDesc, bytes.NewReader(indexData)); pushErr != nil {
 		return fmt.Errorf("push index blob: %w", mapOCIError(pushErr))
 	}
+	c.log().Debug("pushed index blob", "digest", indexDesc.Digest.String(), "size", indexDesc.Size)
 
-	// Step 3: Build data descriptor from pre-computed metadata in index
-	dataDesc, err := dataDescriptor(b)
-	if err != nil {
-		return err
-	}
-
-	// Step 4: Push data blob
+	// Step 3: Push data blob
 	if pushErr := c.oci.PushBlob(ctx, ref, &dataDesc, b.Stream()); pushErr != nil {
 		return fmt.Errorf("push data blob: %w", mapOCIError(pushErr))
 	}
+	c.log().Debug("pushed data blob", "digest", dataDesc.Digest.String(), "size", dataDesc.Size)
 
-	// Step 5: Build and push manifest
+	// Step 4: Build and push manifest
 	manifest := buildManifest(&configDesc, &indexDesc, &dataDesc, cfg.annotations)
 	manifestDesc, err := c.oci.PushManifest(ctx, ref, tag, &manifest)
 	if err != nil {
 		return fmt.Errorf("push manifest: %w", mapOCIError(err))
 	}
+	c.log().Info("pushed manifest", "digest", manifestDesc.Digest.String())
 
-	// Step 6: Apply additional tags
+	// Step 5: Apply additional tags
 	for _, additionalTag := range cfg.tags {
 		if tagErr := c.oci.Tag(ctx, ref, &manifestDesc, additionalTag); tagErr != nil {
 			return fmt.Errorf("tag %q: %w", additionalTag, mapOCIError(tagErr))
 		}
+		c.log().Debug("applied tag", "tag", additionalTag)
 	}
 
 	return nil

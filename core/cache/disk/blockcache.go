@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"math"
 	"os"
 	"path/filepath"
@@ -30,6 +31,15 @@ type BlockCache struct {
 	bytes          atomic.Int64       // current total size of cached blocks
 	fetchGroup     singleflight.Group // deduplicates concurrent fetches for same block
 	pruneMu        sync.Mutex         // serializes prune operations
+	logger         *slog.Logger
+}
+
+// log returns the logger, falling back to a discard logger if nil.
+func (c *BlockCache) log() *slog.Logger {
+	if c.logger == nil {
+		return slog.New(slog.DiscardHandler)
+	}
+	return c.logger
 }
 
 // BlockCacheOption configures a disk-backed block cache.
@@ -55,6 +65,14 @@ func WithBlockShardPrefixLen(n int) BlockCacheOption {
 func WithBlockDirPerm(mode os.FileMode) BlockCacheOption {
 	return func(c *BlockCache) {
 		c.dirPerm = mode
+	}
+}
+
+// WithBlockLogger sets the logger for block cache operations.
+// If not set, logging is disabled.
+func WithBlockLogger(logger *slog.Logger) BlockCacheOption {
+	return func(c *BlockCache) {
+		c.logger = logger
 	}
 }
 
@@ -85,6 +103,7 @@ func NewBlockCache(dir string, opts ...BlockCacheOption) (*BlockCache, error) {
 	} else {
 		return nil, err
 	}
+	c.log().Info("block cache initialized", "dir", dir, "max_bytes", c.maxBytes, "current_bytes", c.bytes.Load())
 	return c, nil
 }
 
@@ -142,6 +161,9 @@ func (c *BlockCache) Prune(targetBytes int64) (int64, error) {
 		return 0, err
 	}
 	c.bytes.Store(remaining)
+	if freed > 0 {
+		c.log().Info("block cache pruned", "bytes_freed", freed, "remaining_bytes", remaining)
+	}
 	return freed, nil
 }
 
@@ -287,6 +309,7 @@ func (c *BlockCache) getBlock(sourceID string, blockSize, blockIndex, blockLen i
 		// path is safe: constructed from hex-encoded SHA256 hash via pathForKey
 		if data, err := os.ReadFile(path); err == nil { //nolint:gosec // path is derived from hash, not user input
 			if int64(len(data)) == blockLen {
+				c.log().Debug("block cache hit", "block_index", blockIndex, "size", blockLen)
 				return data, nil
 			}
 			c.bytes.Add(-int64(len(data)))
@@ -295,6 +318,7 @@ func (c *BlockCache) getBlock(sourceID string, blockSize, blockIndex, blockLen i
 			return nil, err
 		}
 
+		c.log().Debug("block cache miss", "block_index", blockIndex, "size", blockLen)
 		data, err := fetch()
 		if err != nil {
 			return nil, err

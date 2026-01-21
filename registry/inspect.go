@@ -28,6 +28,8 @@ func (c *Client) Inspect(ctx context.Context, ref string, opts ...InspectOption)
 		opt(&cfg)
 	}
 
+	c.log().Debug("inspecting archive", "ref", ref)
+
 	// Step 1: Fetch manifest (handles caching internally)
 	var fetchOpts []FetchOption
 	if cfg.skipCache {

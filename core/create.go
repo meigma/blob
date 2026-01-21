@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
+	"log/slog"
 	"os"
 	"path/filepath"
 
@@ -47,13 +48,17 @@ func Create(ctx context.Context, dir string, indexW, dataW io.Writer, opts ...Cr
 	}
 	defer root.Close()
 
-	w := &writer{cfg: cfg}
+	w := &writer{cfg: cfg, logger: cfg.logger}
+	w.log().Info("creating archive", "dir", dir, "compression", cfg.compression.String())
+
 	hasher := sha256.New()
 	dataWriter := io.MultiWriter(dataW, hasher)
 	entries, dataSize, err := w.writeData(ctx, root, dataWriter)
 	if err != nil {
 		return err
 	}
+
+	w.log().Debug("archive data written", "file_count", len(entries), "data_size", dataSize)
 
 	indexData := buildIndex(entries, dataSize, hasher.Sum(nil))
 	_, err = indexW.Write(indexData)
@@ -62,7 +67,16 @@ func Create(ctx context.Context, dir string, indexW, dataW io.Writer, opts ...Cr
 
 // writer holds state for archive creation.
 type writer struct {
-	cfg createConfig
+	cfg    createConfig
+	logger *slog.Logger
+}
+
+// log returns the logger, falling back to a discard logger if nil.
+func (w *writer) log() *slog.Logger {
+	if w.logger == nil {
+		return slog.New(slog.DiscardHandler)
+	}
+	return w.logger
 }
 
 // writeData walks the directory tree and writes file contents to data.
@@ -135,6 +149,7 @@ func (w *writer) processEntry(ctx context.Context, root *os.Root, data io.Writer
 	entry, err := w.writeEntry(ctx, root, data, enc, buf, path, fsPath, info, strict)
 	if err != nil {
 		if errors.Is(err, platform.ErrSymlink) {
+			w.log().Debug("skipped symlink", "path", path)
 			return Entry{}, true, nil
 		}
 		return Entry{}, false, err

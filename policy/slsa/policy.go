@@ -47,11 +47,18 @@ func NewPolicy(opts ...PolicyOption) (*Policy, error) {
 //
 //nolint:gocritic // req passed by value per interface contract
 func (p *Policy) Evaluate(ctx context.Context, req registry.PolicyRequest) error {
+	p.logger.Debug("slsa: starting provenance verification",
+		slog.String("ref", req.Ref),
+		slog.String("digest", req.Digest))
+
 	// Fetch attestations
 	provenances, err := p.fetchProvenances(ctx, req)
 	if err != nil {
 		return err
 	}
+
+	p.logger.Debug("slsa: found provenance attestations",
+		slog.Int("count", len(provenances)))
 
 	if len(provenances) == 0 {
 		return ErrNoAttestations
@@ -59,11 +66,24 @@ func (p *Policy) Evaluate(ctx context.Context, req registry.PolicyRequest) error
 
 	// Try to find at least one valid provenance
 	var lastErr error
-	for _, prov := range provenances {
+	for i, prov := range provenances {
+		p.logger.Debug("slsa: validating provenance",
+			slog.Int("index", i),
+			slog.String("builder_id", prov.BuilderID),
+			slog.String("source_repo", prov.SourceRepo),
+			slog.String("source_ref", prov.SourceRef),
+			slog.String("source_digest", prov.SourceDigest))
+
 		if err := p.validateProvenance(prov); err != nil {
+			p.logger.Debug("slsa: provenance validation failed",
+				slog.Int("index", i),
+				slog.Any("error", err))
 			lastErr = err
 			continue
 		}
+		p.logger.Info("slsa: provenance verified successfully",
+			slog.String("builder_id", prov.BuilderID),
+			slog.String("source_repo", prov.SourceRepo))
 		return nil // Found a valid one
 	}
 
@@ -196,6 +216,9 @@ func RequireSource(repo string, opts ...SourceOption) *Policy {
 //   - The workflow path matches (if specified via WithWorkflowPath)
 //   - The git ref matches allowed patterns (if specified via WithWorkflowBranches/Tags)
 //
+// Additional [PolicyOption] values (like [WithLogger]) can be passed after the
+// GitHub Actions workflow options.
+//
 // Example:
 //
 //	policy, err := slsa.GitHubActionsWorkflow("myorg/myrepo",
@@ -203,17 +226,29 @@ func RequireSource(repo string, opts ...SourceOption) *Policy {
 //	    slsa.WithWorkflowBranches("main"),
 //	    slsa.WithWorkflowTags("v*"),
 //	)
-func GitHubActionsWorkflow(repo string, opts ...GitHubActionsWorkflowOption) (*Policy, error) {
+func GitHubActionsWorkflow(repo string, opts ...any) (*Policy, error) {
 	if repo == "" {
 		return nil, errors.New("slsa: repository cannot be empty")
 	}
 
 	cfg := &ghActionsConfig{repo: repo}
+	var policyOpts []PolicyOption
+
 	for _, opt := range opts {
-		opt(cfg)
+		switch o := opt.(type) {
+		case GitHubActionsWorkflowOption:
+			o(cfg)
+		case PolicyOption:
+			policyOpts = append(policyOpts, o)
+		default:
+			return nil, fmt.Errorf("slsa: unexpected option type %T", opt)
+		}
 	}
 
-	return NewPolicy(withGitHubActionsValidator(cfg))
+	// Add validator option first, then user-provided options
+	allOpts := append([]PolicyOption{withGitHubActionsValidator(cfg)}, policyOpts...)
+
+	return NewPolicy(allOpts...)
 }
 
 // --- Internal validators ---

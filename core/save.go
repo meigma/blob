@@ -12,6 +12,8 @@ import (
 // Uses atomic writes (temp file + rename) to prevent partial writes on failure.
 // Parent directories are created as needed.
 func (b *Blob) Save(indexPath, dataPath string) error {
+	b.log().Info("saving archive", "index_path", indexPath, "data_path", dataPath)
+
 	// Create parent directories if needed
 	if err := os.MkdirAll(filepath.Dir(indexPath), 0o750); err != nil {
 		return fmt.Errorf("create index directory: %w", err)
