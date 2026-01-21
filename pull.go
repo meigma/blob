@@ -25,6 +25,8 @@ func (c *Client) Pull(ctx context.Context, ref string, opts ...PullOption) (*Arc
 		opt(&cfg)
 	}
 
+	c.log().Info("pulling from registry", "ref", ref)
+
 	// Build registry client options
 	regOpts := buildRegistryOpts(c)
 
@@ -45,6 +47,11 @@ func (c *Client) Pull(ctx context.Context, ref string, opts ...PullOption) (*Arc
 	// Add content cache if configured
 	if c.contentCache != nil {
 		blobOpts = append(blobOpts, blobcore.WithCache(c.contentCache))
+	}
+
+	// Propagate logger to blob
+	if c.logger != nil {
+		blobOpts = append(blobOpts, blobcore.WithLogger(c.logger))
 	}
 
 	// Pass blob options to pull
@@ -76,6 +83,9 @@ func buildRegistryOpts(c *Client) []registry.Option {
 	}
 	for _, p := range c.policies {
 		regOpts = append(regOpts, registry.WithPolicy(p))
+	}
+	if c.logger != nil {
+		regOpts = append(regOpts, registry.WithLogger(c.logger))
 	}
 	return regOpts
 }

@@ -8,6 +8,7 @@ import (
 	"io"
 	"io/fs"
 	"iter"
+	"log/slog"
 	"os"
 	"path/filepath"
 
@@ -105,6 +106,15 @@ type Blob struct {
 	cache                 cache.Cache        // nil = no caching
 	readGroup             singleflight.Group // zero value is valid
 	cacheGroup            singleflight.Group // zero value is valid
+	logger                *slog.Logger
+}
+
+// log returns the logger, falling back to a discard logger if nil.
+func (b *Blob) log() *slog.Logger {
+	if b.logger == nil {
+		return slog.New(slog.DiscardHandler)
+	}
+	return b.logger
 }
 
 // New creates a Blob for accessing files in the archive.
@@ -166,10 +176,12 @@ func (b *Blob) Open(name string) (fs.File, error) {
 
 		// Cache hit - return file from cache
 		if f, ok := b.cache.Get(entry.Hash); ok {
+			b.log().Debug("file cache hit", "path", name)
 			return newCachedFile(f, &entry, b.verifyOnClose, b.cache.Delete), nil
 		}
 
 		// Cache miss - populate then return from cache
+		b.log().Debug("file cache miss", "path", name)
 		if err := b.ensureCached(&entry); err != nil {
 			return nil, &fs.PathError{Op: "open", Path: name, Err: err}
 		}
@@ -246,6 +258,7 @@ func (b *Blob) ReadFile(name string) ([]byte, error) {
 
 	// Cache hit - read from cached file
 	if f, ok := b.cache.Get(entry.Hash); ok {
+		b.log().Debug("readfile cache hit", "path", name)
 		defer f.Close()
 		hasher := sha256.New()
 		content, err := io.ReadAll(io.TeeReader(f, hasher))
@@ -258,6 +271,8 @@ func (b *Blob) ReadFile(name string) ([]byte, error) {
 		}
 		return content, nil
 	}
+
+	b.log().Debug("readfile cache miss", "path", name)
 
 	// Cache miss with singleflight
 	result, err, _ := b.readGroup.Do(string(entry.Hash), func() (any, error) {

@@ -1,6 +1,7 @@
 package blob
 
 import (
+	"log/slog"
 	"time"
 
 	corecache "github.com/meigma/blob/core/cache"
@@ -27,6 +28,17 @@ type Client struct {
 
 	// Policies
 	policies []Policy
+
+	// Logger
+	logger *slog.Logger
+}
+
+// log returns the logger, falling back to a discard logger if nil.
+func (c *Client) log() *slog.Logger {
+	if c.logger == nil {
+		return slog.New(slog.DiscardHandler)
+	}
+	return c.logger
 }
 
 // NewClient creates a new blob archive client with the given options.

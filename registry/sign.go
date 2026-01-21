@@ -36,6 +36,8 @@ func (c *Client) Sign(ctx context.Context, ref string, signer ManifestSigner, op
 		return "", fmt.Errorf("%w: reference must include a tag or digest", ErrInvalidReference)
 	}
 
+	c.log().Info("signing manifest", "ref", ref)
+
 	// Step 1: Resolve to digest
 	digestStr, err := c.resolveDigest(ctx, ref, parsedRef.reference, false)
 	if err != nil {
@@ -68,6 +70,7 @@ func (c *Client) Sign(ctx context.Context, ref string, signer ManifestSigner, op
 	if pushErr := c.oci.PushBlob(ctx, ref, &sigDesc, bytes.NewReader(sigData)); pushErr != nil {
 		return "", fmt.Errorf("push signature blob: %w", mapOCIError(pushErr))
 	}
+	c.log().Debug("pushed signature blob", "digest", sigDigest.String(), "size", len(sigData))
 
 	// Step 5: Push empty config blob (required by OCI artifact pattern)
 	configDesc, err := c.pushEmptyConfig(ctx, ref)
@@ -95,6 +98,7 @@ func (c *Client) Sign(ctx context.Context, ref string, signer ManifestSigner, op
 	if err != nil {
 		return "", fmt.Errorf("push referrer manifest: %w", mapOCIError(err))
 	}
+	c.log().Debug("pushed referrer manifest", "digest", referrerDesc.Digest.String())
 
 	return referrerDesc.Digest.String(), nil
 }

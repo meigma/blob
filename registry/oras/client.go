@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 
 	"github.com/opencontainers/go-digest"
@@ -32,6 +33,7 @@ type Client struct {
 	credStore       credentials.Store
 	authClient      *auth.Client // shared auth client with token cache
 	authHeaderCache *authHeaderCache
+	logger          *slog.Logger //nolint:unused // reserved for future use
 }
 
 // New creates a new OCI client with the given options.

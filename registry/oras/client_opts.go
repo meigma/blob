@@ -1,6 +1,7 @@
 package oras
 
 import (
+	"log/slog"
 	"time"
 
 	"oras.land/oras-go/v2/registry/remote/credentials"
@@ -71,5 +72,13 @@ func WithUserAgent(ua string) Option {
 func WithAuthHeaderCacheTTL(ttl time.Duration) Option {
 	return func(c *Client) {
 		c.authHeaderCache = newAuthHeaderCache(ttl)
+	}
+}
+
+// WithLogger sets a logger for the client.
+// If nil, a discard logger is used (default behavior).
+func WithLogger(logger *slog.Logger) Option {
+	return func(c *Client) {
+		c.logger = logger
 	}
 }

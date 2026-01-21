@@ -1,6 +1,10 @@
 package blob
 
-import "github.com/meigma/blob/core/internal/write"
+import (
+	"log/slog"
+
+	"github.com/meigma/blob/core/internal/write"
+)
 
 // ChangeDetection controls how strictly file changes are detected during creation.
 type ChangeDetection uint8
@@ -27,6 +31,7 @@ type createConfig struct {
 	changeDetection ChangeDetection
 	skipCompression []SkipCompressionFunc
 	maxFiles        int
+	logger          *slog.Logger
 }
 
 // CreateOption configures archive creation via the Create function.
@@ -63,5 +68,13 @@ func CreateWithSkipCompression(fns ...SkipCompressionFunc) CreateOption {
 func CreateWithMaxFiles(n int) CreateOption {
 	return func(cfg *createConfig) {
 		cfg.maxFiles = n
+	}
+}
+
+// CreateWithLogger sets the logger for archive creation.
+// If not set, logging is disabled.
+func CreateWithLogger(logger *slog.Logger) CreateOption {
+	return func(cfg *createConfig) {
+		cfg.logger = logger
 	}
 }

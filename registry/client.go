@@ -1,6 +1,8 @@
 package registry
 
 import (
+	"log/slog"
+
 	"github.com/meigma/blob/registry/cache"
 	"github.com/meigma/blob/registry/oras"
 )
@@ -12,10 +14,19 @@ type Client struct {
 	manifestCache cache.ManifestCache
 	indexCache    cache.IndexCache
 	policies      []Policy
+	logger        *slog.Logger
 
 	// orasOpts are options passed through to the ORAS client when
 	// no custom OCIClient is provided.
 	orasOpts []oras.Option
+}
+
+// log returns the logger, falling back to a discard logger if nil.
+func (c *Client) log() *slog.Logger {
+	if c.logger == nil {
+		return slog.New(slog.DiscardHandler)
+	}
+	return c.logger
 }
 
 // New creates a new blob archive client with the given options.
@@ -30,7 +41,12 @@ func New(opts ...Option) *Client {
 
 	// Create default ORAS client if none provided
 	if c.oci == nil {
-		c.oci = oras.New(c.orasOpts...)
+		// Propagate logger to ORAS client
+		orasOpts := c.orasOpts
+		if c.logger != nil {
+			orasOpts = append(orasOpts, oras.WithLogger(c.logger))
+		}
+		c.oci = oras.New(orasOpts...)
 	}
 
 	return c

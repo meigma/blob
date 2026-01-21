@@ -6,6 +6,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"log/slog"
 	"os"
 	"strings"
 
@@ -84,7 +85,12 @@ func pull(cfg *pullConfig) error {
 
 // buildClientOptions configures client policies based on pullConfig.
 func buildClientOptions(cfg *pullConfig) ([]blob.Option, error) {
-	opts := []blob.Option{blob.WithDockerConfig()}
+	// Create debug logger
+	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{
+		Level: slog.LevelDebug,
+	}))
+
+	opts := []blob.Option{blob.WithDockerConfig(), blob.WithLogger(logger)}
 	if cfg.plainHTTP {
 		opts = append(opts, blob.WithPlainHTTP(true))
 	}

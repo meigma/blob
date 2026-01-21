@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
@@ -30,6 +31,7 @@ type config struct {
 	dirPerm        os.FileMode
 	maxBytes       int64
 	refTTL         time.Duration
+	logger         *slog.Logger
 }
 
 // Option configures a disk cache.
@@ -66,6 +68,14 @@ func WithRefCacheTTL(ttl time.Duration) Option {
 	}
 }
 
+// WithLogger sets the logger for cache operations.
+// If not set, logging is disabled.
+func WithLogger(logger *slog.Logger) Option {
+	return func(c *config) {
+		c.logger = logger
+	}
+}
+
 // defaultConfig returns the default cache configuration.
 func defaultConfig() config {
 	return config{
@@ -86,6 +96,15 @@ type RefCache struct {
 	ttl            time.Duration
 	bytes          atomic.Int64
 	pruneMu        sync.Mutex
+	logger         *slog.Logger
+}
+
+// log returns the logger, falling back to a discard logger if nil.
+func (c *RefCache) log() *slog.Logger {
+	if c.logger == nil {
+		return slog.New(slog.DiscardHandler)
+	}
+	return c.logger
 }
 
 // NewRefCache creates a disk-backed ref cache rooted at dir.
@@ -116,12 +135,14 @@ func NewRefCache(dir string, opts ...Option) (*RefCache, error) {
 		dirPerm:        cfg.dirPerm,
 		maxBytes:       cfg.maxBytes,
 		ttl:            cfg.refTTL,
+		logger:         cfg.logger,
 	}
 	if size, err := dirSize(dir); err == nil {
 		c.bytes.Store(size)
 	} else {
 		return nil, err
 	}
+	c.log().Info("ref cache initialized", "dir", dir, "max_bytes", c.maxBytes)
 	return c, nil
 }
 
@@ -141,9 +162,11 @@ func (c *RefCache) GetDigest(ref string) (dgst string, ok bool) {
 	if c.ttl > 0 {
 		info, statErr := root.Stat(path)
 		if statErr != nil {
+			c.log().Debug("ref cache miss", "ref", ref)
 			return "", false
 		}
 		if time.Since(info.ModTime()) > c.ttl {
+			c.log().Debug("ref cache expired", "ref", ref)
 			_ = c.deleteByPath(root, path) //nolint:errcheck // best-effort cleanup
 			return "", false
 		}
@@ -151,15 +174,18 @@ func (c *RefCache) GetDigest(ref string) (dgst string, ok bool) {
 
 	data, err := root.ReadFile(path)
 	if err != nil {
+		c.log().Debug("ref cache miss", "ref", ref)
 		return "", false
 	}
 
 	// Validate digest format: must be "algorithm:hex"
 	dgst = string(data)
 	if !isValidDigestFormat(dgst) {
+		c.log().Warn("ref cache corrupted entry deleted", "ref", ref)
 		_ = c.deleteByPath(root, path) //nolint:errcheck // best-effort cleanup
 		return "", false
 	}
+	c.log().Debug("ref cache hit", "ref", ref)
 	return dgst, true
 }
 
@@ -360,6 +386,15 @@ type ManifestCache struct {
 	maxBytes       int64
 	bytes          atomic.Int64
 	pruneMu        sync.Mutex
+	logger         *slog.Logger
+}
+
+// log returns the logger, falling back to a discard logger if nil.
+func (c *ManifestCache) log() *slog.Logger {
+	if c.logger == nil {
+		return slog.New(slog.DiscardHandler)
+	}
+	return c.logger
 }
 
 // NewManifestCache creates a disk-backed manifest cache rooted at dir.
@@ -385,12 +420,14 @@ func NewManifestCache(dir string, opts ...Option) (*ManifestCache, error) {
 		shardPrefixLen: cfg.shardPrefixLen,
 		dirPerm:        cfg.dirPerm,
 		maxBytes:       cfg.maxBytes,
+		logger:         cfg.logger,
 	}
 	if size, err := dirSize(dir); err == nil {
 		c.bytes.Store(size)
 	} else {
 		return nil, err
 	}
+	c.log().Info("manifest cache initialized", "dir", dir, "max_bytes", c.maxBytes)
 	return c, nil
 }
 
@@ -411,20 +448,24 @@ func (c *ManifestCache) GetManifest(dgst string) (manifest *ocispec.Manifest, ok
 
 	data, err := root.ReadFile(path)
 	if err != nil {
+		c.log().Debug("manifest cache miss", "digest", dgst[:min(16, len(dgst))])
 		return nil, false
 	}
 
 	match, err := digestMatches(dgst, data)
 	if err != nil || !match {
+		c.log().Warn("manifest cache corrupted entry deleted", "digest", dgst[:min(16, len(dgst))])
 		_ = c.deleteByPath(root, path) //nolint:errcheck // best-effort cleanup
 		return nil, false
 	}
 
 	var m ocispec.Manifest
 	if err := json.Unmarshal(data, &m); err != nil {
+		c.log().Warn("manifest cache corrupted entry deleted", "digest", dgst[:min(16, len(dgst))])
 		_ = c.deleteByPath(root, path) //nolint:errcheck // best-effort cleanup
 		return nil, false
 	}
+	c.log().Debug("manifest cache hit", "digest", dgst[:min(16, len(dgst))])
 	return &m, true
 }
 
@@ -611,6 +652,15 @@ type IndexCache struct {
 	maxBytes       int64
 	bytes          atomic.Int64
 	pruneMu        sync.Mutex
+	logger         *slog.Logger
+}
+
+// log returns the logger, falling back to a discard logger if nil.
+func (c *IndexCache) log() *slog.Logger {
+	if c.logger == nil {
+		return slog.New(slog.DiscardHandler)
+	}
+	return c.logger
 }
 
 // NewIndexCache creates a disk-backed index cache rooted at dir.
@@ -636,12 +686,14 @@ func NewIndexCache(dir string, opts ...Option) (*IndexCache, error) {
 		shardPrefixLen: cfg.shardPrefixLen,
 		dirPerm:        cfg.dirPerm,
 		maxBytes:       cfg.maxBytes,
+		logger:         cfg.logger,
 	}
 	if size, err := dirSize(dir); err == nil {
 		c.bytes.Store(size)
 	} else {
 		return nil, err
 	}
+	c.log().Info("index cache initialized", "dir", dir, "max_bytes", c.maxBytes)
 	return c, nil
 }
 
@@ -662,15 +714,18 @@ func (c *IndexCache) GetIndex(dgst string) (index []byte, ok bool) {
 
 	data, err := root.ReadFile(path)
 	if err != nil {
+		c.log().Debug("index cache miss", "digest", dgst[:min(16, len(dgst))])
 		return nil, false
 	}
 
 	match, err := digestMatches(dgst, data)
 	if err != nil || !match {
+		c.log().Warn("index cache corrupted entry deleted", "digest", dgst[:min(16, len(dgst))])
 		_ = c.deleteByPath(root, path) //nolint:errcheck // best-effort cleanup
 		return nil, false
 	}
 
+	c.log().Debug("index cache hit", "digest", dgst[:min(16, len(dgst))])
 	return data, true
 }
 

@@ -35,6 +35,8 @@ func (c *Client) Fetch(ctx context.Context, ref string, opts ...FetchOption) (*M
 		opt(&cfg)
 	}
 
+	c.log().Debug("fetching manifest", "ref", ref)
+
 	// Build registry client options
 	regOpts := buildRegistryOpts(c)
 

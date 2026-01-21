@@ -43,6 +43,8 @@ func (c *Client) evaluatePolicies(ctx context.Context, ref, digestStr string, ma
 		return nil
 	}
 
+	c.log().Debug("evaluating policies", "ref", ref, "policy_count", len(c.policies))
+
 	dgst, err := digest.Parse(digestStr)
 	if err != nil {
 		return fmt.Errorf("%w: invalid digest %q", ErrInvalidReference, digestStr)
@@ -64,8 +66,12 @@ func (c *Client) evaluatePolicies(ctx context.Context, ref, digestStr string, ma
 		Client:   c,
 	}
 
-	for _, policy := range c.policies {
+	for i, policy := range c.policies {
 		if err := policy.Evaluate(ctx, req); err != nil {
+			c.log().Warn("policy evaluation failed",
+				"policy_index", i,
+				"error", err.Error(),
+			)
 			return fmt.Errorf("%w: %v", ErrPolicyViolation, err)
 		}
 	}
