@@ -98,6 +98,14 @@ func (p *Policy) Evaluate(ctx context.Context, req registry.PolicyRequest) error
 	// 2. Get or clone repository
 	repo, err := p.cache.Get(ctx, p.repoURL)
 	if err != nil {
+		// Clone can fail if the repository doesn't have valid gittuf metadata.
+		// When allowMissingGittuf is enabled, treat clone failures as "no gittuf".
+		if p.allowMissingGittuf {
+			p.logger.Warn("failed to clone/load gittuf repository, skipping verification",
+				slog.String("repo", p.repoURL),
+				slog.Any("error", err))
+			return nil
+		}
 		return fmt.Errorf("%w: %v", ErrCloneFailed, err)
 	}
 

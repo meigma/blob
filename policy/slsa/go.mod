@@ -1,6 +1,6 @@
 module github.com/meigma/blob/policy/slsa
 
-go 1.25.4
+go 1.25.5
 
 require (
 	github.com/meigma/blob v0.0.0

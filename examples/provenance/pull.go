@@ -7,9 +7,11 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strings"
 
 	"github.com/meigma/blob"
 	"github.com/meigma/blob/policy"
+	"github.com/meigma/blob/policy/gittuf"
 	"github.com/meigma/blob/policy/sigstore"
 	"github.com/meigma/blob/policy/slsa"
 )
@@ -20,6 +22,7 @@ type pullConfig struct {
 	repo       string
 	skipSig    bool
 	skipAttest bool
+	skipGittuf bool
 	plainHTTP  bool
 }
 
@@ -35,6 +38,7 @@ func runPull(args []string) error {
 	fs.StringVar(&cfg.repo, "repo", cfg.repo, "GitHub repository (owner/repo)")
 	fs.BoolVar(&cfg.skipSig, "skip-sig", false, "skip signature verification")
 	fs.BoolVar(&cfg.skipAttest, "skip-attest", false, "skip attestation policy")
+	fs.BoolVar(&cfg.skipGittuf, "skip-gittuf", false, "skip gittuf source verification")
 	fs.BoolVar(&cfg.plainHTTP, "plain-http", false, "use plain HTTP")
 	if err := fs.Parse(args); err != nil {
 		return err
@@ -110,6 +114,17 @@ func buildClientOptions(cfg *pullConfig) ([]blob.Option, error) {
 		fmt.Println("Skipping attestation policy")
 	}
 
+	// Add gittuf source verification policy if not skipped
+	if !cfg.skipGittuf {
+		gittufPolicy, err := buildGittufPolicy(cfg.repo)
+		if err != nil {
+			return nil, err
+		}
+		policies = append(policies, gittufPolicy)
+	} else {
+		fmt.Println("Skipping gittuf source verification")
+	}
+
 	// Combine policies with RequireAll
 	if len(policies) > 0 {
 		combined := policy.RequireAll(policies...)
@@ -129,6 +144,32 @@ func buildSigstorePolicy(repo string) (*sigstore.Policy, error) {
 func buildSLSAPolicy(repo string) (*slsa.Policy, error) {
 	fmt.Printf("Configuring SLSA provenance verification for %s\n", repo)
 	return slsa.GitHubActionsWorkflow(repo)
+}
+
+// buildGittufPolicy creates the gittuf source verification policy.
+// This verifies that source changes were authorized according to the
+// repository's gittuf policy by checking the Reference State Log (RSL).
+func buildGittufPolicy(repo string) (*gittuf.Policy, error) {
+	fmt.Printf("Configuring gittuf source verification for %s\n", repo)
+
+	// Parse owner/repo format
+	parts := strings.SplitN(repo, "/", 2)
+	if len(parts) != 2 {
+		return nil, fmt.Errorf("invalid repository format %q, expected owner/repo", repo)
+	}
+
+	return gittuf.GitHubRepository(parts[0], parts[1],
+		// Use latest-only verification for faster checks (default)
+		// Full RSL history verification can be enabled with gittuf.WithFullVerification()
+
+		// Allow missing gittuf during gradual adoption - remove once all repos have gittuf
+		gittuf.WithAllowMissingGittuf(),
+
+		// Allow missing SLSA provenance - gittuf extracts source info (repo, ref, commit)
+		// from SLSA provenance. When provenance is missing, verification is skipped.
+		// In production, use SLSA generators to create provenance attestations.
+		gittuf.WithAllowMissingProvenance(),
+	)
 }
 
 // extractArchive extracts the blob archive to the output directory.

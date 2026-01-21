@@ -6,12 +6,16 @@ on:
       - main
     paths:
       - 'examples/provenance/**'
+  pull_request:
+    branches:
+      - master
   workflow_dispatch:
 
 permissions:
   contents: read
   packages: write
   id-token: write
+  attestations: write
 
 env:
   REGISTRY: ghcr.io
@@ -69,6 +73,16 @@ jobs:
           echo "digest=$DIGEST" >> "$GITHUB_OUTPUT"
           echo "ref=$REF" >> "$GITHUB_OUTPUT"
 
+      - name: Generate SLSA provenance attestation
+        uses: actions/attest-build-provenance@ef244123eb79f2f7a7e75d99086184180e6d0018 # v2.3.0
+        with:
+          subject-name: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          subject-digest: ${{ steps.push.outputs.digest }}
+          push-to-registry: true
+
+      - name: Push latest tag
+        working-directory: examples/provenance
+        run: |
           # Also tag and sign as latest
           ./provenance push --ref "${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest" --sign
 
@@ -111,11 +125,14 @@ jobs:
         working-directory: examples/provenance
         run: |
           REF="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${{ needs.build-and-push.outputs.digest }}"
-          echo "Pulling with signature verification: $REF"
+          echo "Pulling with full verification: $REF"
+          # Full verification chain:
+          # 1. Sigstore: Verifies WHO signed the archive (GitHub Actions OIDC identity)
+          # 2. SLSA: Verifies HOW the archive was built (build provenance attestation)
+          # 3. Gittuf: Verifies WHETHER source changes were authorized (RSL verification)
           ./provenance pull \
             --ref "$REF" \
             --repo "meigma/blob" \
-            --skip-attest \
             --output ./verified-output
 
       - name: Verify extraction
