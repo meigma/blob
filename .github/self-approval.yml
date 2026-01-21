@@ -1,0 +1,14 @@
+# Self-approval configuration for solo maintainer workflow
+# https://github.com/self-approval/app
+
+# Comments that trigger self-approval
+self_approval_messages:
+  - "self-approve"
+  - "LGTM"
+
+# GitHub users allowed to self-approve (empty = anyone can self-approve their own PRs)
+from_author:
+  - "jmgilman"
+
+# Labels to apply when self-approved (empty = no labels)
+apply_labels: []
