@@ -130,10 +130,20 @@ jobs:
           # 1. Sigstore: Verifies WHO signed the archive (GitHub Actions OIDC identity)
           # 2. SLSA: Verifies HOW the archive was built (build provenance attestation)
           # 3. Gittuf: Verifies WHETHER source changes were authorized (RSL verification)
+          #
+          # Note: Gittuf verification is skipped for PR builds because:
+          # - PR merge refs (refs/pull/XX/merge) don't have RSL entries
+          # - Gittuf RSL only tracks actual branch pushes to protected refs
+          GITTUF_FLAG=""
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            echo "Skipping gittuf verification for PR build (PR refs don't have RSL entries)"
+            GITTUF_FLAG="--skip-gittuf"
+          fi
           ./provenance pull \
             --ref "$REF" \
             --repo "meigma/blob" \
-            --output ./verified-output
+            --output ./verified-output \
+            $GITTUF_FLAG
 
       - name: Verify extraction
         working-directory: examples/provenance
