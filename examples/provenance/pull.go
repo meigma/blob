@@ -100,7 +100,7 @@ func buildClientOptions(cfg *pullConfig) ([]blob.Option, error) {
 
 	// Add sigstore policy if not skipped
 	if !cfg.skipSig {
-		sigPolicy, err := buildSigstorePolicy(cfg.repo)
+		sigPolicy, err := buildSigstorePolicy(cfg.repo, logger)
 		if err != nil {
 			return nil, err
 		}
@@ -111,7 +111,7 @@ func buildClientOptions(cfg *pullConfig) ([]blob.Option, error) {
 
 	// Add SLSA policy if not skipped
 	if !cfg.skipAttest {
-		slsaPolicy, err := buildSLSAPolicy(cfg.repo)
+		slsaPolicy, err := buildSLSAPolicy(cfg.repo, logger)
 		if err != nil {
 			return nil, err
 		}
@@ -122,7 +122,7 @@ func buildClientOptions(cfg *pullConfig) ([]blob.Option, error) {
 
 	// Add gittuf source verification policy if not skipped
 	if !cfg.skipGittuf {
-		gittufPolicy, err := buildGittufPolicy(cfg.repo)
+		gittufPolicy, err := buildGittufPolicy(cfg.repo, logger)
 		if err != nil {
 			return nil, err
 		}
@@ -141,21 +141,21 @@ func buildClientOptions(cfg *pullConfig) ([]blob.Option, error) {
 }
 
 // buildSigstorePolicy creates the sigstore verification policy for GitHub Actions.
-func buildSigstorePolicy(repo string) (*sigstore.Policy, error) {
+func buildSigstorePolicy(repo string, logger *slog.Logger) (*sigstore.Policy, error) {
 	fmt.Printf("Configuring signature verification for %s\n", repo)
-	return sigstore.GitHubActionsPolicy(repo)
+	return sigstore.GitHubActionsPolicy(repo, sigstore.WithLogger(logger))
 }
 
 // buildSLSAPolicy creates the SLSA provenance policy for GitHub Actions.
-func buildSLSAPolicy(repo string) (*slsa.Policy, error) {
+func buildSLSAPolicy(repo string, logger *slog.Logger) (*slsa.Policy, error) {
 	fmt.Printf("Configuring SLSA provenance verification for %s\n", repo)
-	return slsa.GitHubActionsWorkflow(repo)
+	return slsa.GitHubActionsWorkflow(repo, slsa.WithLogger(logger))
 }
 
 // buildGittufPolicy creates the gittuf source verification policy.
 // This verifies that source changes were authorized according to the
 // repository's gittuf policy by checking the Reference State Log (RSL).
-func buildGittufPolicy(repo string) (*gittuf.Policy, error) {
+func buildGittufPolicy(repo string, logger *slog.Logger) (*gittuf.Policy, error) {
 	fmt.Printf("Configuring gittuf source verification for %s\n", repo)
 
 	// Parse owner/repo format
@@ -175,6 +175,9 @@ func buildGittufPolicy(repo string) (*gittuf.Policy, error) {
 		// from SLSA provenance. When provenance is missing, verification is skipped.
 		// In production, use SLSA generators to create provenance attestations.
 		gittuf.WithAllowMissingProvenance(),
+
+		// Pass logger for detailed verification output
+		gittuf.WithLogger(logger),
 	)
 }
 

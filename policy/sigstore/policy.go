@@ -60,6 +60,10 @@ func NewPolicy(opts ...PolicyOption) (*Policy, error) {
 //
 //nolint:gocritic // req passed by value per registry.Policy interface contract
 func (p *Policy) Evaluate(ctx context.Context, req registry.PolicyRequest) error {
+	p.logger.Debug("sigstore: starting signature verification",
+		slog.String("ref", req.Ref),
+		slog.String("digest", req.Digest))
+
 	// List sigstore bundle referrers for the subject manifest
 	referrers, err := req.Client.Referrers(ctx, req.Ref, req.Subject, SignatureArtifactType)
 	if err != nil {
@@ -68,6 +72,9 @@ func (p *Policy) Evaluate(ctx context.Context, req registry.PolicyRequest) error
 		}
 		return fmt.Errorf("sigstore: list referrers: %w", err)
 	}
+
+	p.logger.Debug("sigstore: found signature referrers",
+		slog.Int("count", len(referrers)))
 
 	if len(referrers) == 0 {
 		return errors.New("sigstore: no signatures found for manifest")
@@ -81,19 +88,29 @@ func (p *Policy) Evaluate(ctx context.Context, req registry.PolicyRequest) error
 
 	// Try to verify at least one signature
 	var lastErr error
-	for _, ref := range referrers {
+	for i, ref := range referrers {
+		p.logger.Debug("sigstore: verifying signature",
+			slog.Int("index", i),
+			slog.String("digest", ref.Digest.String()))
+
 		bundleData, err := req.Client.FetchDescriptor(ctx, req.Ref, ref)
 		if err != nil {
 			lastErr = fmt.Errorf("sigstore: fetch bundle: %w", err)
+			p.logger.Debug("sigstore: failed to fetch bundle",
+				slog.Any("error", err))
 			continue
 		}
 
 		if err := p.verifyBundleData(ctx, req, bundleData, payload); err != nil {
 			lastErr = err
+			p.logger.Debug("sigstore: signature verification failed",
+				slog.Any("error", err))
 			continue
 		}
 
 		// Successfully verified
+		p.logger.Info("sigstore: signature verified successfully",
+			slog.String("digest", ref.Digest.String()))
 		return nil
 	}
 
@@ -178,6 +195,8 @@ func (p *Policy) verifyBundle(bundleData, payload []byte) error {
 		return fmt.Errorf("parse bundle: %w", err)
 	}
 
+	p.logger.Debug("sigstore: parsed bundle, verifying signature")
+
 	// Build verifier with transparency log and timestamp requirements
 	verifier, err := verify.NewVerifier(
 		p.trustedRoot,
@@ -191,8 +210,12 @@ func (p *Policy) verifyBundle(bundleData, payload []byte) error {
 	// Build verification policy
 	var policyOpts []verify.PolicyOption
 	if p.identity != nil {
+		p.logger.Debug("sigstore: checking identity requirement",
+			slog.String("issuer", p.identity.Issuer.Issuer),
+			slog.String("subject", p.identity.SubjectAlternativeName.SubjectAlternativeName))
 		policyOpts = append(policyOpts, verify.WithCertificateIdentity(*p.identity))
 	} else {
+		p.logger.Debug("sigstore: no identity requirement configured, accepting any valid signature")
 		policyOpts = append(policyOpts, verify.WithoutIdentitiesUnsafe())
 	}
 

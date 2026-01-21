@@ -57,6 +57,9 @@ func AllowRefs(refs ...string) GitHubActionsOption {
 // By default, any workflow and any ref is allowed. Use [AllowBranches],
 // [AllowTags], or [AllowRefs] to restrict which refs are accepted.
 //
+// Additional [PolicyOption] values (like [WithLogger]) can be passed after the
+// GitHub Actions options.
+//
 // Example:
 //
 //	// Allow any ref from the repo
@@ -67,14 +70,23 @@ func AllowRefs(refs ...string) GitHubActionsOption {
 //	    sigstore.AllowBranches("main"),
 //	    sigstore.AllowTags("v*"),
 //	)
-func GitHubActionsPolicy(repo string, opts ...GitHubActionsOption) (*Policy, error) {
+func GitHubActionsPolicy(repo string, opts ...any) (*Policy, error) {
 	if repo == "" {
 		return nil, errors.New("sigstore: repository cannot be empty")
 	}
 
 	cfg := &gitHubActionsConfig{}
+	var policyOpts []PolicyOption
+
 	for _, opt := range opts {
-		opt(cfg)
+		switch o := opt.(type) {
+		case GitHubActionsOption:
+			o(cfg)
+		case PolicyOption:
+			policyOpts = append(policyOpts, o)
+		default:
+			return nil, fmt.Errorf("sigstore: unexpected option type %T", opt)
+		}
 	}
 
 	// Build the subject regex pattern
@@ -89,15 +101,14 @@ func GitHubActionsPolicy(repo string, opts ...GitHubActionsOption) (*Policy, err
 		return nil, fmt.Errorf("sigstore: create identity: %w", err)
 	}
 
-	p := &Policy{
-		identity: &identity,
-	}
+	// Add identity option first, then user-provided options
+	allOpts := append([]PolicyOption{func(p *Policy) error {
+		p.identity = &identity
+		return nil
+	}}, policyOpts...)
 
 	// Fetch public Sigstore trusted root
-	return NewPolicy(func(p2 *Policy) error {
-		p2.identity = p.identity
-		return nil
-	})
+	return NewPolicy(allOpts...)
 }
 
 // buildGitHubActionsSubjectRegex constructs the subject regex pattern.

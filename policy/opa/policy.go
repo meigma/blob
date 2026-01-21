@@ -56,6 +56,11 @@ func NewPolicy(opts ...PolicyOption) (*Policy, error) {
 //
 //nolint:gocritic // req passed by value per registry.Policy interface contract
 func (p *Policy) Evaluate(ctx context.Context, req registry.PolicyRequest) error {
+	p.logger.Debug("opa: starting policy evaluation",
+		slog.String("ref", req.Ref),
+		slog.String("digest", req.Digest),
+		slog.String("artifact_type", p.artifactType))
+
 	// Fetch attestation referrers
 	referrers, err := req.Client.Referrers(ctx, req.Ref, req.Subject, p.artifactType)
 	if err != nil {
@@ -65,11 +70,17 @@ func (p *Policy) Evaluate(ctx context.Context, req registry.PolicyRequest) error
 		return fmt.Errorf("opa: list referrers: %w", err)
 	}
 
+	p.logger.Debug("opa: found attestation referrers",
+		slog.Int("count", len(referrers)))
+
 	// Collect and parse attestations
 	attestations := p.fetchAttestations(ctx, req, referrers)
 	if len(attestations) == 0 {
 		return ErrNoAttestations
 	}
+
+	p.logger.Debug("opa: parsed attestations",
+		slog.Int("count", len(attestations)))
 
 	// Build Rego input
 	input := Input{
@@ -170,6 +181,8 @@ func (p *Policy) fetchAttestationsFromLayers(ctx context.Context, req registry.P
 
 // evaluatePolicy runs the Rego policy against the input.
 func (p *Policy) evaluatePolicy(ctx context.Context, input Input) error {
+	p.logger.Debug("opa: evaluating rego policy")
+
 	results, err := p.query.Eval(ctx, rego.EvalInput(input))
 	if err != nil {
 		return fmt.Errorf("%w: %v", ErrPolicyEvaluation, err)
@@ -185,7 +198,14 @@ func (p *Policy) evaluatePolicy(ctx context.Context, input Input) error {
 		return fmt.Errorf("%w: unexpected result type", ErrPolicyEvaluation)
 	}
 
-	return checkPolicyResult(result)
+	err = checkPolicyResult(result)
+	if err != nil {
+		p.logger.Debug("opa: policy denied", slog.Any("error", err))
+		return err
+	}
+
+	p.logger.Info("opa: policy allowed")
+	return nil
 }
 
 // checkPolicyResult evaluates the allow/deny rules from the Rego result.
