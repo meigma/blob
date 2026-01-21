@@ -11,5 +11,4 @@ from_author:
   - "jmgilman"
 
 # Labels to apply when self-approved (empty = no labels)
-apply_labels:
-  - "self-approved"
+apply_labels: []
