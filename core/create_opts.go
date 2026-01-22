@@ -32,6 +32,7 @@ type createConfig struct {
 	skipCompression []SkipCompressionFunc
 	maxFiles        int
 	logger          *slog.Logger
+	progress        ProgressFunc
 }
 
 // CreateOption configures archive creation via the Create function.
@@ -76,5 +77,13 @@ func CreateWithMaxFiles(n int) CreateOption {
 func CreateWithLogger(logger *slog.Logger) CreateOption {
 	return func(cfg *createConfig) {
 		cfg.logger = logger
+	}
+}
+
+// CreateWithProgress sets a callback to receive progress updates.
+// The callback may be invoked concurrently and must be safe for concurrent use.
+func CreateWithProgress(fn ProgressFunc) CreateOption {
+	return func(cfg *createConfig) {
+		cfg.progress = fn
 	}
 }

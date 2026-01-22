@@ -32,6 +32,15 @@ type (
 	// EntryView provides a read-only view of an index entry.
 	EntryView = blobtype.EntryView
 
+	// ProgressEvent represents a progress update during operations.
+	ProgressEvent = blobtype.ProgressEvent
+
+	// ProgressStage identifies the current phase of an operation.
+	ProgressStage = blobtype.ProgressStage
+
+	// ProgressFunc receives progress updates during operations.
+	ProgressFunc = blobtype.ProgressFunc
+
 	// File represents an archive file with optional random access.
 	// ReadAt is only supported for uncompressed entries.
 	File interface {
@@ -47,6 +56,17 @@ var EntryFromViewWithPath = blobtype.EntryFromViewWithPath
 const (
 	CompressionNone = blobtype.CompressionNone
 	CompressionZstd = blobtype.CompressionZstd
+)
+
+// Re-export progress stage constants.
+const (
+	StageEnumerating      = blobtype.StageEnumerating
+	StageCompressing      = blobtype.StageCompressing
+	StagePushingIndex     = blobtype.StagePushingIndex
+	StagePushingData      = blobtype.StagePushingData
+	StageFetchingManifest = blobtype.StageFetchingManifest
+	StageFetchingIndex    = blobtype.StageFetchingIndex
+	StageExtracting       = blobtype.StageExtracting
 )
 
 // Interface compliance.
@@ -535,6 +555,12 @@ func (b *Blob) copyEntries(destDir string, entries []*batch.Entry, cfg *copyConf
 	}
 	if cfg.readAheadBytesSet {
 		procOpts = append(procOpts, batch.WithReadAheadBytes(cfg.readAheadBytes))
+	}
+	if cfg.progress != nil {
+		procOpts = append(procOpts, batch.WithProcessorProgress(cfg.progress))
+	}
+	if b.logger != nil {
+		procOpts = append(procOpts, batch.WithProcessorLogger(b.logger))
 	}
 	proc := batch.NewProcessor(b.reader.Source(), b.reader.Pool(), b.maxFileSize, procOpts...)
 
