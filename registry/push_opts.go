@@ -1,11 +1,14 @@
 package registry
 
+import blob "github.com/meigma/blob/core"
+
 // PushOption configures a Push operation.
 type PushOption func(*pushConfig)
 
 type pushConfig struct {
 	tags        []string
 	annotations map[string]string
+	progress    blob.ProgressFunc
 }
 
 // WithTags applies additional tags to the pushed manifest.
@@ -30,5 +33,14 @@ func WithAnnotations(annotations map[string]string) PushOption {
 		for k, v := range annotations {
 			cfg.annotations[k] = v
 		}
+	}
+}
+
+// WithProgress sets a callback to receive progress updates during push.
+// The callback receives events for index and data blob uploads.
+// The callback may be invoked concurrently and must be safe for concurrent use.
+func WithProgress(fn blob.ProgressFunc) PushOption {
+	return func(cfg *pushConfig) {
+		cfg.progress = fn
 	}
 }

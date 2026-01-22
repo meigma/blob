@@ -63,15 +63,19 @@ func (c *Client) Push(ctx context.Context, ref string, b *blob.Blob, opts ...Pus
 		Digest:    digest.FromBytes(indexData),
 		Size:      int64(len(indexData)),
 	}
+	reportProgress(cfg.progress, blob.StagePushingIndex, 0, sizeToUint64(indexDesc.Size))
 	if pushErr := c.oci.PushBlob(ctx, ref, &indexDesc, bytes.NewReader(indexData)); pushErr != nil {
 		return fmt.Errorf("push index blob: %w", mapOCIError(pushErr))
 	}
+	reportProgress(cfg.progress, blob.StagePushingIndex, sizeToUint64(indexDesc.Size), sizeToUint64(indexDesc.Size))
 	c.log().Debug("pushed index blob", "digest", indexDesc.Digest.String(), "size", indexDesc.Size)
 
 	// Step 3: Push data blob
+	reportProgress(cfg.progress, blob.StagePushingData, 0, sizeToUint64(dataDesc.Size))
 	if pushErr := c.oci.PushBlob(ctx, ref, &dataDesc, b.Stream()); pushErr != nil {
 		return fmt.Errorf("push data blob: %w", mapOCIError(pushErr))
 	}
+	reportProgress(cfg.progress, blob.StagePushingData, sizeToUint64(dataDesc.Size), sizeToUint64(dataDesc.Size))
 	c.log().Debug("pushed data blob", "digest", dataDesc.Digest.String(), "size", dataDesc.Size)
 
 	// Step 4: Build and push manifest
@@ -152,4 +156,24 @@ func buildManifest(configDesc, indexDesc, dataDesc *ocispec.Descriptor, customAn
 		Layers:       []ocispec.Descriptor{*indexDesc, *dataDesc},
 		Annotations:  annotations,
 	}
+}
+
+// reportProgress sends a progress event if a callback is configured.
+func reportProgress(fn blob.ProgressFunc, stage blob.ProgressStage, bytesDone, bytesTotal uint64) {
+	if fn == nil {
+		return
+	}
+	fn(blob.ProgressEvent{
+		Stage:      stage,
+		BytesDone:  bytesDone,
+		BytesTotal: bytesTotal,
+	})
+}
+
+// sizeToUint64 safely converts an int64 size to uint64, treating negative values as 0.
+func sizeToUint64(v int64) uint64 {
+	if v < 0 {
+		return 0
+	}
+	return uint64(v) //nolint:gosec // v is guaranteed non-negative after check
 }
