@@ -35,6 +35,7 @@ func (c *Client) Pull(ctx context.Context, ref string, opts ...PullOption) (*blo
 	c.log().Info("pulling archive", "ref", ref)
 
 	// Step 1: Fetch manifest (handles caching internally)
+	reportPullProgress(cfg.progress, blob.StageFetchingManifest, 0, 0)
 	var fetchOpts []FetchOption
 	if cfg.skipCache {
 		fetchOpts = append(fetchOpts, WithSkipCache())
@@ -43,12 +44,16 @@ func (c *Client) Pull(ctx context.Context, ref string, opts ...PullOption) (*blo
 	if err != nil {
 		return nil, err
 	}
+	reportPullProgress(cfg.progress, blob.StageFetchingManifest, 1, 1)
 
 	// Step 2: Fetch index blob (small, download fully)
+	indexDesc := manifest.IndexDescriptor()
+	reportPullProgress(cfg.progress, blob.StageFetchingIndex, 0, sizeToUint64(indexDesc.Size))
 	indexData, err := c.fetchIndexBlob(ctx, ref, manifest, &cfg)
 	if err != nil {
 		return nil, err
 	}
+	reportPullProgress(cfg.progress, blob.StageFetchingIndex, uint64(len(indexData)), uint64(len(indexData)))
 
 	// Step 3: Create HTTP source for lazy data access
 	source, err := c.createDataSource(ctx, ref, manifest)
@@ -207,4 +212,16 @@ func readIndexData(r io.Reader, expectedSize, maxSize int64) ([]byte, error) {
 	}
 
 	return data, nil
+}
+
+// reportPullProgress sends a progress event if a callback is configured.
+func reportPullProgress(fn blob.ProgressFunc, stage blob.ProgressStage, bytesDone, bytesTotal uint64) {
+	if fn == nil {
+		return
+	}
+	fn(blob.ProgressEvent{
+		Stage:      stage,
+		BytesDone:  bytesDone,
+		BytesTotal: bytesTotal,
+	})
 }

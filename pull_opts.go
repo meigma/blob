@@ -9,6 +9,7 @@ type pullConfig struct {
 	skipCache    bool
 	maxIndexSize int64
 	blobOpts     []blobcore.Option
+	progress     ProgressFunc
 }
 
 // PullWithSkipCache bypasses the ref and manifest caches.
@@ -61,5 +62,14 @@ func PullWithDecoderLowmem(enabled bool) PullOption {
 func PullWithVerifyOnClose(enabled bool) PullOption {
 	return func(cfg *pullConfig) {
 		cfg.blobOpts = append(cfg.blobOpts, blobcore.WithVerifyOnClose(enabled))
+	}
+}
+
+// PullWithProgress sets a callback to receive progress updates during pull.
+// The callback receives events for manifest and index fetching.
+// The callback may be invoked concurrently and must be safe for concurrent use.
+func PullWithProgress(fn ProgressFunc) PullOption {
+	return func(cfg *pullConfig) {
+		cfg.progress = fn
 	}
 }

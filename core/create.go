@@ -71,6 +71,21 @@ type writer struct {
 	logger *slog.Logger
 }
 
+// reportProgress sends a progress event if a callback is configured.
+func (w *writer) reportProgress(stage ProgressStage, path string, bytesDone, bytesTotal uint64, filesDone, filesTotal int) {
+	if w.cfg.progress == nil {
+		return
+	}
+	w.cfg.progress(ProgressEvent{
+		Stage:      stage,
+		Path:       path,
+		BytesDone:  bytesDone,
+		BytesTotal: bytesTotal,
+		FilesDone:  filesDone,
+		FilesTotal: filesTotal,
+	})
+}
+
 // log returns the logger, falling back to a discard logger if nil.
 func (w *writer) log() *slog.Logger {
 	if w.logger == nil {
@@ -99,6 +114,9 @@ func (w *writer) writeData(ctx context.Context, root *os.Root, data io.Writer) (
 	}
 	buf := make([]byte, 32*1024)
 
+	// Signal enumeration start
+	w.reportProgress(StageEnumerating, "", 0, 0, 0, 0)
+
 	err = fs.WalkDir(root.FS(), ".", func(path string, d fs.DirEntry, walkErr error) error {
 		entry, skip, procErr := w.processEntry(ctx, root, data, enc, buf, path, d, walkErr, strict, maxFiles, len(entries))
 		if procErr != nil || skip {
@@ -110,6 +128,7 @@ func (w *writer) writeData(ctx context.Context, root *os.Root, data io.Writer) (
 		entry.DataOffset = totalBytes
 		entries = append(entries, entry)
 		totalBytes += entry.DataSize
+		w.reportProgress(StageCompressing, path, totalBytes, 0, len(entries), 0)
 		return nil
 	})
 	if err != nil {
