@@ -59,6 +59,11 @@ func (c *Client) Pull(ctx context.Context, ref string, opts ...PullOption) (*Arc
 		pullOpts = append(pullOpts, registry.WithBlobOptions(blobOpts...))
 	}
 
+	// Pass progress callback
+	if cfg.progress != nil {
+		pullOpts = append(pullOpts, registry.WithPullProgress(cfg.progress))
+	}
+
 	// Pull via registry client
 	blob, err := regClient.Pull(ctx, ref, pullOpts...)
 	if err != nil {

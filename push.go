@@ -89,6 +89,9 @@ func (c *Client) pushArchive(ctx context.Context, ref string, archive *blobcore.
 	if cfg.annotations != nil {
 		pushOpts = append(pushOpts, registry.WithAnnotations(cfg.annotations))
 	}
+	if cfg.progress != nil {
+		pushOpts = append(pushOpts, registry.WithProgress(cfg.progress))
+	}
 
 	return regClient.Push(ctx, ref, archive, pushOpts...)
 }

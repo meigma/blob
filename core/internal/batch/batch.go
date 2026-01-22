@@ -49,6 +49,11 @@ type Processor struct {
 	readAheadBytes   uint64
 	readAheadEnabled bool
 	logger           *slog.Logger
+	progress         blobtype.ProgressFunc
+
+	// Progress tracking state (set during Process call)
+	progressTotal     int
+	progressProcessed atomic.Int64
 }
 
 // log returns the logger, falling back to a discard logger if nil.
@@ -57,6 +62,22 @@ func (p *Processor) log() *slog.Logger {
 		return slog.New(slog.DiscardHandler)
 	}
 	return p.logger
+}
+
+// reportEntryProgress reports extraction progress for a single entry.
+func (p *Processor) reportEntryProgress(entry *Entry) {
+	if p.progress == nil {
+		return
+	}
+	done := int(p.progressProcessed.Add(1))
+	p.progress(blobtype.ProgressEvent{
+		Stage:      blobtype.StageExtracting,
+		Path:       entry.Path,
+		BytesDone:  entry.OriginalSize,
+		BytesTotal: entry.OriginalSize,
+		FilesDone:  done,
+		FilesTotal: p.progressTotal,
+	})
 }
 
 // ProcessorOption configures a Processor.
@@ -96,6 +117,14 @@ func WithReadAheadBytes(limit uint64) ProcessorOption {
 func WithProcessorLogger(logger *slog.Logger) ProcessorOption {
 	return func(p *Processor) {
 		p.logger = logger
+	}
+}
+
+// WithProcessorProgress sets a callback to receive progress updates during processing.
+// The callback receives events for each file extracted.
+func WithProcessorProgress(fn blobtype.ProgressFunc) ProcessorOption {
+	return func(p *Processor) {
+		p.progress = fn
 	}
 }
 
@@ -140,6 +169,10 @@ func (p *Processor) Process(entries []*Entry, sink Sink) error {
 	if len(toProcess) == 0 {
 		return nil
 	}
+
+	// Initialize progress tracking
+	p.progressTotal = len(toProcess)
+	p.progressProcessed.Store(0)
 
 	// Validate all entries
 	sourceSize := p.source.Size()
@@ -373,6 +406,7 @@ func (p *Processor) processEntriesSerial(entries []*Entry, data []byte, groupSta
 		if err := p.processEntry(entry, data, groupStart, sink); err != nil {
 			return err
 		}
+		p.reportEntryProgress(entry)
 	}
 	return nil
 }
@@ -391,12 +425,14 @@ func (p *Processor) processEntriesParallel(entries []*Entry, data []byte, groupS
 				if stop.Load() {
 					return
 				}
-				if err := p.processEntry(entries[i], data, groupStart, sink); err != nil {
+				entry := entries[i]
+				if err := p.processEntry(entry, data, groupStart, sink); err != nil {
 					if stop.CompareAndSwap(false, true) {
 						errCh <- err
 					}
 					return
 				}
+				p.reportEntryProgress(entry)
 			}
 		}(w)
 	}

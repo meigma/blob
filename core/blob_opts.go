@@ -90,6 +90,7 @@ type copyConfig struct {
 	readAheadBytes     uint64
 	readAheadBytesSet  bool
 	cleanDest          bool
+	progress           ProgressFunc
 }
 
 // CopyWithOverwrite allows overwriting existing files.
@@ -151,5 +152,14 @@ func CopyWithReadAheadBytes(limit uint64) CopyOption {
 	return func(c *copyConfig) {
 		c.readAheadBytes = limit
 		c.readAheadBytesSet = true
+	}
+}
+
+// CopyWithProgress sets a callback to receive progress updates during extraction.
+// The callback receives events for each file extracted.
+// The callback may be invoked concurrently and must be safe for concurrent use.
+func CopyWithProgress(fn ProgressFunc) CopyOption {
+	return func(c *copyConfig) {
+		c.progress = fn
 	}
 }
