@@ -7,7 +7,7 @@ require (
 	github.com/opencontainers/go-digest v1.0.0
 	github.com/opencontainers/image-spec v1.1.1
 	github.com/sigstore/protobuf-specs v0.5.0
-	github.com/sigstore/sigstore v1.10.3
+	github.com/sigstore/sigstore v1.10.4
 	github.com/sigstore/sigstore-go v1.1.4
 	github.com/stretchr/testify v1.11.1
 	google.golang.org/protobuf v1.36.11
