@@ -9,6 +9,7 @@ type pushConfig struct {
 	tags        []string
 	annotations map[string]string
 	createOpts  []blobcore.CreateOption
+	progress    ProgressFunc
 }
 
 // PushWithTags applies additional tags to the pushed manifest.
@@ -67,5 +68,16 @@ func PushWithChangeDetection(cd ChangeDetection) PushOption {
 func PushWithMaxFiles(n int) PushOption {
 	return func(cfg *pushConfig) {
 		cfg.createOpts = append(cfg.createOpts, blobcore.CreateWithMaxFiles(n))
+	}
+}
+
+// PushWithProgress sets a callback to receive progress updates during push.
+// The callback receives events for archive creation (compressing files) and
+// blob uploads (pushing index and data).
+// The callback may be invoked concurrently and must be safe for concurrent use.
+func PushWithProgress(fn ProgressFunc) PushOption {
+	return func(cfg *pushConfig) {
+		cfg.progress = fn
+		cfg.createOpts = append(cfg.createOpts, blobcore.CreateWithProgress(fn))
 	}
 }

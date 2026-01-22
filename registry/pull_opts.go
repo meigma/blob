@@ -11,6 +11,7 @@ type pullConfig struct {
 	// maxIndexSize limits how many bytes are read for the index blob.
 	// A value <= 0 disables the limit.
 	maxIndexSize int64
+	progress     blob.ProgressFunc
 }
 
 const defaultMaxIndexSize = 8 << 20 // 8 MiB
@@ -40,5 +41,14 @@ func WithMaxIndexSize(maxBytes int64) PullOption {
 func WithPullSkipCache() PullOption {
 	return func(cfg *pullConfig) {
 		cfg.skipCache = true
+	}
+}
+
+// WithPullProgress sets a callback to receive progress updates during pull.
+// The callback receives events for manifest and index fetching.
+// The callback may be invoked concurrently and must be safe for concurrent use.
+func WithPullProgress(fn blob.ProgressFunc) PullOption {
+	return func(cfg *pullConfig) {
+		cfg.progress = fn
 	}
 }
