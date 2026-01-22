@@ -55,6 +55,9 @@ var (
 // and known already-compressed extensions.
 var DefaultSkipCompression = blobcore.DefaultSkipCompression
 
+// NormalizePath converts a user-provided path to fs.ValidPath format.
+var NormalizePath = blobcore.NormalizePath
+
 // DefaultMaxFiles is the default limit used when no MaxFiles option is set.
 const DefaultMaxFiles = blobcore.DefaultMaxFiles
 
