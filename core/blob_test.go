@@ -866,3 +866,62 @@ func TestBlob_CopyFile_PreserveTimes(t *testing.T) {
 		assert.Less(t, diff, time.Second, "mod time should match original")
 	})
 }
+
+func TestBlob_DirStats(t *testing.T) {
+	t.Parallel()
+
+	files := map[string][]byte{
+		"a.txt":                bytes.Repeat([]byte("a"), 100),
+		"b.txt":                bytes.Repeat([]byte("b"), 200),
+		"etc/nginx/nginx.conf": bytes.Repeat([]byte("n"), 300),
+		"etc/nginx/mime.types": bytes.Repeat([]byte("m"), 150),
+		"etc/hosts":            bytes.Repeat([]byte("h"), 50),
+	}
+	b := createTestArchive(t, files, CompressionNone)
+
+	tests := []struct {
+		name      string
+		prefix    string
+		wantCount int
+		wantBytes uint64
+	}{
+		{name: "entire archive with dot", prefix: ".", wantCount: 5, wantBytes: 800},
+		{name: "entire archive with empty", prefix: "", wantCount: 5, wantBytes: 800},
+		{name: "subdirectory", prefix: "etc/nginx", wantCount: 2, wantBytes: 450},
+		{name: "parent directory", prefix: "etc", wantCount: 3, wantBytes: 500},
+		{name: "nonexistent prefix", prefix: "nonexistent", wantCount: 0, wantBytes: 0},
+		{name: "normalized leading slash", prefix: "/etc/nginx", wantCount: 2, wantBytes: 450},
+		{name: "normalized trailing slash", prefix: "etc/nginx/", wantCount: 2, wantBytes: 450},
+		// Exact file match cases
+		{name: "exact file match", prefix: "etc/hosts", wantCount: 1, wantBytes: 50},
+		{name: "exact file match nested", prefix: "etc/nginx/nginx.conf", wantCount: 1, wantBytes: 300},
+		{name: "exact file match with leading slash", prefix: "/a.txt", wantCount: 1, wantBytes: 100},
+		// Invalid path cases
+		{name: "path traversal", prefix: "../escape", wantCount: 0, wantBytes: 0},
+		{name: "absolute path traversal", prefix: "/../etc", wantCount: 0, wantBytes: 0},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			stats := b.DirStats(tt.prefix)
+			assert.Equal(t, tt.wantCount, stats.FileCount)
+			assert.Equal(t, tt.wantBytes, stats.TotalBytes)
+		})
+	}
+}
+
+func TestBlob_DirStats_Compressed(t *testing.T) {
+	t.Parallel()
+
+	// Create compressible content
+	files := map[string][]byte{
+		"data.txt": bytes.Repeat([]byte("compressible data "), 100),
+	}
+	b := createTestArchive(t, files, CompressionZstd)
+
+	stats := b.DirStats(".")
+	assert.Equal(t, 1, stats.FileCount)
+	assert.Equal(t, uint64(1800), stats.TotalBytes)         // Original size
+	assert.Less(t, stats.CompressedBytes, stats.TotalBytes) // Compressed should be smaller
+}

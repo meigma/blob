@@ -462,6 +462,45 @@ func (b *Blob) Len() int {
 	return b.idx.Len()
 }
 
+// DirStats returns statistics for all files under prefix.
+//
+// The prefix is normalized before use, so "/etc/nginx/" and "etc/nginx"
+// are equivalent. Use "" or "." to get statistics for the entire archive.
+//
+// If prefix matches a file exactly, returns stats for that single file.
+// If prefix matches a directory, returns stats for all files under it.
+//
+// Returns zero values for non-existent or invalid prefixes.
+func (b *Blob) DirStats(prefix string) DirStats {
+	prefix = NormalizePath(prefix)
+	if !fs.ValidPath(prefix) {
+		return DirStats{}
+	}
+
+	var stats DirStats
+
+	// Check for exact file match (prefix is a file path, not a directory)
+	if prefix != "." {
+		if view, ok := b.idx.LookupView(prefix); ok && view.Mode().IsRegular() {
+			stats.FileCount = 1
+			stats.TotalBytes = view.OriginalSize()
+			stats.CompressedBytes = view.DataSize()
+			return stats
+		}
+	}
+
+	// Scan directory children
+	dirPrefix := file.DirPrefix(prefix)
+	for view := range b.idx.EntriesWithPrefixView(dirPrefix) {
+		if view.Mode().IsRegular() {
+			stats.FileCount++
+			stats.TotalBytes += view.OriginalSize()
+			stats.CompressedBytes += view.DataSize()
+		}
+	}
+	return stats
+}
+
 // CopyTo extracts specific files to a destination directory.
 //
 // Parent directories are created as needed.
