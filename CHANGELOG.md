@@ -1,5 +1,18 @@
 # Changelog
 
+## [1.1.0](https://github.com/meigma/blob/compare/v1.0.0...v1.1.0) (2026-01-23)
+
+
+### Features
+
+* add progress reporting for CLI progress bars ([#48](https://github.com/meigma/blob/issues/48)) ([10f2fbe](https://github.com/meigma/blob/commit/10f2fbe93dcc3b3a5f29bb5329d093ddc3439c11))
+* **core:** add CopyFile method for single-file extraction with rename ([#51](https://github.com/meigma/blob/issues/51)) ([727a0e9](https://github.com/meigma/blob/commit/727a0e97fbb37e29061779959363d82615d6e0a9))
+* **core:** add DirStats method for directory statistics ([#54](https://github.com/meigma/blob/issues/54)) ([e9ed59a](https://github.com/meigma/blob/commit/e9ed59a486d71de7d51ee63cc0909f14477e0e40))
+* **core:** add Exists, IsDir, IsFile convenience methods ([#53](https://github.com/meigma/blob/issues/53)) ([ffc1ac6](https://github.com/meigma/blob/commit/ffc1ac62444809955ba4937cb28b6a1ce058face))
+* **core:** add NormalizePath helper for fs.ValidPath conversion ([#50](https://github.com/meigma/blob/issues/50)) ([6ddbec5](https://github.com/meigma/blob/commit/6ddbec521236d2ca134a3bf162cccd219ebd9666))
+* **core:** add ValidateFiles method for bulk file validation ([#55](https://github.com/meigma/blob/issues/55)) ([5eb137a](https://github.com/meigma/blob/commit/5eb137ab3b007f259120b60f3a414d6ea50315ac))
+* **core:** return CopyStats from copy operations ([#52](https://github.com/meigma/blob/issues/52)) ([c48479d](https://github.com/meigma/blob/commit/c48479d01f2e66015bc31de369f5eaab8962e416))
+
 ## 1.0.0 (2026-01-21)
 
 
