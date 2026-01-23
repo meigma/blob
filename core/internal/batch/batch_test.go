@@ -186,13 +186,18 @@ func TestProcessor_ShouldProcess(t *testing.T) {
 	source := &mockByteSource{data: []byte("helloworld")}
 	proc := NewProcessor(source, nil, 0)
 
-	err := proc.Process(entries, sink)
+	stats, err := proc.Process(entries, sink)
 	require.NoError(t, err)
 
 	// Only a.txt should be written
 	assert.Contains(t, sink.written, "a.txt")
 	assert.NotContains(t, sink.written, "skip.txt")
 	assert.Equal(t, []byte("hello"), sink.written["a.txt"])
+
+	// Verify stats
+	assert.Equal(t, 1, stats.Processed)
+	assert.Equal(t, 1, stats.Skipped)
+	assert.Equal(t, uint64(5), stats.TotalBytes)
 }
 
 func TestProcessor_EmptyEntries(t *testing.T) {
@@ -201,11 +206,13 @@ func TestProcessor_EmptyEntries(t *testing.T) {
 	sink := newMockSink()
 	proc := NewProcessor(&mockByteSource{data: make([]byte, 100)}, nil, 0)
 
-	err := proc.Process(nil, sink)
+	stats, err := proc.Process(nil, sink)
 	assert.NoError(t, err)
+	assert.Equal(t, ProcessStats{}, stats)
 
-	err = proc.Process([]*Entry{}, sink)
+	stats, err = proc.Process([]*Entry{}, sink)
 	assert.NoError(t, err)
+	assert.Equal(t, ProcessStats{}, stats)
 }
 
 // sha256Hash returns a valid SHA256 hash for the given content.

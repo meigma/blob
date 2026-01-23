@@ -26,7 +26,8 @@ func extractFromRegistry(ref, destDir string) error {
 	}
 
 	// Extract all files
-	return archive.CopyDir(destDir, ".")
+	_, err = archive.CopyDir(destDir, ".")
+	return err
 }
 ```
 
@@ -46,7 +47,7 @@ if err != nil {
 defer blobFile.Close()
 
 // All Blob methods work on BlobFile
-err = blobFile.CopyDir("/dest", ".")
+_, err = blobFile.CopyDir("/dest", ".")
 ```
 
 The examples below use `*Blob` but apply equally to `*BlobFile`.
@@ -56,7 +57,7 @@ The examples below use `*Blob` but apply equally to `*BlobFile`.
 To extract specific files by path, use `CopyTo`:
 
 ```go
-err := archive.CopyTo("/dest/dir", "config.json", "lib/utils.go", "main.go")
+_, err := archive.CopyTo("/dest/dir", "config.json", "lib/utils.go", "main.go")
 ```
 
 The files are extracted to the destination directory, preserving their relative paths:
@@ -69,7 +70,7 @@ To pass options, use `CopyToWithOptions`:
 
 ```go
 paths := []string{"config.json", "lib/utils.go"}
-err := archive.CopyToWithOptions("/dest/dir", paths,
+_, err := archive.CopyToWithOptions("/dest/dir", paths,
 	blob.CopyWithOverwrite(true),
 	blob.CopyWithPreserveMode(true),
 )
@@ -81,10 +82,14 @@ To extract all files under a directory prefix, use `CopyDir`:
 
 ```go
 // Extract everything under src/
-err := archive.CopyDir("/dest/dir", "src")
+stats, err := archive.CopyDir("/dest/dir", "src")
 
 // Extract the entire archive
-err = archive.CopyDir("/dest/dir", ".")
+stats, err = archive.CopyDir("/dest/dir", ".")
+
+// stats.FileCount contains the number of files extracted
+// stats.TotalBytes contains the total uncompressed size
+// stats.Skipped contains the number of files skipped (already exist)
 ```
 
 Files matching the prefix are extracted to the destination directory with their full archive paths:
@@ -96,7 +101,7 @@ Files matching the prefix are extracted to the destination directory with their 
 By default, existing files are skipped. To overwrite:
 
 ```go
-err := archive.CopyDir("/dest/dir", ".",
+_, err := archive.CopyDir("/dest/dir", ".",
 	blob.CopyWithOverwrite(true),
 )
 ```
@@ -110,7 +115,7 @@ This is useful when you want to ensure files match the archive contents, even if
 To preserve file permission modes from the archive:
 
 ```go
-err := archive.CopyDir("/dest/dir", ".",
+_, err := archive.CopyDir("/dest/dir", ".",
 	blob.CopyWithPreserveMode(true),
 )
 ```
@@ -122,7 +127,7 @@ Without this option, extracted files use the current umask defaults.
 To preserve file modification times:
 
 ```go
-err := archive.CopyDir("/dest/dir", ".",
+_, err := archive.CopyDir("/dest/dir", ".",
 	blob.CopyWithPreserveTimes(true),
 )
 ```
@@ -130,7 +135,7 @@ err := archive.CopyDir("/dest/dir", ".",
 ### Both Mode and Times
 
 ```go
-err := archive.CopyDir("/dest/dir", ".",
+_, err := archive.CopyDir("/dest/dir", ".",
 	blob.CopyWithPreserveMode(true),
 	blob.CopyWithPreserveTimes(true),
 )
@@ -141,7 +146,7 @@ err := archive.CopyDir("/dest/dir", ".",
 For faster extraction when starting fresh, use `CopyWithCleanDest`:
 
 ```go
-err := archive.CopyDir("/dest/dir", ".",
+_, err := archive.CopyDir("/dest/dir", ".",
 	blob.CopyWithCleanDest(true),
 )
 ```
@@ -169,7 +174,7 @@ The clean destination option includes safety checks:
 To control the number of parallel file writers:
 
 ```go
-err := archive.CopyDir("/dest/dir", ".",
+_, err := archive.CopyDir("/dest/dir", ".",
 	blob.CopyWithWorkers(8), // Use 8 parallel workers
 )
 ```
@@ -184,7 +189,7 @@ Values:
 For remote archives, control the number of concurrent range reads:
 
 ```go
-err := archive.CopyDir("/dest/dir", ".",
+_, err := archive.CopyDir("/dest/dir", ".",
 	blob.CopyWithReadConcurrency(8), // 8 concurrent HTTP requests
 )
 ```
@@ -196,7 +201,7 @@ The default is 4 concurrent reads. Higher values reduce latency but increase mem
 To limit memory usage during parallel reads:
 
 ```go
-err := archive.CopyDir("/dest/dir", ".",
+_, err := archive.CopyDir("/dest/dir", ".",
 	blob.CopyWithReadAheadBytes(64 * 1024 * 1024), // 64MB budget
 )
 ```
@@ -208,7 +213,7 @@ This caps the total size of buffered read-ahead data. Use this when extracting l
 Extraction errors include the file path and underlying cause:
 
 ```go
-err := archive.CopyDir("/dest/dir", ".")
+_, err := archive.CopyDir("/dest/dir", ".")
 if err != nil {
 	// Errors are wrapped with path context
 	log.Printf("extraction failed: %v", err)
@@ -255,7 +260,8 @@ func extractArchive(archive *blob.Blob, destDir string, opts ExtractOptions) err
 		prefix = "."
 	}
 
-	return archive.CopyDir(destDir, prefix, copyOpts...)
+	_, err = archive.CopyDir(destDir, prefix, copyOpts...)
+	return err
 }
 
 type ExtractOptions struct {

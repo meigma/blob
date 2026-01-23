@@ -458,7 +458,7 @@ func BenchmarkBlobCopyDirHTTPMatrix(b *testing.B) {
 				}
 				b.StartTimer()
 
-				if err := blob.CopyDir(destDir, prefix, opts...); err != nil {
+				if _, err := blob.CopyDir(destDir, prefix, opts...); err != nil {
 					b.Fatal(err)
 				}
 
@@ -821,7 +821,7 @@ func benchmarkBlobCopyDir(b *testing.B, label string, workers int, cleanDest boo
 							opts = append(opts, CopyWithCleanDest(true))
 						}
 
-						if err := blob.CopyDir(destDir, prefix, opts...); err != nil {
+						if _, err := blob.CopyDir(destDir, prefix, opts...); err != nil {
 							b.Fatal(err)
 						}
 

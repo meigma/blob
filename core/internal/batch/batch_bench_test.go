@@ -100,7 +100,7 @@ func BenchmarkProcessorPipelined(b *testing.B) {
 					b.ResetTimer()
 
 					for b.Loop() {
-						if err := proc.Process(entries, sink); err != nil {
+						if _, err := proc.Process(entries, sink); err != nil {
 							b.Fatal(err)
 						}
 					}

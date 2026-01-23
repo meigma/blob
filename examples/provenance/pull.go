@@ -196,7 +196,7 @@ func extractArchive(archive *blob.Archive, output string) error {
 
 	fmt.Printf("Extracting to %s...\n", output)
 
-	err := archive.CopyDir(output, "",
+	stats, err := archive.CopyDir(output, "",
 		blob.CopyWithPreserveMode(true),
 		blob.CopyWithPreserveTimes(true),
 		blob.CopyWithOverwrite(true),
@@ -205,7 +205,7 @@ func extractArchive(archive *blob.Archive, output string) error {
 		return fmt.Errorf("extract: %w", err)
 	}
 
-	fmt.Printf("Extracted %d files to %s\n", entryCount, output)
+	fmt.Printf("Extracted %d files to %s\n", stats.FileCount, output)
 	fmt.Println("Verification successful!")
 
 	return nil

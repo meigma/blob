@@ -392,7 +392,7 @@ func BenchmarkBlobCopyDirBlockCache(b *testing.B) {
 					b.Fatal(err)
 				}
 
-				if err := cached.CopyDir(destDir, ".", CopyWithOverwrite(true)); err != nil {
+				if _, err := cached.CopyDir(destDir, ".", CopyWithOverwrite(true)); err != nil {
 					b.Fatal(err)
 				}
 
@@ -400,7 +400,7 @@ func BenchmarkBlobCopyDirBlockCache(b *testing.B) {
 				b.ReportAllocs()
 				b.ResetTimer()
 				for b.Loop() {
-					if err := cached.CopyDir(destDir, ".", CopyWithOverwrite(true)); err != nil {
+					if _, err := cached.CopyDir(destDir, ".", CopyWithOverwrite(true)); err != nil {
 						b.Fatal(err)
 					}
 				}

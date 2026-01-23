@@ -153,10 +153,13 @@ func NewProcessor(source file.ByteSource, pool *file.DecompressPool, maxFileSize
 // entry, the content is decompressed (if needed), hash-verified, and
 // written to the sink.
 //
-// Processing stops on the first error encountered.
-func (p *Processor) Process(entries []*Entry, sink Sink) error {
+// Processing stops on the first error encountered. The returned ProcessStats
+// contains counts for processed and skipped entries, and total bytes written.
+// On error, partial stats are returned reflecting work completed before the error.
+func (p *Processor) Process(entries []*Entry, sink Sink) (ProcessStats, error) {
+	var stats ProcessStats
 	if len(entries) == 0 {
-		return nil
+		return stats, nil
 	}
 
 	// Filter entries that should be processed
@@ -164,10 +167,12 @@ func (p *Processor) Process(entries []*Entry, sink Sink) error {
 	for _, entry := range entries {
 		if sink.ShouldProcess(entry) {
 			toProcess = append(toProcess, entry)
+		} else {
+			stats.Skipped++
 		}
 	}
 	if len(toProcess) == 0 {
-		return nil
+		return stats, nil
 	}
 
 	// Initialize progress tracking
@@ -178,7 +183,7 @@ func (p *Processor) Process(entries []*Entry, sink Sink) error {
 	sourceSize := p.source.Size()
 	for _, entry := range toProcess {
 		if err := file.ValidateAll(entry, sourceSize, p.maxFileSize); err != nil {
-			return fmt.Errorf("batch: %s: %w", entry.Path, err)
+			return stats, fmt.Errorf("batch: %s: %w", entry.Path, err)
 		}
 	}
 
@@ -197,10 +202,15 @@ func (p *Processor) Process(entries []*Entry, sink Sink) error {
 	groups := groupAdjacentEntries(toProcess)
 	p.log().Debug("batch processing", "entries", len(toProcess), "groups", len(groups))
 
+	var procStats ProcessStats
+	var err error
 	if len(groups) > 1 && (p.readConcurrency > 1 || p.readAheadEnabled) {
-		return p.processGroupsPipelined(groups, sink)
+		procStats, err = p.processGroupsPipelined(groups, sink)
+	} else {
+		procStats, err = p.processGroupsSequential(groups, sink)
 	}
-	return p.processGroupsSequential(groups, sink)
+	stats.add(procStats)
+	return stats, err
 }
 
 // groupTask represents a pending group read operation for the pipeline.
@@ -219,19 +229,22 @@ type groupResult struct {
 }
 
 // processGroupsSequential processes groups one at a time without pipelining.
-func (p *Processor) processGroupsSequential(groups []rangeGroup, sink Sink) error {
+func (p *Processor) processGroupsSequential(groups []rangeGroup, sink Sink) (ProcessStats, error) {
+	var stats ProcessStats
 	for _, group := range groups {
-		if err := p.processGroup(group, sink); err != nil {
-			return err
+		groupStats, err := p.processGroup(group, sink)
+		stats.add(groupStats)
+		if err != nil {
+			return stats, err
 		}
 	}
-	return nil
+	return stats, nil
 }
 
 //nolint:gocognit,gocyclo // complex pipeline logic requires coordination between producers/consumers
-func (p *Processor) processGroupsPipelined(groups []rangeGroup, sink Sink) error {
+func (p *Processor) processGroupsPipelined(groups []rangeGroup, sink Sink) (ProcessStats, error) {
 	if len(groups) == 0 {
-		return nil
+		return ProcessStats{}, nil
 	}
 
 	readWorkers := p.readConcurrency
@@ -243,7 +256,7 @@ func (p *Processor) processGroupsPipelined(groups []rangeGroup, sink Sink) error
 	if p.readAheadEnabled {
 		limit, err := sizing.ToInt64(p.readAheadBytes, blobtype.ErrSizeOverflow)
 		if err != nil {
-			return fmt.Errorf("batch: %w", err)
+			return ProcessStats{}, fmt.Errorf("batch: %w", err)
 		}
 		budget = semaphore.NewWeighted(limit)
 	}
@@ -315,6 +328,10 @@ func (p *Processor) processGroupsPipelined(groups []rangeGroup, sink Sink) error
 		close(readyCh)
 	}()
 
+	// Track stats from the consumer goroutine
+	var stats ProcessStats
+	var statsMu sync.Mutex
+
 	eg.Go(func() error {
 		next := 0
 		pending := make(map[int]groupResult, readWorkers)
@@ -334,14 +351,15 @@ func (p *Processor) processGroupsPipelined(groups []rangeGroup, sink Sink) error
 						break
 					}
 					delete(pending, next)
-					if err := p.processGroupWithData(res.group, res.data, sink); err != nil {
-						if budget != nil {
-							budget.Release(res.size)
-						}
-						return err
-					}
+					groupStats, err := p.processGroupWithData(res.group, res.data, sink)
+					statsMu.Lock()
+					stats.add(groupStats)
+					statsMu.Unlock()
 					if budget != nil {
 						budget.Release(res.size)
+					}
+					if err != nil {
+						return err
 					}
 					next++
 				}
@@ -352,22 +370,23 @@ func (p *Processor) processGroupsPipelined(groups []rangeGroup, sink Sink) error
 		return nil
 	})
 
-	return eg.Wait()
+	err := eg.Wait()
+	return stats, err
 }
 
 // processGroup reads a contiguous range and processes each entry.
-func (p *Processor) processGroup(group rangeGroup, sink Sink) error {
+func (p *Processor) processGroup(group rangeGroup, sink Sink) (ProcessStats, error) {
 	data, err := p.readGroupData(group)
 	if err != nil {
-		return err
+		return ProcessStats{}, err
 	}
 	return p.processGroupWithData(group, data, sink)
 }
 
 // processGroupWithData processes all entries in a group using pre-fetched data.
-func (p *Processor) processGroupWithData(group rangeGroup, data []byte, sink Sink) error {
+func (p *Processor) processGroupWithData(group rangeGroup, data []byte, sink Sink) (ProcessStats, error) {
 	if len(group.entries) == 0 {
-		return nil
+		return ProcessStats{}, nil
 	}
 	workers := p.workerCount(group.entries)
 	if workers < 2 {
@@ -401,19 +420,24 @@ func groupSize(group rangeGroup) (int64, error) {
 }
 
 // processEntriesSerial processes entries one at a time.
-func (p *Processor) processEntriesSerial(entries []*Entry, data []byte, groupStart uint64, sink Sink) error {
+func (p *Processor) processEntriesSerial(entries []*Entry, data []byte, groupStart uint64, sink Sink) (ProcessStats, error) {
+	var stats ProcessStats
 	for _, entry := range entries {
 		if err := p.processEntry(entry, data, groupStart, sink); err != nil {
-			return err
+			return stats, err
 		}
+		stats.Processed++
+		stats.TotalBytes += entry.OriginalSize
 		p.reportEntryProgress(entry)
 	}
-	return nil
+	return stats, nil
 }
 
 // processEntriesParallel processes entries concurrently.
-func (p *Processor) processEntriesParallel(entries []*Entry, data []byte, groupStart uint64, sink Sink, workers int) error {
+func (p *Processor) processEntriesParallel(entries []*Entry, data []byte, groupStart uint64, sink Sink, workers int) (ProcessStats, error) {
 	var stop atomic.Bool
+	var processed atomic.Int64
+	var totalBytes atomic.Uint64
 	errCh := make(chan error, 1)
 	var wg sync.WaitGroup
 
@@ -432,17 +456,24 @@ func (p *Processor) processEntriesParallel(entries []*Entry, data []byte, groupS
 					}
 					return
 				}
+				processed.Add(1)
+				totalBytes.Add(entry.OriginalSize)
 				p.reportEntryProgress(entry)
 			}
 		}(w)
 	}
 	wg.Wait()
 
+	stats := ProcessStats{
+		Processed:  int(processed.Load()),
+		TotalBytes: totalBytes.Load(),
+	}
+
 	select {
 	case err := <-errCh:
-		return err
+		return stats, err
 	default:
-		return nil
+		return stats, nil
 	}
 }
 
