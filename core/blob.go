@@ -252,6 +252,52 @@ func (b *Blob) Stat(name string) (fs.FileInfo, error) {
 	return nil, &fs.PathError{Op: "stat", Path: name, Err: fs.ErrNotExist}
 }
 
+// Exists reports whether path exists in the archive (file or directory).
+//
+// The path is normalized before lookup, so "/etc/nginx/" and "etc/nginx"
+// are equivalent. Returns false for invalid paths.
+func (b *Blob) Exists(path string) bool {
+	path = NormalizePath(path)
+	if !fs.ValidPath(path) {
+		return false
+	}
+	return b.IsFile(path) || b.IsDir(path)
+}
+
+// IsDir reports whether path is a directory in the archive.
+//
+// Directories are synthesized from file paths - IsDir returns true if
+// any file exists with path as a prefix. Returns false if path does not
+// exist or is invalid.
+//
+// The path is normalized before lookup, so "/etc/nginx/" and "etc/nginx"
+// are equivalent.
+func (b *Blob) IsDir(path string) bool {
+	path = NormalizePath(path)
+	if !fs.ValidPath(path) {
+		return false
+	}
+	return b.isDir(path)
+}
+
+// IsFile reports whether path is a regular file in the archive.
+//
+// Returns false if path does not exist, is a directory, or is invalid.
+//
+// The path is normalized before lookup, so "/etc/hosts" and "etc/hosts"
+// are equivalent.
+func (b *Blob) IsFile(path string) bool {
+	path = NormalizePath(path)
+	if !fs.ValidPath(path) {
+		return false
+	}
+	view, ok := b.idx.LookupView(path)
+	if !ok {
+		return false
+	}
+	return view.Mode().IsRegular()
+}
+
 // ReadFile implements fs.ReadFileFS.
 //
 // ReadFile reads and returns the entire contents of the named file.

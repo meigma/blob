@@ -109,6 +109,109 @@ func TestCopyTo_ReturnsStats(t *testing.T) {
 	assert.Equal(t, 0, stats.Skipped)
 }
 
+func TestBlob_Exists(t *testing.T) {
+	t.Parallel()
+
+	files := map[string][]byte{
+		"etc/nginx/nginx.conf": []byte("config"),
+		"etc/hosts":            []byte("hosts"),
+	}
+	b := createTestArchive(t, files, CompressionNone)
+
+	tests := []struct {
+		path string
+		want bool
+	}{
+		{"etc/nginx/nginx.conf", true},
+		{"etc/hosts", true},
+		{"etc/nginx", true},
+		{"etc", true},
+		{".", true},
+		{"/etc/nginx", true},
+		{"etc/nginx/", true},
+		{"/etc/nginx/", true},
+		{"nonexistent", false},
+		{"etc/nginx/nonexistent", false},
+		// Invalid paths (after normalization) return false
+		{"../escape", false},
+		{"etc/../hosts", false},
+		{"etc/./nginx", false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.path, func(t *testing.T) {
+			t.Parallel()
+			got := b.Exists(tt.path)
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}
+
+func TestBlob_IsDir(t *testing.T) {
+	t.Parallel()
+
+	files := map[string][]byte{
+		"etc/nginx/nginx.conf": []byte("config"),
+		"etc/hosts":            []byte("hosts"),
+	}
+	b := createTestArchive(t, files, CompressionNone)
+
+	tests := []struct {
+		path string
+		want bool
+	}{
+		{"etc/nginx", true},
+		{"etc", true},
+		{".", true},
+		{"/etc/nginx/", true},
+		{"etc/nginx/nginx.conf", false},
+		{"etc/hosts", false},
+		{"nonexistent", false},
+		// Invalid paths return false
+		{"../escape", false},
+		{"etc/../hosts", false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.path, func(t *testing.T) {
+			t.Parallel()
+			got := b.IsDir(tt.path)
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}
+
+func TestBlob_IsFile(t *testing.T) {
+	t.Parallel()
+
+	files := map[string][]byte{
+		"etc/nginx/nginx.conf": []byte("config"),
+		"etc/hosts":            []byte("hosts"),
+	}
+	b := createTestArchive(t, files, CompressionNone)
+
+	tests := []struct {
+		path string
+		want bool
+	}{
+		{"etc/nginx/nginx.conf", true},
+		{"etc/hosts", true},
+		{"/etc/hosts", true},
+		{"etc/nginx", false},
+		{"etc", false},
+		{".", false},
+		{"nonexistent", false},
+		// Invalid paths return false
+		{"../escape", false},
+		{"etc/../hosts", false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.path, func(t *testing.T) {
+			t.Parallel()
+			got := b.IsFile(tt.path)
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}
+
 // createTestArchive creates a Blob for testing with the given files and compression.
 // Files are specified as a map of path to content.
 func createTestArchive(t *testing.T, files map[string][]byte, compression Compression) *Blob {
