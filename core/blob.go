@@ -252,6 +252,52 @@ func (b *Blob) Stat(name string) (fs.FileInfo, error) {
 	return nil, &fs.PathError{Op: "stat", Path: name, Err: fs.ErrNotExist}
 }
 
+// Exists reports whether path exists in the archive (file or directory).
+//
+// The path is normalized before lookup, so "/etc/nginx/" and "etc/nginx"
+// are equivalent. Returns false for invalid paths.
+func (b *Blob) Exists(path string) bool {
+	path = NormalizePath(path)
+	if !fs.ValidPath(path) {
+		return false
+	}
+	return b.IsFile(path) || b.IsDir(path)
+}
+
+// IsDir reports whether path is a directory in the archive.
+//
+// Directories are synthesized from file paths - IsDir returns true if
+// any file exists with path as a prefix. Returns false if path does not
+// exist or is invalid.
+//
+// The path is normalized before lookup, so "/etc/nginx/" and "etc/nginx"
+// are equivalent.
+func (b *Blob) IsDir(path string) bool {
+	path = NormalizePath(path)
+	if !fs.ValidPath(path) {
+		return false
+	}
+	return b.isDir(path)
+}
+
+// IsFile reports whether path is a regular file in the archive.
+//
+// Returns false if path does not exist, is a directory, or is invalid.
+//
+// The path is normalized before lookup, so "/etc/hosts" and "etc/hosts"
+// are equivalent.
+func (b *Blob) IsFile(path string) bool {
+	path = NormalizePath(path)
+	if !fs.ValidPath(path) {
+		return false
+	}
+	view, ok := b.idx.LookupView(path)
+	if !ok {
+		return false
+	}
+	return view.Mode().IsRegular()
+}
+
 // ReadFile implements fs.ReadFileFS.
 //
 // ReadFile reads and returns the entire contents of the named file.
@@ -424,9 +470,9 @@ func (b *Blob) Len() int {
 //   - Existing files are skipped (use CopyWithOverwrite to overwrite)
 //   - File modes and times are not preserved (use CopyWithPreserveMode/Times)
 //   - Range reads are pipelined (when beneficial) with concurrency 4 (use CopyWithReadConcurrency to change)
-func (b *Blob) CopyTo(destDir string, paths ...string) error {
+func (b *Blob) CopyTo(destDir string, paths ...string) (CopyStats, error) {
 	if len(paths) == 0 {
-		return nil
+		return CopyStats{}, nil
 	}
 
 	cfg := copyConfig{}
@@ -434,9 +480,9 @@ func (b *Blob) CopyTo(destDir string, paths ...string) error {
 }
 
 // CopyToWithOptions extracts specific files with options.
-func (b *Blob) CopyToWithOptions(destDir string, paths []string, opts ...CopyOption) error {
+func (b *Blob) CopyToWithOptions(destDir string, paths []string, opts ...CopyOption) (CopyStats, error) {
 	if len(paths) == 0 {
-		return nil
+		return CopyStats{}, nil
 	}
 
 	cfg := copyConfig{}
@@ -444,7 +490,7 @@ func (b *Blob) CopyToWithOptions(destDir string, paths []string, opts ...CopyOpt
 		opt(&cfg)
 	}
 	if cfg.cleanDest {
-		return errors.New("CopyWithCleanDest is only supported by CopyDir")
+		return CopyStats{}, errors.New("CopyWithCleanDest is only supported by CopyDir")
 	}
 	return b.copyEntries(destDir, b.collectPathEntries(paths), &cfg)
 }
@@ -463,7 +509,7 @@ func (b *Blob) CopyToWithOptions(destDir string, paths []string, opts ...CopyOpt
 //   - Existing files are skipped (use CopyWithOverwrite to overwrite)
 //   - File modes and times are not preserved (use CopyWithPreserveMode/Times)
 //   - Range reads are pipelined (when beneficial) with concurrency 4 (use CopyWithReadConcurrency to change)
-func (b *Blob) CopyDir(destDir, prefix string, opts ...CopyOption) error {
+func (b *Blob) CopyDir(destDir, prefix string, opts ...CopyOption) (CopyStats, error) {
 	cfg := copyConfig{}
 	for _, opt := range opts {
 		opt(&cfg)
@@ -471,10 +517,10 @@ func (b *Blob) CopyDir(destDir, prefix string, opts ...CopyOption) error {
 	if cfg.cleanDest {
 		target, err := cleanCopyDest(destDir, prefix)
 		if err != nil {
-			return err
+			return CopyStats{}, err
 		}
 		if err := os.RemoveAll(target); err != nil {
-			return fmt.Errorf("clean destination %s: %w", target, err)
+			return CopyStats{}, fmt.Errorf("clean destination %s: %w", target, err)
 		}
 		cfg.overwrite = true
 	}
@@ -496,46 +542,52 @@ func (b *Blob) CopyDir(destDir, prefix string, opts ...CopyOption) error {
 // overwrite is disabled), CopyFile returns fs.ErrExist. This explicit error
 // behavior is more appropriate for single-file operations where the caller
 // likely wants to know if the copy didn't happen.
-func (b *Blob) CopyFile(srcPath, destPath string, opts ...CopyOption) error {
+func (b *Blob) CopyFile(srcPath, destPath string, opts ...CopyOption) (CopyStats, error) {
 	cfg := copyConfig{}
 	for _, opt := range opts {
 		opt(&cfg)
 	}
 	if cfg.cleanDest {
-		return errors.New("CopyWithCleanDest is only supported by CopyDir")
+		return CopyStats{}, errors.New("CopyWithCleanDest is only supported by CopyDir")
 	}
 
 	// Normalize and validate source path
 	srcPath = NormalizePath(srcPath)
 	if !fs.ValidPath(srcPath) {
-		return &fs.PathError{Op: "copyfile", Path: srcPath, Err: fs.ErrInvalid}
+		return CopyStats{}, &fs.PathError{Op: "copyfile", Path: srcPath, Err: fs.ErrInvalid}
 	}
 
 	// Look up entry, verify it's a file
 	view, ok := b.idx.LookupView(srcPath)
 	if !ok {
-		return &fs.PathError{Op: "copyfile", Path: srcPath, Err: fs.ErrNotExist}
+		return CopyStats{}, &fs.PathError{Op: "copyfile", Path: srcPath, Err: fs.ErrNotExist}
 	}
 	entry := blobtype.EntryFromViewWithPath(view, srcPath)
 	if entry.Mode.IsDir() {
-		return &fs.PathError{Op: "copyfile", Path: srcPath, Err: errors.New("cannot copy directory")}
+		return CopyStats{}, &fs.PathError{Op: "copyfile", Path: srcPath, Err: errors.New("cannot copy directory")}
 	}
 
 	// Check destination (unless overwrite)
 	if !cfg.overwrite {
 		if _, err := os.Stat(destPath); err == nil {
-			return &fs.PathError{Op: "copyfile", Path: destPath, Err: fs.ErrExist}
+			return CopyStats{}, &fs.PathError{Op: "copyfile", Path: destPath, Err: fs.ErrExist}
 		}
 	}
 
 	// Open source file (handles decompression + verification)
 	src, err := b.Open(srcPath)
 	if err != nil {
-		return err
+		return CopyStats{}, err
 	}
 	defer src.Close()
 
-	return copyFileAtomic(src, destPath, &entry, &cfg)
+	if err := copyFileAtomic(src, destPath, &entry, &cfg); err != nil {
+		return CopyStats{}, err
+	}
+	return CopyStats{
+		FileCount:  1,
+		TotalBytes: entry.OriginalSize,
+	}, nil
 }
 
 // copyFileAtomic writes content from src to destPath atomically using a temp file.
@@ -638,13 +690,13 @@ func (b *Blob) collectPrefixEntries(prefix string) []*batch.Entry {
 }
 
 // copyEntries uses the batch processor to copy entries to destDir.
-func (b *Blob) copyEntries(destDir string, entries []*batch.Entry, cfg *copyConfig) error {
+func (b *Blob) copyEntries(destDir string, entries []*batch.Entry, cfg *copyConfig) (CopyStats, error) {
 	if len(entries) == 0 {
-		return nil
+		return CopyStats{}, nil
 	}
 	for _, entry := range entries {
 		if !fs.ValidPath(entry.Path) {
-			return &fs.PathError{Op: "copy", Path: entry.Path, Err: fs.ErrInvalid}
+			return CopyStats{}, &fs.PathError{Op: "copy", Path: entry.Path, Err: fs.ErrInvalid}
 		}
 	}
 
@@ -682,7 +734,12 @@ func (b *Blob) copyEntries(destDir string, entries []*batch.Entry, cfg *copyConf
 	}
 	proc := batch.NewProcessor(b.reader.Source(), b.reader.Pool(), b.maxFileSize, procOpts...)
 
-	return proc.Process(entries, sink)
+	procStats, err := proc.Process(entries, sink)
+	return CopyStats{
+		FileCount:  procStats.Processed,
+		TotalBytes: procStats.TotalBytes,
+		Skipped:    procStats.Skipped,
+	}, err
 }
 
 func cleanCopyDest(destDir, prefix string) (string, error) {

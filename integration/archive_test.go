@@ -407,7 +407,7 @@ func TestCopyTo_SpecificFiles(t *testing.T) {
 	require.NoError(t, err, "Pull")
 
 	destDir := t.TempDir()
-	err = archive.CopyTo(destDir, "root.txt", "dir1/a.txt")
+	_, err = archive.CopyTo(destDir, "root.txt", "dir1/a.txt")
 	require.NoError(t, err, "CopyTo")
 
 	// Verify extracted files
@@ -448,7 +448,7 @@ func TestCopyTo_WithOverwrite(t *testing.T) {
 	require.NoError(t, os.WriteFile(existing, []byte("original"), 0o644))
 
 	// Without overwrite - file should not be overwritten
-	err = archive.CopyTo(destDir, "hello.txt")
+	_, err = archive.CopyTo(destDir, "hello.txt")
 	require.NoError(t, err, "CopyTo without overwrite")
 
 	content, err := os.ReadFile(existing)
@@ -456,7 +456,7 @@ func TestCopyTo_WithOverwrite(t *testing.T) {
 	assert.Equal(t, []byte("original"), content)
 
 	// With overwrite - file should be overwritten
-	err = archive.CopyToWithOptions(destDir, []string{"hello.txt"}, blob.CopyWithOverwrite(true))
+	_, err = archive.CopyToWithOptions(destDir, []string{"hello.txt"}, blob.CopyWithOverwrite(true))
 	require.NoError(t, err, "CopyTo with overwrite")
 
 	content, err = os.ReadFile(existing)
@@ -490,7 +490,7 @@ func TestCopyTo_WithPreserveMode(t *testing.T) {
 	require.NoError(t, err, "Pull")
 
 	destDir := t.TempDir()
-	err = archive.CopyToWithOptions(destDir, []string{"script.sh"}, blob.CopyWithPreserveMode(true))
+	_, err = archive.CopyToWithOptions(destDir, []string{"script.sh"}, blob.CopyWithPreserveMode(true))
 	require.NoError(t, err, "CopyTo with preserve mode")
 
 	info, err := os.Stat(filepath.Join(destDir, "script.sh"))
@@ -517,7 +517,7 @@ func TestCopyTo_WithPreserveTimes(t *testing.T) {
 	require.NoError(t, err, "Pull")
 
 	destDir := t.TempDir()
-	err = archive.CopyToWithOptions(destDir, []string{"hello.txt"}, blob.CopyWithPreserveTimes(true))
+	_, err = archive.CopyToWithOptions(destDir, []string{"hello.txt"}, blob.CopyWithPreserveTimes(true))
 	require.NoError(t, err, "CopyTo with preserve times")
 
 	// File should exist (detailed time verification would require known mtime)
@@ -543,7 +543,7 @@ func TestCopyDir_Prefix(t *testing.T) {
 	require.NoError(t, err, "Pull")
 
 	destDir := t.TempDir()
-	err = archive.CopyDir(destDir, "dir1")
+	_, err = archive.CopyDir(destDir, "dir1")
 	require.NoError(t, err, "CopyDir")
 
 	// dir1 files should exist
@@ -576,7 +576,7 @@ func TestCopyDir_All(t *testing.T) {
 	require.NoError(t, err, "Pull")
 
 	destDir := t.TempDir()
-	err = archive.CopyDir(destDir, "")
+	_, err = archive.CopyDir(destDir, "")
 	require.NoError(t, err, "CopyDir all")
 
 	assertDirContents(t, destDir, nestedArchive)
@@ -606,7 +606,7 @@ func TestCopyDir_WithCleanDest(t *testing.T) {
 	require.NoError(t, os.MkdirAll(filepath.Dir(oldFile), 0o755))
 	require.NoError(t, os.WriteFile(oldFile, []byte("old"), 0o644))
 
-	err = archive.CopyDir(destDir, "dir1", blob.CopyWithCleanDest(true))
+	_, err = archive.CopyDir(destDir, "dir1", blob.CopyWithCleanDest(true))
 	require.NoError(t, err, "CopyDir with clean")
 
 	// Old file should be gone
@@ -645,7 +645,7 @@ func TestCopyDir_WithWorkers(t *testing.T) {
 	require.NoError(t, err, "Pull")
 
 	destDir := t.TempDir()
-	err = archive.CopyDir(destDir, "data", blob.CopyWithWorkers(4))
+	_, err = archive.CopyDir(destDir, "data", blob.CopyWithWorkers(4))
 	require.NoError(t, err, "CopyDir with workers")
 
 	// Verify all files were copied

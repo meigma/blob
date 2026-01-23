@@ -432,7 +432,7 @@ func BenchmarkCompareCopyDir(b *testing.B) {
 							}
 							b.StartTimer()
 
-							if err := bb.CopyDir(destDir, prefix, opts...); err != nil {
+							if _, err := bb.CopyDir(destDir, prefix, opts...); err != nil {
 								b.Fatal(err)
 							}
 
@@ -554,7 +554,7 @@ func BenchmarkCompareCopyAll(b *testing.B) {
 							}
 							b.StartTimer()
 
-							if err := bb.CopyDir(destDir, prefix, opts...); err != nil {
+							if _, err := bb.CopyDir(destDir, prefix, opts...); err != nil {
 								b.Fatal(err)
 							}
 

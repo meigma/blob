@@ -100,7 +100,7 @@ These options control parallel extraction via `CopyTo` and `CopyDir`.
 Controls parallel file writers:
 
 ```go
-err := archive.CopyDir("/dest", ".",
+_, err := archive.CopyDir("/dest", ".",
 	blob.CopyWithWorkers(8),
 )
 ```
@@ -118,7 +118,7 @@ Use 0 for automatic heuristics or negative values for serial processing.
 Controls concurrent range requests for remote archives:
 
 ```go
-err := archive.CopyDir("/dest", ".",
+_, err := archive.CopyDir("/dest", ".",
 	blob.CopyWithReadConcurrency(8),
 )
 ```
@@ -135,7 +135,7 @@ For high-latency connections (> 100ms), try 8-16 concurrent reads.
 Limits memory used by buffered parallel reads:
 
 ```go
-err := archive.CopyDir("/dest", ".",
+_, err := archive.CopyDir("/dest", ".",
 	blob.CopyWithReadAheadBytes(32 << 20), // 32 MB
 )
 ```
@@ -218,7 +218,7 @@ archive, err := c.Pull(ctx, ref,
 	blob.PullWithDecoderConcurrency(1),       // Single-threaded
 )
 
-err = archive.CopyDir("/dest", ".",
+_, err = archive.CopyDir("/dest", ".",
 	blob.CopyWithWorkers(2),               // Few parallel writers
 	blob.CopyWithReadConcurrency(2),       // Few parallel reads
 	blob.CopyWithReadAheadBytes(16 << 20), // 16 MB read budget
@@ -247,7 +247,7 @@ archive, err := c.Pull(ctx, ref,
 	blob.PullWithDecoderConcurrency(0),  // Max decoder parallelism
 )
 
-err = archive.CopyDir("/dest", ".",
+_, err = archive.CopyDir("/dest", ".",
 	blob.CopyWithWorkers(4),           // Parallel file writing
 	blob.CopyWithReadConcurrency(16),  // Many concurrent requests
 )
@@ -262,7 +262,7 @@ archive, err := c.Pull(ctx, ref,
 	blob.PullWithDecoderConcurrency(0),  // Use all cores
 )
 
-err = archive.CopyDir("/dest", ".",
+_, err = archive.CopyDir("/dest", ".",
 	blob.CopyWithWorkers(0),              // Auto-detect workers
 	blob.CopyWithReadConcurrency(8),      // Parallel reads
 	blob.CopyWithCleanDest(true),         // Skip temp files
@@ -294,7 +294,7 @@ archive, err := c.Pull(ctx, ref,
 	blob.PullWithVerifyOnClose(true),  // Always verify (default)
 )
 
-err = archive.CopyDir("/dest", ".",
+_, err = archive.CopyDir("/dest", ".",
 	blob.CopyWithPreserveMode(true),
 	blob.CopyWithPreserveTimes(true),
 )
@@ -314,7 +314,7 @@ Example timing:
 
 ```go
 start := time.Now()
-err := archive.CopyDir("/dest", ".")
+_, err := archive.CopyDir("/dest", ".")
 log.Printf("extraction took %v", time.Since(start))
 ```
 

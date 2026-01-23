@@ -25,6 +25,9 @@ type SkipCompressionFunc = blobcore.SkipCompressionFunc
 // CopyOption configures CopyTo and CopyDir operations.
 type CopyOption = blobcore.CopyOption
 
+// CopyStats contains statistics about a copy operation.
+type CopyStats = blobcore.CopyStats
+
 // ByteSource provides random access to the data blob.
 type ByteSource = blobcore.ByteSource
 

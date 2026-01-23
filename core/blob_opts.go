@@ -163,3 +163,15 @@ func CopyWithProgress(fn ProgressFunc) CopyOption {
 		c.progress = fn
 	}
 }
+
+// CopyStats contains statistics about a copy operation.
+type CopyStats struct {
+	// FileCount is the number of files successfully copied.
+	FileCount int
+
+	// TotalBytes is the sum of original (uncompressed) file sizes.
+	TotalBytes uint64
+
+	// Skipped is the number of files skipped (e.g., already exist without overwrite).
+	Skipped int
+}

@@ -502,7 +502,8 @@ c, _ := blob.NewClient(
 
 // Lazy load - only downloads what you read
 archive, _ := c.Pull(ctx, "ghcr.io/org/configs:v1")
-archive.CopyDir("./output", "configs/")`}
+stats, _ := archive.CopyDir("./output", "configs/")
+fmt.Printf("Extracted %d files\n", stats.FileCount)`}
                             </CodeBlock>
                         </div>
                     </div>

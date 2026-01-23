@@ -659,26 +659,38 @@ ReadDir implements `fs.ReadDirFS`. Returns directory entries sorted by name.
 #### CopyTo
 
 ```go
-func (b *Blob) CopyTo(destDir string, paths ...string) error
+func (b *Blob) CopyTo(destDir string, paths ...string) (CopyStats, error)
 ```
 
-CopyTo extracts specific files to a destination directory.
+CopyTo extracts specific files to a destination directory. Returns statistics about the copy operation.
 
 #### CopyToWithOptions
 
 ```go
-func (b *Blob) CopyToWithOptions(destDir string, paths []string, opts ...CopyOption) error
+func (b *Blob) CopyToWithOptions(destDir string, paths []string, opts ...CopyOption) (CopyStats, error)
 ```
 
-CopyToWithOptions extracts specific files with options.
+CopyToWithOptions extracts specific files with options. Returns statistics about the copy operation.
 
 #### CopyDir
 
 ```go
-func (b *Blob) CopyDir(destDir, prefix string, opts ...CopyOption) error
+func (b *Blob) CopyDir(destDir, prefix string, opts ...CopyOption) (CopyStats, error)
 ```
 
-CopyDir extracts all files under a directory prefix. Use prefix "." for all files.
+CopyDir extracts all files under a directory prefix. Use prefix "." for all files. Returns statistics about the copy operation.
+
+#### CopyStats
+
+```go
+type CopyStats struct {
+    FileCount  int    // Number of files successfully copied
+    TotalBytes uint64 // Sum of original (uncompressed) file sizes
+    Skipped    int    // Number of files skipped (already exist without overwrite)
+}
+```
+
+CopyStats contains statistics about a copy operation, returned by CopyTo, CopyToWithOptions, CopyDir, and CopyFile.
 
 #### Entry
 

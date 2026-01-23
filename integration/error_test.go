@@ -279,7 +279,7 @@ func TestError_CopyTo_InvalidPath(t *testing.T) {
 	destDir := t.TempDir()
 
 	// CopyTo with invalid paths should silently skip them
-	err = archive.CopyTo(destDir, "../escape", "hello.txt")
+	_, err = archive.CopyTo(destDir, "../escape", "hello.txt")
 	require.NoError(t, err, "CopyTo should not error on invalid paths")
 
 	// But valid file should still be copied

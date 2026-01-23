@@ -816,7 +816,7 @@ func BenchmarkSequentialVsRandom(b *testing.B) {
 			b.ReportAllocs()
 			b.ResetTimer()
 			for b.Loop() {
-				if err := processor.Process(entries, discardSink{}); err != nil {
+				if _, err := processor.Process(entries, discardSink{}); err != nil {
 					b.Fatal(err)
 				}
 			}
@@ -860,7 +860,8 @@ func BenchmarkDirectoryTransfer(b *testing.B) {
 			fn: func(blob *Blob, _ benchByteSource) error {
 				entries := blob.collectPrefixEntries(prefix)
 				processor := batch.NewProcessor(blob.reader.Source(), blob.reader.Pool(), blob.maxFileSize, batch.WithReadConcurrency(1))
-				return processor.Process(entries, discardSink{})
+				_, err := processor.Process(entries, discardSink{})
+				return err
 			},
 		},
 		{
@@ -1133,7 +1134,7 @@ func BenchmarkCopyDirContiguous(b *testing.B) {
 	b.ReportAllocs()
 	b.ResetTimer()
 	for b.Loop() {
-		if err := processor.Process(entries, discardSink{}); err != nil {
+		if _, err := processor.Process(entries, discardSink{}); err != nil {
 			b.Fatal(err)
 		}
 	}
@@ -1182,7 +1183,8 @@ func BenchmarkCopyDirVsIndividual(b *testing.B) {
 			fn: func(blob *Blob) error {
 				entries := blob.collectPrefixEntries(prefix)
 				processor := batch.NewProcessor(blob.reader.Source(), blob.reader.Pool(), blob.maxFileSize, batch.WithReadConcurrency(1))
-				return processor.Process(entries, discardSink{})
+				_, err := processor.Process(entries, discardSink{})
+				return err
 			},
 		},
 		{

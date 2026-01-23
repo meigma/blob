@@ -40,12 +40,176 @@ func TestCopyDirRejectsTraversalPaths(t *testing.T) {
 	require.NoError(t, err)
 
 	destDir := t.TempDir()
-	err = archive.CopyDir(destDir, "")
+	_, err = archive.CopyDir(destDir, "")
 	var pathErr *fs.PathError
 	require.ErrorAs(t, err, &pathErr)
 	require.ErrorIs(t, pathErr.Err, fs.ErrInvalid)
 	_, statErr := os.Stat(filepath.Join(destDir, "..", "pwned.txt"))
 	require.Error(t, statErr)
+}
+
+func TestCopyDir_ReturnsStats(t *testing.T) {
+	t.Parallel()
+
+	files := map[string][]byte{
+		"a.txt":     bytes.Repeat([]byte("a"), 100),
+		"b.txt":     bytes.Repeat([]byte("b"), 200),
+		"dir/c.txt": bytes.Repeat([]byte("c"), 300),
+	}
+	b := createTestArchive(t, files, CompressionNone)
+
+	destDir := t.TempDir()
+	stats, err := b.CopyDir(destDir, "")
+	require.NoError(t, err)
+
+	assert.Equal(t, 3, stats.FileCount)
+	assert.Equal(t, uint64(600), stats.TotalBytes)
+	assert.Equal(t, 0, stats.Skipped)
+}
+
+func TestCopyDir_SkippedStats(t *testing.T) {
+	t.Parallel()
+
+	files := map[string][]byte{
+		"a.txt": []byte("aaa"),
+		"b.txt": []byte("bbb"),
+	}
+	b := createTestArchive(t, files, CompressionNone)
+
+	destDir := t.TempDir()
+
+	// Pre-create one file
+	require.NoError(t, os.WriteFile(filepath.Join(destDir, "a.txt"), []byte("existing"), 0o644))
+
+	// Without overwrite, a.txt should be skipped
+	stats, err := b.CopyDir(destDir, "")
+	require.NoError(t, err)
+
+	assert.Equal(t, 1, stats.FileCount)          // Only b.txt copied
+	assert.Equal(t, uint64(3), stats.TotalBytes) // Only b.txt size
+	assert.Equal(t, 1, stats.Skipped)            // a.txt skipped
+}
+
+func TestCopyTo_ReturnsStats(t *testing.T) {
+	t.Parallel()
+
+	files := map[string][]byte{
+		"a.txt": bytes.Repeat([]byte("a"), 100),
+		"b.txt": bytes.Repeat([]byte("b"), 200),
+		"c.txt": bytes.Repeat([]byte("c"), 300),
+	}
+	b := createTestArchive(t, files, CompressionNone)
+
+	destDir := t.TempDir()
+	stats, err := b.CopyTo(destDir, "a.txt", "b.txt")
+	require.NoError(t, err)
+
+	assert.Equal(t, 2, stats.FileCount)
+	assert.Equal(t, uint64(300), stats.TotalBytes)
+	assert.Equal(t, 0, stats.Skipped)
+}
+
+func TestBlob_Exists(t *testing.T) {
+	t.Parallel()
+
+	files := map[string][]byte{
+		"etc/nginx/nginx.conf": []byte("config"),
+		"etc/hosts":            []byte("hosts"),
+	}
+	b := createTestArchive(t, files, CompressionNone)
+
+	tests := []struct {
+		path string
+		want bool
+	}{
+		{"etc/nginx/nginx.conf", true},
+		{"etc/hosts", true},
+		{"etc/nginx", true},
+		{"etc", true},
+		{".", true},
+		{"/etc/nginx", true},
+		{"etc/nginx/", true},
+		{"/etc/nginx/", true},
+		{"nonexistent", false},
+		{"etc/nginx/nonexistent", false},
+		// Invalid paths (after normalization) return false
+		{"../escape", false},
+		{"etc/../hosts", false},
+		{"etc/./nginx", false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.path, func(t *testing.T) {
+			t.Parallel()
+			got := b.Exists(tt.path)
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}
+
+func TestBlob_IsDir(t *testing.T) {
+	t.Parallel()
+
+	files := map[string][]byte{
+		"etc/nginx/nginx.conf": []byte("config"),
+		"etc/hosts":            []byte("hosts"),
+	}
+	b := createTestArchive(t, files, CompressionNone)
+
+	tests := []struct {
+		path string
+		want bool
+	}{
+		{"etc/nginx", true},
+		{"etc", true},
+		{".", true},
+		{"/etc/nginx/", true},
+		{"etc/nginx/nginx.conf", false},
+		{"etc/hosts", false},
+		{"nonexistent", false},
+		// Invalid paths return false
+		{"../escape", false},
+		{"etc/../hosts", false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.path, func(t *testing.T) {
+			t.Parallel()
+			got := b.IsDir(tt.path)
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}
+
+func TestBlob_IsFile(t *testing.T) {
+	t.Parallel()
+
+	files := map[string][]byte{
+		"etc/nginx/nginx.conf": []byte("config"),
+		"etc/hosts":            []byte("hosts"),
+	}
+	b := createTestArchive(t, files, CompressionNone)
+
+	tests := []struct {
+		path string
+		want bool
+	}{
+		{"etc/nginx/nginx.conf", true},
+		{"etc/hosts", true},
+		{"/etc/hosts", true},
+		{"etc/nginx", false},
+		{"etc", false},
+		{".", false},
+		{"nonexistent", false},
+		// Invalid paths return false
+		{"../escape", false},
+		{"etc/../hosts", false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.path, func(t *testing.T) {
+			t.Parallel()
+			got := b.IsFile(tt.path)
+			assert.Equal(t, tt.want, got)
+		})
+	}
 }
 
 // createTestArchive creates a Blob for testing with the given files and compression.
@@ -484,8 +648,13 @@ func TestBlob_CopyFile(t *testing.T) {
 		t.Parallel()
 		dest := filepath.Join(t.TempDir(), "renamed.json")
 
-		err := b.CopyFile("config/app.json", dest)
+		stats, err := b.CopyFile("config/app.json", dest)
 		require.NoError(t, err)
+
+		// Verify stats
+		assert.Equal(t, 1, stats.FileCount)
+		assert.Equal(t, uint64(len(content)), stats.TotalBytes)
+		assert.Equal(t, 0, stats.Skipped)
 
 		got, err := os.ReadFile(dest)
 		require.NoError(t, err)
@@ -497,7 +666,7 @@ func TestBlob_CopyFile(t *testing.T) {
 		dest := filepath.Join(t.TempDir(), "existing.json")
 		require.NoError(t, os.WriteFile(dest, []byte("existing"), 0o644))
 
-		err := b.CopyFile("config/app.json", dest)
+		_, err := b.CopyFile("config/app.json", dest)
 		assert.ErrorIs(t, err, fs.ErrExist)
 	})
 
@@ -506,7 +675,7 @@ func TestBlob_CopyFile(t *testing.T) {
 		dest := filepath.Join(t.TempDir(), "overwrite.json")
 		require.NoError(t, os.WriteFile(dest, []byte("old"), 0o644))
 
-		err := b.CopyFile("config/app.json", dest, CopyWithOverwrite(true))
+		_, err := b.CopyFile("config/app.json", dest, CopyWithOverwrite(true))
 		require.NoError(t, err)
 
 		got, err := os.ReadFile(dest)
@@ -520,7 +689,7 @@ func TestBlob_CopyFile(t *testing.T) {
 
 		// "config" is a synthetic directory (has config/app.json under it).
 		// Since directories aren't stored as entries, this returns ErrNotExist.
-		err := b.CopyFile("config", dest)
+		_, err := b.CopyFile("config", dest)
 		assert.ErrorIs(t, err, fs.ErrNotExist)
 	})
 
@@ -528,7 +697,7 @@ func TestBlob_CopyFile(t *testing.T) {
 		t.Parallel()
 		dest := filepath.Join(t.TempDir(), "out.txt")
 
-		err := b.CopyFile("nonexistent.txt", dest)
+		_, err := b.CopyFile("nonexistent.txt", dest)
 		assert.ErrorIs(t, err, fs.ErrNotExist)
 	})
 
@@ -536,7 +705,7 @@ func TestBlob_CopyFile(t *testing.T) {
 		t.Parallel()
 		dest := filepath.Join(t.TempDir(), "missing", "parent", "file.txt")
 
-		err := b.CopyFile("config/app.json", dest)
+		_, err := b.CopyFile("config/app.json", dest)
 		assert.Error(t, err)
 	})
 
@@ -545,7 +714,7 @@ func TestBlob_CopyFile(t *testing.T) {
 		dest := filepath.Join(t.TempDir(), "normalized.json")
 
 		// Leading slash should be stripped
-		err := b.CopyFile("/config/app.json", dest)
+		_, err := b.CopyFile("/config/app.json", dest)
 		require.NoError(t, err)
 
 		got, err := os.ReadFile(dest)
@@ -557,7 +726,7 @@ func TestBlob_CopyFile(t *testing.T) {
 		t.Parallel()
 		dest := filepath.Join(t.TempDir(), "test.json")
 
-		err := b.CopyFile("config/app.json", dest, CopyWithCleanDest(true))
+		_, err := b.CopyFile("config/app.json", dest, CopyWithCleanDest(true))
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "CopyWithCleanDest")
 	})
@@ -569,7 +738,7 @@ func TestBlob_CopyFile(t *testing.T) {
 		// Create a directory at the destination
 		require.NoError(t, os.Mkdir(dest, 0o755))
 
-		err := b.CopyFile("config/app.json", dest, CopyWithOverwrite(true))
+		_, err := b.CopyFile("config/app.json", dest, CopyWithOverwrite(true))
 		var pathErr *fs.PathError
 		require.ErrorAs(t, err, &pathErr)
 		assert.Equal(t, "copyfile", pathErr.Op)
@@ -588,7 +757,7 @@ func TestBlob_CopyFile_Compressed(t *testing.T) {
 	b := createTestArchive(t, files, CompressionZstd)
 
 	dest := filepath.Join(t.TempDir(), "extracted.bin")
-	err := b.CopyFile("data.bin", dest)
+	_, err := b.CopyFile("data.bin", dest)
 	require.NoError(t, err)
 
 	got, err := os.ReadFile(dest)
@@ -622,7 +791,7 @@ func TestBlob_CopyFile_PreserveMode(t *testing.T) {
 		t.Parallel()
 		dest := filepath.Join(t.TempDir(), "script.sh")
 
-		err := b.CopyFile("script.sh", dest)
+		_, err := b.CopyFile("script.sh", dest)
 		require.NoError(t, err)
 
 		info, err := os.Stat(dest)
@@ -636,7 +805,7 @@ func TestBlob_CopyFile_PreserveMode(t *testing.T) {
 		t.Parallel()
 		dest := filepath.Join(t.TempDir(), "script.sh")
 
-		err := b.CopyFile("script.sh", dest, CopyWithPreserveMode(true))
+		_, err := b.CopyFile("script.sh", dest, CopyWithPreserveMode(true))
 		require.NoError(t, err)
 
 		info, err := os.Stat(dest)
@@ -670,7 +839,7 @@ func TestBlob_CopyFile_PreserveTimes(t *testing.T) {
 		// Use a 2-second buffer to handle coarse filesystem timestamp resolution
 		beforeCopy := time.Now().Add(-2 * time.Second)
 
-		err := b.CopyFile("file.txt", dest)
+		_, err := b.CopyFile("file.txt", dest)
 		require.NoError(t, err)
 
 		info, err := os.Stat(dest)
@@ -683,7 +852,7 @@ func TestBlob_CopyFile_PreserveTimes(t *testing.T) {
 		t.Parallel()
 		dest := filepath.Join(t.TempDir(), "file.txt")
 
-		err := b.CopyFile("file.txt", dest, CopyWithPreserveTimes(true))
+		_, err := b.CopyFile("file.txt", dest, CopyWithPreserveTimes(true))
 		require.NoError(t, err)
 
 		info, err := os.Stat(dest)
