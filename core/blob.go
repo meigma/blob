@@ -481,6 +481,124 @@ func (b *Blob) CopyDir(destDir, prefix string, opts ...CopyOption) error {
 	return b.copyEntries(destDir, b.collectPrefixEntries(prefix), &cfg)
 }
 
+// CopyFile extracts a single file to a specific destination path.
+//
+// Unlike CopyTo (which preserves the source filename), CopyFile writes
+// directly to destPath, allowing the file to be renamed during extraction.
+//
+// The destination's parent directory must exist or an error is returned.
+// Use CopyWithOverwrite to overwrite existing files.
+// Use CopyWithPreserveMode and CopyWithPreserveTimes to preserve metadata.
+//
+// Returns an error if srcPath is a directory or does not exist.
+//
+// Note: Unlike CopyTo and CopyDir (which silently skip existing files when
+// overwrite is disabled), CopyFile returns fs.ErrExist. This explicit error
+// behavior is more appropriate for single-file operations where the caller
+// likely wants to know if the copy didn't happen.
+func (b *Blob) CopyFile(srcPath, destPath string, opts ...CopyOption) error {
+	cfg := copyConfig{}
+	for _, opt := range opts {
+		opt(&cfg)
+	}
+	if cfg.cleanDest {
+		return errors.New("CopyWithCleanDest is only supported by CopyDir")
+	}
+
+	// Normalize and validate source path
+	srcPath = NormalizePath(srcPath)
+	if !fs.ValidPath(srcPath) {
+		return &fs.PathError{Op: "copyfile", Path: srcPath, Err: fs.ErrInvalid}
+	}
+
+	// Look up entry, verify it's a file
+	view, ok := b.idx.LookupView(srcPath)
+	if !ok {
+		return &fs.PathError{Op: "copyfile", Path: srcPath, Err: fs.ErrNotExist}
+	}
+	entry := blobtype.EntryFromViewWithPath(view, srcPath)
+	if entry.Mode.IsDir() {
+		return &fs.PathError{Op: "copyfile", Path: srcPath, Err: errors.New("cannot copy directory")}
+	}
+
+	// Check destination (unless overwrite)
+	if !cfg.overwrite {
+		if _, err := os.Stat(destPath); err == nil {
+			return &fs.PathError{Op: "copyfile", Path: destPath, Err: fs.ErrExist}
+		}
+	}
+
+	// Open source file (handles decompression + verification)
+	src, err := b.Open(srcPath)
+	if err != nil {
+		return err
+	}
+	defer src.Close()
+
+	return copyFileAtomic(src, destPath, &entry, &cfg)
+}
+
+// copyFileAtomic writes content from src to destPath atomically using a temp file.
+func copyFileAtomic(src io.Reader, destPath string, entry *blobtype.Entry, cfg *copyConfig) error {
+	dir := filepath.Dir(destPath)
+	tmp, err := os.CreateTemp(dir, ".blob-")
+	if err != nil {
+		return fmt.Errorf("creating temp file: %w", err)
+	}
+	tmpPath := tmp.Name()
+	success := false
+	defer func() {
+		if !success {
+			tmp.Close()
+			os.Remove(tmpPath)
+		}
+	}()
+
+	if _, err := io.Copy(tmp, src); err != nil {
+		return fmt.Errorf("copying content: %w", err)
+	}
+
+	if err := tmp.Close(); err != nil {
+		return fmt.Errorf("closing temp file: %w", err)
+	}
+
+	if err := applyCopyMetadata(tmpPath, entry, cfg); err != nil {
+		return err
+	}
+
+	// On Windows, os.Rename fails if destination exists. Remove it first when
+	// overwrite is enabled. On Unix this is harmless (rename is atomic anyway).
+	// However, refuse to replace a directory with a file.
+	if cfg.overwrite {
+		if info, err := os.Stat(destPath); err == nil && info.IsDir() {
+			return &fs.PathError{Op: "copyfile", Path: destPath, Err: errors.New("is a directory")}
+		}
+		_ = os.Remove(destPath) // ignore error; rename will fail if removal was needed but failed
+	}
+
+	if err := os.Rename(tmpPath, destPath); err != nil {
+		return fmt.Errorf("renaming to destination: %w", err)
+	}
+
+	success = true
+	return nil
+}
+
+// applyCopyMetadata applies mode and time metadata to the file at path.
+func applyCopyMetadata(path string, entry *blobtype.Entry, cfg *copyConfig) error {
+	if cfg.preserveMode {
+		if err := os.Chmod(path, entry.Mode.Perm()); err != nil {
+			return fmt.Errorf("setting mode: %w", err)
+		}
+	}
+	if cfg.preserveTimes {
+		if err := os.Chtimes(path, entry.ModTime, entry.ModTime); err != nil {
+			return fmt.Errorf("setting times: %w", err)
+		}
+	}
+	return nil
+}
+
 // collectPathEntries collects entries for specific paths.
 func (b *Blob) collectPathEntries(paths []string) []*batch.Entry {
 	entries := make([]*batch.Entry, 0, len(paths))
