@@ -925,3 +925,99 @@ func TestBlob_DirStats_Compressed(t *testing.T) {
 	assert.Equal(t, uint64(1800), stats.TotalBytes)         // Original size
 	assert.Less(t, stats.CompressedBytes, stats.TotalBytes) // Compressed should be smaller
 }
+
+func TestBlob_ValidateFiles(t *testing.T) {
+	t.Parallel()
+
+	files := map[string][]byte{
+		"file1.txt":    []byte("content1"),
+		"file2.txt":    []byte("content2"),
+		"dir/file.txt": []byte("nested"),
+	}
+	b := createTestArchive(t, files, CompressionNone)
+
+	t.Run("all valid", func(t *testing.T) {
+		t.Parallel()
+		normalized, err := b.ValidateFiles("file1.txt", "file2.txt")
+		require.NoError(t, err)
+		assert.Equal(t, []string{"file1.txt", "file2.txt"}, normalized)
+	})
+
+	t.Run("empty list", func(t *testing.T) {
+		t.Parallel()
+		normalized, err := b.ValidateFiles()
+		require.NoError(t, err)
+		assert.Empty(t, normalized)
+	})
+
+	t.Run("single valid file", func(t *testing.T) {
+		t.Parallel()
+		normalized, err := b.ValidateFiles("file1.txt")
+		require.NoError(t, err)
+		assert.Equal(t, []string{"file1.txt"}, normalized)
+	})
+
+	t.Run("returns normalized paths", func(t *testing.T) {
+		t.Parallel()
+		normalized, err := b.ValidateFiles("/file1.txt", "dir/file.txt/")
+		require.NoError(t, err)
+		assert.Equal(t, []string{"file1.txt", "dir/file.txt"}, normalized)
+
+		// Verify normalized paths work with Open
+		for _, p := range normalized {
+			f, err := b.Open(p)
+			require.NoError(t, err)
+			f.Close()
+		}
+	})
+
+	t.Run("file not found", func(t *testing.T) {
+		t.Parallel()
+		normalized, err := b.ValidateFiles("file1.txt", "nonexistent.txt", "file2.txt")
+		require.Error(t, err)
+		assert.Nil(t, normalized)
+
+		var valErr *ValidationError
+		require.ErrorAs(t, err, &valErr)
+		assert.Equal(t, "nonexistent.txt", valErr.Path)
+		assert.Equal(t, "not found", valErr.Reason)
+		assert.Contains(t, err.Error(), "nonexistent.txt")
+	})
+
+	t.Run("directory not allowed", func(t *testing.T) {
+		t.Parallel()
+		normalized, err := b.ValidateFiles("dir")
+		require.Error(t, err)
+		assert.Nil(t, normalized)
+
+		var valErr *ValidationError
+		require.ErrorAs(t, err, &valErr)
+		assert.Equal(t, "dir", valErr.Path)
+		assert.Equal(t, "is a directory", valErr.Reason)
+		assert.Contains(t, err.Error(), "directory")
+	})
+
+	t.Run("invalid path", func(t *testing.T) {
+		t.Parallel()
+		normalized, err := b.ValidateFiles("../escape")
+		require.Error(t, err)
+		assert.Nil(t, normalized)
+
+		var valErr *ValidationError
+		require.ErrorAs(t, err, &valErr)
+		assert.Equal(t, "../escape", valErr.Path)
+		assert.Equal(t, "invalid path", valErr.Reason)
+	})
+
+	t.Run("preserves original path in error", func(t *testing.T) {
+		t.Parallel()
+		// Even though path is normalized, error should show original path
+		normalized, err := b.ValidateFiles("/nonexistent.txt")
+		require.Error(t, err)
+		assert.Nil(t, normalized)
+
+		var valErr *ValidationError
+		require.ErrorAs(t, err, &valErr)
+		assert.Equal(t, "/nonexistent.txt", valErr.Path)
+	})
+}

@@ -98,6 +98,16 @@ var (
 	ErrTooManyFiles = errors.New("blob: too many files")
 )
 
+// ValidationError describes why a path failed validation.
+type ValidationError struct {
+	Path   string // The path that failed validation
+	Reason string // "not found", "is a directory", "not a regular file", or "invalid path"
+}
+
+func (e *ValidationError) Error() string {
+	return fmt.Sprintf("%s: %s", e.Reason, e.Path)
+}
+
 // ByteSource provides random access to the data blob.
 //
 // Implementations exist for local files (*os.File) and HTTP range requests.
@@ -296,6 +306,40 @@ func (b *Blob) IsFile(path string) bool {
 		return false
 	}
 	return view.Mode().IsRegular()
+}
+
+// ValidateFiles checks that all paths exist and are regular files.
+//
+// Returns the normalized paths if all are valid files, suitable for use with
+// Open, ReadFile, and other Blob methods that require fs.ValidPath format.
+// Returns a *ValidationError for the first path that does not exist or is not
+// a regular file.
+//
+// Paths are normalized before validation, so "/etc/hosts" and "etc/hosts" are
+// equivalent and both return "etc/hosts" in the result slice.
+//
+// An empty path list is valid and returns an empty slice.
+func (b *Blob) ValidateFiles(paths ...string) ([]string, error) {
+	normalized := make([]string, len(paths))
+	for i, path := range paths {
+		normalized[i] = NormalizePath(path)
+		if !fs.ValidPath(normalized[i]) {
+			return nil, &ValidationError{Path: path, Reason: "invalid path"}
+		}
+
+		view, ok := b.idx.LookupView(normalized[i])
+		if !ok {
+			// Not a file entry - check if it's a directory
+			if b.isDir(normalized[i]) {
+				return nil, &ValidationError{Path: path, Reason: "is a directory"}
+			}
+			return nil, &ValidationError{Path: path, Reason: "not found"}
+		}
+		if !view.Mode().IsRegular() {
+			return nil, &ValidationError{Path: path, Reason: "not a regular file"}
+		}
+	}
+	return normalized, nil
 }
 
 // ReadFile implements fs.ReadFileFS.
