@@ -28,6 +28,9 @@ type CopyOption = blobcore.CopyOption
 // CopyStats contains statistics about a copy operation.
 type CopyStats = blobcore.CopyStats
 
+// DirStats contains statistics about files under a directory prefix.
+type DirStats = blobcore.DirStats
+
 // ByteSource provides random access to the data blob.
 type ByteSource = blobcore.ByteSource
 

@@ -175,3 +175,15 @@ type CopyStats struct {
 	// Skipped is the number of files skipped (e.g., already exist without overwrite).
 	Skipped int
 }
+
+// DirStats contains statistics about files under a directory prefix.
+type DirStats struct {
+	// FileCount is the number of regular files.
+	FileCount int
+
+	// TotalBytes is the sum of original (uncompressed) file sizes.
+	TotalBytes uint64
+
+	// CompressedBytes is the sum of stored (compressed) file sizes.
+	CompressedBytes uint64
+}
