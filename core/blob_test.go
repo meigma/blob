@@ -8,7 +8,9 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
+	"time"
 
 	"github.com/klauspost/compress/zstd"
 	"github.com/stretchr/testify/assert"
@@ -466,4 +468,232 @@ func TestBlobCompressedDecompression(t *testing.T) {
 	content, err := b.ReadFile("test.txt")
 	require.NoError(t, err)
 	assert.Equal(t, original, content)
+}
+
+func TestBlob_CopyFile(t *testing.T) {
+	t.Parallel()
+
+	content := []byte("hello world")
+	files := map[string][]byte{
+		"config/app.json": content,
+		"dir/nested.txt":  []byte("nested"),
+	}
+	b := createTestArchive(t, files, CompressionNone)
+
+	t.Run("copy with rename", func(t *testing.T) {
+		t.Parallel()
+		dest := filepath.Join(t.TempDir(), "renamed.json")
+
+		err := b.CopyFile("config/app.json", dest)
+		require.NoError(t, err)
+
+		got, err := os.ReadFile(dest)
+		require.NoError(t, err)
+		assert.Equal(t, content, got)
+	})
+
+	t.Run("skip existing without overwrite", func(t *testing.T) {
+		t.Parallel()
+		dest := filepath.Join(t.TempDir(), "existing.json")
+		require.NoError(t, os.WriteFile(dest, []byte("existing"), 0o644))
+
+		err := b.CopyFile("config/app.json", dest)
+		assert.ErrorIs(t, err, fs.ErrExist)
+	})
+
+	t.Run("overwrite existing", func(t *testing.T) {
+		t.Parallel()
+		dest := filepath.Join(t.TempDir(), "overwrite.json")
+		require.NoError(t, os.WriteFile(dest, []byte("old"), 0o644))
+
+		err := b.CopyFile("config/app.json", dest, CopyWithOverwrite(true))
+		require.NoError(t, err)
+
+		got, err := os.ReadFile(dest)
+		require.NoError(t, err)
+		assert.Equal(t, content, got)
+	})
+
+	t.Run("error on directory", func(t *testing.T) {
+		t.Parallel()
+		dest := filepath.Join(t.TempDir(), "out.txt")
+
+		// "config" is a synthetic directory (has config/app.json under it).
+		// Since directories aren't stored as entries, this returns ErrNotExist.
+		err := b.CopyFile("config", dest)
+		assert.ErrorIs(t, err, fs.ErrNotExist)
+	})
+
+	t.Run("error on not found", func(t *testing.T) {
+		t.Parallel()
+		dest := filepath.Join(t.TempDir(), "out.txt")
+
+		err := b.CopyFile("nonexistent.txt", dest)
+		assert.ErrorIs(t, err, fs.ErrNotExist)
+	})
+
+	t.Run("error when parent missing", func(t *testing.T) {
+		t.Parallel()
+		dest := filepath.Join(t.TempDir(), "missing", "parent", "file.txt")
+
+		err := b.CopyFile("config/app.json", dest)
+		assert.Error(t, err)
+	})
+
+	t.Run("normalizes input path", func(t *testing.T) {
+		t.Parallel()
+		dest := filepath.Join(t.TempDir(), "normalized.json")
+
+		// Leading slash should be stripped
+		err := b.CopyFile("/config/app.json", dest)
+		require.NoError(t, err)
+
+		got, err := os.ReadFile(dest)
+		require.NoError(t, err)
+		assert.Equal(t, content, got)
+	})
+
+	t.Run("rejects CopyWithCleanDest", func(t *testing.T) {
+		t.Parallel()
+		dest := filepath.Join(t.TempDir(), "test.json")
+
+		err := b.CopyFile("config/app.json", dest, CopyWithCleanDest(true))
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "CopyWithCleanDest")
+	})
+
+	t.Run("refuses to overwrite directory", func(t *testing.T) {
+		t.Parallel()
+		destDir := t.TempDir()
+		dest := filepath.Join(destDir, "target")
+		// Create a directory at the destination
+		require.NoError(t, os.Mkdir(dest, 0o755))
+
+		err := b.CopyFile("config/app.json", dest, CopyWithOverwrite(true))
+		var pathErr *fs.PathError
+		require.ErrorAs(t, err, &pathErr)
+		assert.Equal(t, "copyfile", pathErr.Op)
+		assert.Equal(t, dest, pathErr.Path)
+		assert.Contains(t, pathErr.Err.Error(), "directory")
+	})
+}
+
+func TestBlob_CopyFile_Compressed(t *testing.T) {
+	t.Parallel()
+
+	content := bytes.Repeat([]byte("compress me "), 100)
+	files := map[string][]byte{
+		"data.bin": content,
+	}
+	b := createTestArchive(t, files, CompressionZstd)
+
+	dest := filepath.Join(t.TempDir(), "extracted.bin")
+	err := b.CopyFile("data.bin", dest)
+	require.NoError(t, err)
+
+	got, err := os.ReadFile(dest)
+	require.NoError(t, err)
+	assert.Equal(t, content, got)
+}
+
+func TestBlob_CopyFile_PreserveMode(t *testing.T) {
+	t.Parallel()
+
+	if runtime.GOOS == "windows" {
+		t.Skip("file mode bits are not preserved on Windows")
+	}
+
+	// Create archive with specific file mode
+	content := []byte("executable content")
+	dir := t.TempDir()
+	srcPath := filepath.Join(dir, "script.sh")
+	require.NoError(t, os.WriteFile(srcPath, content, 0o644))
+	// Explicitly set mode to avoid umask interference
+	require.NoError(t, os.Chmod(srcPath, 0o755))
+
+	var indexBuf, dataBuf bytes.Buffer
+	err := Create(context.Background(), dir, &indexBuf, &dataBuf, CreateWithCompression(CompressionNone))
+	require.NoError(t, err)
+
+	b, err := New(indexBuf.Bytes(), testutil.NewMockByteSource(dataBuf.Bytes()))
+	require.NoError(t, err)
+
+	t.Run("without preserve mode uses default", func(t *testing.T) {
+		t.Parallel()
+		dest := filepath.Join(t.TempDir(), "script.sh")
+
+		err := b.CopyFile("script.sh", dest)
+		require.NoError(t, err)
+
+		info, err := os.Stat(dest)
+		require.NoError(t, err)
+		// Without preserve mode, should NOT have execute bits (uses umask default)
+		// The exact mode depends on umask, but it shouldn't be 0755
+		assert.NotEqual(t, fs.FileMode(0o755), info.Mode().Perm())
+	})
+
+	t.Run("with preserve mode keeps original", func(t *testing.T) {
+		t.Parallel()
+		dest := filepath.Join(t.TempDir(), "script.sh")
+
+		err := b.CopyFile("script.sh", dest, CopyWithPreserveMode(true))
+		require.NoError(t, err)
+
+		info, err := os.Stat(dest)
+		require.NoError(t, err)
+		assert.Equal(t, fs.FileMode(0o755), info.Mode().Perm())
+	})
+}
+
+func TestBlob_CopyFile_PreserveTimes(t *testing.T) {
+	t.Parallel()
+
+	content := []byte("timed content")
+	dir := t.TempDir()
+	srcPath := filepath.Join(dir, "file.txt")
+	require.NoError(t, os.WriteFile(srcPath, content, 0o644))
+
+	// Set a specific modification time in the past
+	pastTime := time.Date(2020, 1, 15, 10, 30, 0, 0, time.UTC)
+	require.NoError(t, os.Chtimes(srcPath, pastTime, pastTime))
+
+	var indexBuf, dataBuf bytes.Buffer
+	err := Create(context.Background(), dir, &indexBuf, &dataBuf, CreateWithCompression(CompressionNone))
+	require.NoError(t, err)
+
+	b, err := New(indexBuf.Bytes(), testutil.NewMockByteSource(dataBuf.Bytes()))
+	require.NoError(t, err)
+
+	t.Run("without preserve times uses current time", func(t *testing.T) {
+		t.Parallel()
+		dest := filepath.Join(t.TempDir(), "file.txt")
+		// Use a 2-second buffer to handle coarse filesystem timestamp resolution
+		beforeCopy := time.Now().Add(-2 * time.Second)
+
+		err := b.CopyFile("file.txt", dest)
+		require.NoError(t, err)
+
+		info, err := os.Stat(dest)
+		require.NoError(t, err)
+		// Without preserve times, mod time should be recent (at or after beforeCopy)
+		assert.False(t, info.ModTime().Before(beforeCopy), "mod time should be recent")
+	})
+
+	t.Run("with preserve times keeps original", func(t *testing.T) {
+		t.Parallel()
+		dest := filepath.Join(t.TempDir(), "file.txt")
+
+		err := b.CopyFile("file.txt", dest, CopyWithPreserveTimes(true))
+		require.NoError(t, err)
+
+		info, err := os.Stat(dest)
+		require.NoError(t, err)
+		// With preserve times, should match the original time
+		// Allow 1 second tolerance for filesystem precision
+		diff := info.ModTime().Sub(pastTime)
+		if diff < 0 {
+			diff = -diff
+		}
+		assert.Less(t, diff, time.Second, "mod time should match original")
+	})
 }
