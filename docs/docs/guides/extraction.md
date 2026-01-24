@@ -33,6 +33,26 @@ func extractFromRegistry(ref, destDir string) error {
 
 The pulled archive fetches file data lazily. For extraction, data is streamed via range requests as needed.
 
+### CLI: Reading and Extracting Files
+
+```bash
+# Print file to stdout
+blob cat ghcr.io/myorg/archive:v1 config.json
+
+# Copy specific files
+blob cp ghcr.io/myorg/archive:v1:config.json ./local/
+blob cp ghcr.io/myorg/archive:v1:src/main.go ./local/
+
+# Pull entire archive
+blob pull ghcr.io/myorg/archive:v1 ./dest
+
+# Pull with options
+blob pull --overwrite --preserve-mode ghcr.io/myorg/archive:v1 ./dest
+
+# Extract specific prefix
+blob pull --prefix=src ghcr.io/myorg/archive:v1 ./dest
+```
+
 ## Working with BlobFile
 
 When using `OpenFile` or `CreateBlob` from the core package, you receive a `*BlobFile` which embeds `*Blob`. All extraction methods work identically:
@@ -289,6 +309,7 @@ err := extractArchive(archive, "/app/deploy", ExtractOptions{
 
 ## See Also
 
+- [CLI Reference](../reference/cli) - Command-line extraction commands (`pull`, `cp`, `cat`)
 - [OCI Client](oci-client) - Pull archives from registries
 - [Performance Tuning](performance-tuning) - Advanced extraction optimization
 - [Caching](caching) - Cache content for faster repeated extraction
