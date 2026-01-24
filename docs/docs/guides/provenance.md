@@ -80,6 +80,34 @@ fmt.Printf("Signed! Signature digest: %s\n", sigDigest)
 
 The signature is attached to the manifest as an OCI referrer artifact, which can be discovered and verified by consumers.
 
+### CLI: Signing and Verification
+
+```bash
+# Keyless signing (GitHub Actions with OIDC)
+blob push --sign ghcr.io/myorg/archive:v1 ./src
+
+# Or sign separately
+blob sign ghcr.io/myorg/archive:v1
+
+# Sign with private key
+blob sign --key private.pem ghcr.io/myorg/archive:v1
+
+# Verify with GitHub Actions policy
+blob verify --repo=myorg/myrepo ghcr.io/myorg/archive:v1
+
+# Verify with branch/tag restrictions
+blob verify --repo=myorg/myrepo --branches=main --tags="v*" \
+    ghcr.io/myorg/archive:v1
+
+# Verify with policy file
+blob verify --policy=policy.yaml ghcr.io/myorg/archive:v1
+
+# Pull with verification
+blob pull --verify --repo=myorg/myrepo ghcr.io/myorg/archive:v1 ./dest
+```
+
+For complete CLI security workflows, see [CLI Workflows](cli-workflows).
+
 ### Signer Options
 
 | Option | Description |
@@ -684,3 +712,10 @@ The OPA policy denied the attestation. Check:
 #### "no attestations found"
 
 No SLSA attestations are attached. Ensure your CI pipeline includes the `actions/attest-build-provenance` step with `push-to-registry: true`.
+
+## See Also
+
+- [CLI Reference](../reference/cli#security-commands) - Command-line signing and verification
+- [CLI Workflows](cli-workflows) - CI/CD integration patterns
+- [OCI Client](oci-client#sign-operations) - Go library signing API
+- [API Reference](../reference/api#package-blobpolicysigstore) - Sigstore policy package

@@ -24,6 +24,16 @@ The index blob is small (~1MB for 10K files) and contains file metadata. The dat
 
 ## Installation
 
+### CLI
+
+```bash
+curl -sSfL https://blob.meigma.dev/install.sh | sh
+```
+
+See [blob-cli](https://github.com/meigma/blob-cli) for more installation options.
+
+### Go Library
+
 ```bash
 go get github.com/meigma/blob
 ```
@@ -102,7 +112,9 @@ Path-sorted storage means directories fetch with a single range request. Content
 
 ## Documentation
 
-- [Getting Started](https://blob.meigma.dev/docs/getting-started) — Complete tutorial
+- [Getting Started](https://blob.meigma.dev/docs/getting-started) — Go library tutorial
+- [CLI Getting Started](https://blob.meigma.dev/docs/cli-getting-started) — Command-line tutorial
+- [CLI Reference](https://blob.meigma.dev/docs/reference/cli) — Complete CLI command reference
 - [Architecture](https://blob.meigma.dev/docs/explanation/architecture) — Design decisions and trade-offs
 - [API Reference](https://blob.meigma.dev/docs/reference/api) — Complete API documentation
 

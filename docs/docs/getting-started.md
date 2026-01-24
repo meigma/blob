@@ -4,6 +4,8 @@ sidebar_position: 2
 
 # Getting Started
 
+> **CLI users**: This tutorial covers the Go library. For command-line usage, see [CLI Getting Started](cli-getting-started).
+
 This tutorial walks through the complete workflow of creating a blob archive, pushing it to an OCI registry, and reading files lazily via HTTP range requests.
 
 ## Prerequisites

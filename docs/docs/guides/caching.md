@@ -210,6 +210,27 @@ manifest, err := c.Fetch(ctx, ref,
 )
 ```
 
+### CLI: Cache Management
+
+```bash
+# Enable caching
+blob config set cache.dir ~/.cache/blob
+
+# View cache status
+blob cache status
+
+# Clear all caches
+blob cache clear
+
+# Clear specific cache layer
+blob cache clear content   # File content cache
+blob cache clear blocks    # HTTP range block cache
+blob cache clear refs      # Tag resolution cache
+
+# Set reference cache TTL
+blob config set cache.ref_ttl 5m
+```
+
 ## Cache Lifecycle
 
 ### Automatic Pruning
@@ -275,6 +296,8 @@ func main() {
 
 ## See Also
 
+- [CLI Reference](../reference/cli#blob-cache) - Command-line cache management
+- [CLI Workflows](cli-workflows#cache-management) - CLI caching patterns
 - [OCI Client](oci-client) - Client configuration and authentication
 - [Performance Tuning](performance-tuning) - Cache tuning for specific scenarios
 - [Advanced Usage](advanced) - Custom cache implementations

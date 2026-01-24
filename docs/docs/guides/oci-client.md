@@ -84,6 +84,16 @@ func pushArchive(srcDir string) error {
 }
 ```
 
+#### CLI Equivalent
+
+```bash
+# Basic push
+blob push ghcr.io/myorg/myarchive:v1.0.0 ./src
+
+# With compression
+blob push --compression=zstd ghcr.io/myorg/myarchive:v1.0.0 ./src
+```
+
 ### Multiple Tags
 
 Apply additional tags to the same manifest:
@@ -160,6 +170,16 @@ func readFromRegistry(ref string) error {
 ```
 
 The pulled archive uses HTTP range requests to fetch file data on demand. Only the small index blob is downloaded immediately; file contents are fetched lazily when accessed.
+
+#### CLI Equivalent
+
+```bash
+# Pull and read files
+blob pull ghcr.io/myorg/myarchive:v1 ./dest
+
+# Read a single file without extracting
+blob cat ghcr.io/myorg/myarchive:v1 config.json
+```
 
 ### Pull Options
 
@@ -473,6 +493,7 @@ func main() {
 
 ## See Also
 
+- [CLI Reference](../reference/cli) - Command-line equivalent operations
 - [Creating Archives](creating-archives) - Archive creation options
 - [Caching](caching) - Cache configuration and sizing
 - [Provenance & Signing](provenance) - Signing archives and verification policies

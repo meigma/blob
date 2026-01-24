@@ -1,17 +1,847 @@
-.heroBanner {
-    padding: 5rem 0;
-    position: relative;
-    overflow: hidden;
+/* Landing Page Styles - Matching Pencil Design */
+
+.landingPage {
+    background: #0b1014;
+    color: #ffffff;
+    min-height: 100vh;
 }
 
-@media (min-width: 997px) {
-    .heroBanner {
-        padding: 6.5rem 0;
+/* Hero Section */
+.heroSection {
+    background:
+        radial-gradient(75% 65% at 70% 0%, rgba(47, 183, 160, 0.2), transparent 60%),
+        #0b1014;
+    padding: 0 0 80px 0;
+    width: 100%;
+}
+
+.header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 20px 120px;
+    width: 100%;
+    max-width: 1440px;
+    margin: 0 auto;
+}
+
+.logo {
+    font-family: 'Fraunces', serif;
+    font-size: 28px;
+    font-weight: 700;
+    color: #ffffff;
+}
+
+.navRow {
+    display: flex;
+    align-items: center;
+    gap: 32px;
+}
+
+.navLink {
+    font-family: 'IBM Plex Sans', sans-serif;
+    font-size: 14px;
+    font-weight: 500;
+    color: #a7b6c6;
+    text-decoration: none;
+    transition: color 0.2s ease;
+}
+
+.navLink:hover {
+    color: #ffffff;
+    text-decoration: none;
+}
+
+.heroContent {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 32px;
+    padding: 80px 120px;
+    width: 100%;
+    max-width: 1440px;
+    margin: 0 auto;
+}
+
+.tagline {
+    font-family: 'Fraunces', serif;
+    font-size: 56px;
+    font-weight: 600;
+    color: #ffffff;
+    text-align: center;
+    max-width: 900px;
+    margin: 0;
+    line-height: 1.1;
+}
+
+.subhead {
+    font-family: 'IBM Plex Sans', sans-serif;
+    font-size: 20px;
+    color: #a7b6c6;
+    text-align: center;
+    max-width: 640px;
+    margin: 0;
+}
+
+.ctaRow {
+    display: flex;
+    gap: 16px;
+    padding-top: 16px;
+}
+
+.ctaPrimary {
+    display: flex;
+    align-items: center;
+    padding: 14px 28px;
+    background: #2fb7a0;
+    border-radius: 8px;
+    font-family: 'IBM Plex Sans', sans-serif;
+    font-size: 16px;
+    font-weight: 600;
+    color: #0b1014;
+    text-decoration: none;
+    transition: background 0.2s ease;
+}
+
+.ctaPrimary:hover {
+    background: #3cc6af;
+    color: #0b1014;
+    text-decoration: none;
+}
+
+.ctaSecondary {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 14px 28px;
+    background: transparent;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 8px;
+    font-family: 'IBM Plex Sans', sans-serif;
+    font-size: 16px;
+    font-weight: 500;
+    color: #ffffff;
+    text-decoration: none;
+    transition: border-color 0.2s ease;
+}
+
+.ctaSecondary:hover {
+    border-color: rgba(255, 255, 255, 0.2);
+    color: #ffffff;
+    text-decoration: none;
+}
+
+.installSection {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+    padding-top: 24px;
+}
+
+.installLabel {
+    font-family: 'IBM Plex Sans', sans-serif;
+    font-size: 11px;
+    font-weight: 600;
+    color: #f6c177;
+    letter-spacing: 2px;
+}
+
+.installCode {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    padding: 16px 24px;
+    background: #111821;
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    border-radius: 8px;
+}
+
+.installText {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 14px;
+    color: #a7b6c6;
+}
+
+.installMeta {
+    font-family: 'IBM Plex Sans', sans-serif;
+    font-size: 13px;
+    color: #64748b;
+}
+
+/* Demo Section */
+.demoSection {
+    display: flex;
+    justify-content: center;
+    padding-top: 48px;
+    width: 100%;
+    max-width: 800px;
+}
+
+.demoGif {
+    width: 100%;
+    border-radius: 12px;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+}
+
+/* Problem Section */
+.problemSection {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 24px;
+    padding: 80px 120px;
+    background: linear-gradient(180deg, #111821 0%, #0b1014 100%);
+    border-top: 1px solid rgba(255, 255, 255, 0.03);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.03);
+    width: 100%;
+    max-width: 1440px;
+    margin: 0 auto;
+}
+
+.problemHeading {
+    font-family: 'Fraunces', serif;
+    font-size: 36px;
+    font-weight: 600;
+    color: #ffffff;
+    text-align: center;
+    max-width: 800px;
+    margin: 0;
+}
+
+.problemCopy {
+    font-family: 'IBM Plex Sans', sans-serif;
+    font-size: 18px;
+    color: #a7b6c6;
+    text-align: center;
+    max-width: 680px;
+    margin: 0;
+    line-height: 1.6;
+}
+
+.problemHighlight {
+    font-family: 'IBM Plex Sans', sans-serif;
+    font-size: 18px;
+    font-weight: 500;
+    color: #f6c177;
+    text-align: center;
+    max-width: 680px;
+    margin: 0;
+}
+
+/* What Blob Does Section */
+.whatSection {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 48px;
+    padding: 100px 120px;
+    width: 100%;
+    max-width: 1440px;
+    margin: 0 auto;
+}
+
+.whatHeading {
+    font-family: 'Fraunces', serif;
+    font-size: 40px;
+    font-weight: 600;
+    color: #ffffff;
+    text-align: center;
+    max-width: 800px;
+    margin: 0;
+}
+
+.whatCopy {
+    font-family: 'IBM Plex Sans', sans-serif;
+    font-size: 18px;
+    color: #a7b6c6;
+    text-align: center;
+    max-width: 700px;
+    margin: 0;
+    line-height: 1.6;
+}
+
+.codeBlock {
+    width: 720px;
+    max-width: 100%;
+    background: #111821;
+    border: 1px solid rgba(255, 255, 255, 0.04);
+    border-radius: 12px;
+    padding: 24px 28px;
+    overflow-x: auto;
+}
+
+.codeBlock pre {
+    margin: 0;
+    padding: 0;
+    background: transparent !important;
+}
+
+.codeBlock code {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 14px;
+}
+
+/* Benefits Section */
+.benefitsSection {
+    padding: 100px 120px;
+    background: linear-gradient(180deg, #111821 0%, #0b1014 100%);
+    border-top: 1px solid rgba(255, 255, 255, 0.03);
+    width: 100%;
+}
+
+.benefitsGrid {
+    display: flex;
+    gap: 40px;
+    width: 100%;
+    max-width: 1200px;
+    margin: 0 auto;
+}
+
+.benefitCard {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    padding: 32px 28px;
+    background: linear-gradient(160deg, rgba(20, 28, 36, 0.95) 0%, rgba(10, 15, 20, 0.95) 100%);
+    border: 1px solid rgba(255, 255, 255, 0.04);
+    border-radius: 16px;
+}
+
+.benefitIcon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 48px;
+    height: 48px;
+    background: rgba(47, 183, 160, 0.15);
+    border-radius: 10px;
+    color: #2fb7a0;
+}
+
+.benefitTitle {
+    font-family: 'Fraunces', serif;
+    font-size: 22px;
+    font-weight: 600;
+    color: #ffffff;
+    margin: 0;
+}
+
+.benefitCopy {
+    font-family: 'IBM Plex Sans', sans-serif;
+    font-size: 15px;
+    color: #a7b6c6;
+    margin: 0;
+    line-height: 1.6;
+}
+
+/* How It Works Section */
+.howItWorksSection {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 56px;
+    padding: 100px 120px;
+    width: 100%;
+    max-width: 1440px;
+    margin: 0 auto;
+}
+
+.howHeading {
+    font-family: 'Fraunces', serif;
+    font-size: 40px;
+    font-weight: 600;
+    color: #ffffff;
+    text-align: center;
+    margin: 0;
+}
+
+.architectureDiagram {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 32px;
+    width: 700px;
+    max-width: 100%;
+    padding: 40px 48px;
+    background: #111821;
+    border: 1px solid rgba(255, 255, 255, 0.04);
+    border-radius: 16px;
+}
+
+.manifestBox {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    height: 64px;
+    padding: 0 24px;
+    background: rgba(47, 183, 160, 0.1);
+    border: 1px solid rgba(47, 183, 160, 0.25);
+    border-radius: 10px;
+}
+
+.manifestLabel {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 16px;
+    font-weight: 600;
+    color: #2fb7a0;
+}
+
+.manifestNote {
+    font-family: 'IBM Plex Sans', sans-serif;
+    font-size: 12px;
+    font-weight: 500;
+    color: #f6c177;
+}
+
+.arrowsRow {
+    display: flex;
+    justify-content: space-around;
+    width: 100%;
+    height: 40px;
+    padding: 0 100px;
+    color: #64748b;
+}
+
+.arrowIcon {
+    width: 24px;
+    height: 24px;
+}
+
+.blobsRow {
+    display: flex;
+    gap: 32px;
+    width: 100%;
+}
+
+.blobCard {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+    padding: 24px 20px;
+    background: rgba(31, 43, 54, 0.5);
+    border: 1px solid rgba(255, 255, 255, 0.04);
+    border-radius: 12px;
+}
+
+.blobTitle {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 18px;
+    font-weight: 600;
+    color: #ffffff;
+}
+
+.blobSubtitle {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 13px;
+    color: #64748b;
+}
+
+.blobDesc {
+    font-family: 'IBM Plex Sans', sans-serif;
+    font-size: 13px;
+    color: #a7b6c6;
+    text-align: center;
+}
+
+.howCopy {
+    font-family: 'IBM Plex Sans', sans-serif;
+    font-size: 16px;
+    color: #a7b6c6;
+    text-align: center;
+    max-width: 640px;
+    margin: 0;
+    line-height: 1.6;
+}
+
+.howCopy2 {
+    font-family: 'IBM Plex Sans', sans-serif;
+    font-size: 16px;
+    font-weight: 500;
+    color: #ffffff;
+    text-align: center;
+    max-width: 600px;
+    margin: 0;
+}
+
+/* Use Cases Section */
+.useCasesSection {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 48px;
+    padding: 100px 120px;
+    background: linear-gradient(180deg, #111821 0%, #0b1014 100%);
+    border-top: 1px solid rgba(255, 255, 255, 0.03);
+    width: 100%;
+}
+
+.useCasesLabel {
+    font-family: 'IBM Plex Sans', sans-serif;
+    font-size: 12px;
+    font-weight: 600;
+    color: #f6c177;
+    letter-spacing: 2px;
+}
+
+.useCasesGrid {
+    display: flex;
+    gap: 24px;
+    width: 100%;
+    max-width: 1200px;
+}
+
+.useCaseCard {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    padding: 28px 24px;
+    background: rgba(31, 43, 54, 0.3);
+    border: 1px solid rgba(255, 255, 255, 0.03);
+    border-radius: 14px;
+}
+
+.useCaseIcon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 44px;
+    height: 44px;
+    background: rgba(47, 183, 160, 0.1);
+    border-radius: 10px;
+    color: #2fb7a0;
+}
+
+.useCaseTitle {
+    font-family: 'IBM Plex Sans', sans-serif;
+    font-size: 17px;
+    font-weight: 600;
+    color: #ffffff;
+    margin: 0;
+}
+
+.useCaseDesc {
+    font-family: 'IBM Plex Sans', sans-serif;
+    font-size: 14px;
+    color: #a7b6c6;
+    margin: 0;
+}
+
+/* Final CTA Section */
+.ctaSection {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 48px;
+    padding: 100px 120px;
+    background:
+        radial-gradient(60% 75% at 50% 0%, rgba(47, 183, 160, 0.08), transparent 70%),
+        #0b1014;
+    width: 100%;
+    max-width: 1440px;
+    margin: 0 auto;
+}
+
+.ctaHeading {
+    font-family: 'Fraunces', serif;
+    font-size: 40px;
+    font-weight: 600;
+    color: #ffffff;
+    text-align: center;
+    margin: 0;
+}
+
+.ctaCodeBlock {
+    width: 580px;
+    max-width: 100%;
+    background: #111821;
+    border: 1px solid rgba(255, 255, 255, 0.04);
+    border-radius: 12px;
+    padding: 28px 32px;
+    overflow-x: auto;
+}
+
+.ctaCodeBlock pre {
+    margin: 0;
+    padding: 0;
+    background: transparent !important;
+}
+
+.ctaCodeBlock code {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 14px;
+}
+
+.ctaButtonRow {
+    display: flex;
+    gap: 16px;
+    padding-top: 8px;
+}
+
+.ctaButtonPrimary {
+    display: flex;
+    align-items: center;
+    padding: 16px 32px;
+    background: #2fb7a0;
+    border-radius: 8px;
+    font-family: 'IBM Plex Sans', sans-serif;
+    font-size: 16px;
+    font-weight: 600;
+    color: #0b1014;
+    text-decoration: none;
+    transition: background 0.2s ease;
+}
+
+.ctaButtonPrimary:hover {
+    background: #3cc6af;
+    color: #0b1014;
+    text-decoration: none;
+}
+
+.ctaButtonSecondary {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 16px 32px;
+    background: transparent;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 8px;
+    font-family: 'IBM Plex Sans', sans-serif;
+    font-size: 16px;
+    font-weight: 500;
+    color: #ffffff;
+    text-decoration: none;
+    transition: border-color 0.2s ease;
+}
+
+.ctaButtonSecondary:hover {
+    border-color: rgba(255, 255, 255, 0.2);
+    color: #ffffff;
+    text-decoration: none;
+}
+
+.ctaButtonIcon {
+    width: 18px;
+    height: 18px;
+}
+
+/* Footer */
+.footer {
+    display: flex;
+    flex-direction: column;
+    gap: 32px;
+    padding: 48px 120px;
+    background: #0b1014;
+    border-top: 1px solid rgba(255, 255, 255, 0.03);
+    width: 100%;
+    max-width: 1440px;
+    margin: 0 auto;
+}
+
+.footerContent {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    width: 100%;
+}
+
+.footerBrand {
+    display: flex;
+    align-items: center;
+    gap: 24px;
+}
+
+.footerLogo {
+    font-family: 'Fraunces', serif;
+    font-size: 22px;
+    font-weight: 700;
+    color: #ffffff;
+}
+
+.footerTagline {
+    font-family: 'IBM Plex Sans', sans-serif;
+    font-size: 14px;
+    color: #64748b;
+}
+
+.footerLinks {
+    display: flex;
+    align-items: center;
+    gap: 32px;
+}
+
+.footerLink {
+    font-family: 'IBM Plex Sans', sans-serif;
+    font-size: 14px;
+    font-weight: 500;
+    color: #a7b6c6;
+    text-decoration: none;
+    transition: color 0.2s ease;
+}
+
+.footerLink:hover {
+    color: #ffffff;
+    text-decoration: none;
+}
+
+.footerDivider {
+    width: 100%;
+    height: 1px;
+    background: rgba(255, 255, 255, 0.03);
+}
+
+.footerBottom {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    width: 100%;
+}
+
+.footerCopyright,
+.footerMeigma {
+    font-family: 'IBM Plex Sans', sans-serif;
+    font-size: 13px;
+    color: #475569;
+}
+
+/* Responsive Styles */
+@media (max-width: 1200px) {
+    .header,
+    .heroContent,
+    .problemSection,
+    .whatSection,
+    .howItWorksSection,
+    .ctaSection,
+    .footer {
+        padding-left: 60px;
+        padding-right: 60px;
+    }
+
+    .benefitsSection,
+    .useCasesSection {
+        padding-left: 60px;
+        padding-right: 60px;
     }
 }
 
-.buttons {
-    display: flex;
-    align-items: center;
-    flex-wrap: wrap;
+@media (max-width: 996px) {
+    .header,
+    .heroContent,
+    .problemSection,
+    .whatSection,
+    .howItWorksSection,
+    .ctaSection,
+    .footer {
+        padding-left: 24px;
+        padding-right: 24px;
+    }
+
+    .benefitsSection,
+    .useCasesSection {
+        padding-left: 24px;
+        padding-right: 24px;
+    }
+
+    .tagline {
+        font-size: 40px;
+    }
+
+    .benefitsGrid {
+        flex-direction: column;
+    }
+
+    .useCasesGrid {
+        flex-direction: column;
+    }
+
+    .footerContent {
+        flex-direction: column;
+        gap: 24px;
+    }
+
+    .footerBottom {
+        flex-direction: column;
+        gap: 8px;
+    }
+}
+
+@media (max-width: 768px) {
+    .tagline {
+        font-size: 32px;
+    }
+
+    .subhead {
+        font-size: 16px;
+    }
+
+    .ctaRow {
+        flex-direction: column;
+        width: 100%;
+    }
+
+    .ctaPrimary,
+    .ctaSecondary {
+        width: 100%;
+        justify-content: center;
+    }
+
+    .installCode {
+        width: 100%;
+    }
+
+    .installText {
+        font-size: 12px;
+    }
+
+    .problemHeading,
+    .whatHeading,
+    .howHeading,
+    .ctaHeading {
+        font-size: 28px;
+    }
+
+    .codeBlock,
+    .ctaCodeBlock {
+        width: 100%;
+    }
+
+    .architectureDiagram {
+        padding: 24px 20px;
+    }
+
+    .arrowsRow {
+        padding: 0 40px;
+    }
+
+    .blobsRow {
+        flex-direction: column;
+    }
+
+    .ctaButtonRow {
+        flex-direction: column;
+        width: 100%;
+    }
+
+    .ctaButtonPrimary,
+    .ctaButtonSecondary {
+        width: 100%;
+        justify-content: center;
+    }
+
+    .footerBrand {
+        flex-direction: column;
+        gap: 12px;
+    }
+
+    .footerLinks {
+        flex-wrap: wrap;
+        justify-content: center;
+        gap: 16px;
+    }
 }
