@@ -238,7 +238,7 @@ func TestManifestCachePutGet(t *testing.T) {
 		t.Fatalf("PutManifest() error = %v", err)
 	}
 
-	got, ok := c.GetManifest(dgst.String())
+	got, gotRaw, ok := c.GetManifest(dgst.String())
 	if !ok {
 		t.Fatal("GetManifest() ok = false, want true")
 	}
@@ -250,6 +250,9 @@ func TestManifestCachePutGet(t *testing.T) {
 	}
 	if len(got.Layers) != len(manifest.Layers) {
 		t.Fatalf("len(manifest.Layers) = %d, want %d", len(got.Layers), len(manifest.Layers))
+	}
+	if !bytes.Equal(gotRaw, raw) {
+		t.Fatalf("GetManifest() raw mismatch")
 	}
 
 	// Verify sharded path (digest without sha256: prefix)
@@ -269,7 +272,7 @@ func TestManifestCacheNotFound(t *testing.T) {
 		t.Fatalf("NewManifestCache() error = %v", err)
 	}
 
-	_, ok := c.GetManifest("sha256:deadbeef")
+	_, _, ok := c.GetManifest("sha256:deadbeef")
 	if ok {
 		t.Fatal("GetManifest() ok = true, want false for nonexistent digest")
 	}
@@ -331,7 +334,7 @@ func TestManifestCacheAlreadyCached(t *testing.T) {
 		t.Fatalf("PutManifest() error = %v", err)
 	}
 
-	got, ok := c.GetManifest(dgst.String())
+	got, _, ok := c.GetManifest(dgst.String())
 	if !ok {
 		t.Fatal("GetManifest() ok = false, want true")
 	}
@@ -623,7 +626,7 @@ func TestManifestCacheCorruptedJSON(t *testing.T) {
 		t.Fatalf("WriteFile() error = %v", err)
 	}
 
-	_, ok := c.GetManifest(dgst.String())
+	_, _, ok := c.GetManifest(dgst.String())
 	if ok {
 		t.Fatal("GetManifest() ok = true, want false for corrupted JSON")
 	}
@@ -652,7 +655,7 @@ func TestManifestCacheRejectsInvalidDigest(t *testing.T) {
 		t.Fatal("PutManifest() error = nil, want error for invalid digest")
 	}
 
-	if _, ok := c.GetManifest(invalidDigest); ok {
+	if _, _, ok := c.GetManifest(invalidDigest); ok {
 		t.Fatal("GetManifest() ok = true, want false for invalid digest")
 	}
 
@@ -736,7 +739,7 @@ func TestManifestCacheCorruptedDeleted(t *testing.T) {
 	}
 
 	// GetManifest should return false
-	_, ok := c.GetManifest(dgst.String())
+	_, _, ok := c.GetManifest(dgst.String())
 	if ok {
 		t.Fatal("GetManifest() ok = true, want false for corrupted JSON")
 	}

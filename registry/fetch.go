@@ -96,10 +96,10 @@ func (c *Client) resolveDigest(ctx context.Context, ref, reference string, skipC
 func (c *Client) fetchManifestByDigest(ctx context.Context, ref, dgst string, skipCache bool) (manifest *BlobManifest, raw []byte, fromCache bool, err error) {
 	// Try manifest cache
 	if !skipCache && c.manifestCache != nil {
-		if cached, ok := c.manifestCache.GetManifest(dgst); ok {
+		if cached, cachedRaw, ok := c.manifestCache.GetManifest(dgst); ok {
 			c.log().Debug("manifest cache hit", "digest", dgst[:min(16, len(dgst))])
 			manifest, err = parseBlobManifest(cached, dgst)
-			return manifest, nil, true, err
+			return manifest, cachedRaw, true, err
 		}
 		c.log().Debug("manifest cache miss", "digest", dgst[:min(16, len(dgst))])
 	}

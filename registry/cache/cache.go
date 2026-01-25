@@ -32,8 +32,10 @@ type RefCache interface {
 //
 // This avoids redundant manifest fetches.
 type ManifestCache interface {
-	// GetManifest returns the cached manifest for a digest.
-	GetManifest(digest string) (manifest *ocispec.Manifest, ok bool)
+	// GetManifest returns the cached manifest and raw bytes for a digest.
+	// The raw bytes are needed for policy evaluation (e.g., sigstore verification)
+	// which requires the exact original bytes for size calculations.
+	GetManifest(digest string) (manifest *ocispec.Manifest, raw []byte, ok bool)
 
 	// PutManifest caches raw manifest bytes by digest.
 	PutManifest(digest string, raw []byte) error

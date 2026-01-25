@@ -164,16 +164,16 @@ func newMemManifestCache() *memManifestCache {
 	return &memManifestCache{data: make(map[string][]byte)}
 }
 
-func (c *memManifestCache) GetManifest(dgst string) (*ocispec.Manifest, bool) {
+func (c *memManifestCache) GetManifest(dgst string) (*ocispec.Manifest, []byte, bool) {
 	raw, ok := c.data[dgst]
 	if !ok {
-		return nil, false
+		return nil, nil, false
 	}
 	var manifest ocispec.Manifest
 	if err := json.Unmarshal(raw, &manifest); err != nil {
-		return nil, false
+		return nil, nil, false
 	}
-	return &manifest, true
+	return &manifest, raw, true
 }
 
 func (c *memManifestCache) PutManifest(dgst string, raw []byte) error {
@@ -539,7 +539,60 @@ func TestClient_Fetch_PopulatesCaches(t *testing.T) {
 	assert.Equal(t, testDigest, cachedDigest)
 
 	// Verify manifest cache was populated
-	cachedManifest, ok := manifestCache.GetManifest(testDigest)
+	cachedManifest, _, ok := manifestCache.GetManifest(testDigest)
 	assert.True(t, ok, "manifest cache should be populated")
 	assert.Equal(t, ArtifactType, cachedManifest.ArtifactType)
+}
+
+// TestClient_Fetch_CacheHitReturnsRawBytes verifies that when a manifest is
+// retrieved from the cache, the raw bytes are returned for policy evaluation.
+// This is a regression test for a bug where cached manifests returned nil raw
+// bytes, causing policy verification to fail due to Size=0 in the subject
+// descriptor.
+func TestClient_Fetch_CacheHitReturnsRawBytes(t *testing.T) {
+	t.Parallel()
+
+	const testRef = "registry.example.com/repo:v1.0.0"
+
+	manifest := testManifest()
+	manifestBytes := mustMarshalManifest(t, manifest)
+	testDigest := digest.FromBytes(manifestBytes).String()
+
+	// Pre-populate caches to simulate a cache hit scenario
+	refCache := newMemRefCache()
+	require.NoError(t, refCache.PutDigest(testRef, testDigest))
+	manifestCache := newMemManifestCache()
+	require.NoError(t, manifestCache.PutManifest(testDigest, manifestBytes))
+
+	// Create a policy that verifies we receive non-nil raw bytes with correct size
+	var receivedRawSize int64
+	policy := PolicyFunc(func(ctx context.Context, req PolicyRequest) error {
+		receivedRawSize = req.Subject.Size
+		return nil
+	})
+
+	mock := &mockOCIClient{
+		ResolveFunc: func(ctx context.Context, repoRef, ref string) (ocispec.Descriptor, error) {
+			t.Error("Resolve should not be called when ref is cached")
+			return ocispec.Descriptor{}, nil
+		},
+		FetchManifestFunc: func(ctx context.Context, repoRef string, expected *ocispec.Descriptor) (ocispec.Manifest, []byte, error) {
+			t.Error("FetchManifest should not be called when manifest is cached")
+			return ocispec.Manifest{}, nil, nil
+		},
+	}
+
+	c := &Client{
+		oci:           mock,
+		refCache:      refCache,
+		manifestCache: manifestCache,
+		policies:      []Policy{policy},
+	}
+
+	_, err := c.Fetch(context.Background(), testRef)
+	require.NoError(t, err)
+
+	// Verify that the policy received the raw bytes size (not zero)
+	assert.Equal(t, int64(len(manifestBytes)), receivedRawSize,
+		"policy should receive raw bytes from cache for subject.Size calculation")
 }
