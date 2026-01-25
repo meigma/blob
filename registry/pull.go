@@ -62,8 +62,19 @@ func (c *Client) Pull(ctx context.Context, ref string, opts ...PullOption) (*blo
 	}
 	c.log().Debug("created data source", "url", source.SourceID())
 
-	// Step 4: Create Blob with index data and lazy data source
-	return blob.New(indexData, source, cfg.blobOpts...)
+	// Step 4: Wrap source with block cache if configured
+	var dataSource blob.ByteSource = source
+	if cfg.blockCache != nil {
+		wrapped, wrapErr := cfg.blockCache.Wrap(source)
+		if wrapErr != nil {
+			return nil, fmt.Errorf("wrap data source with block cache: %w", wrapErr)
+		}
+		dataSource = wrapped
+		c.log().Debug("wrapped data source with block cache")
+	}
+
+	// Step 5: Create Blob with index data and lazy data source
+	return blob.New(indexData, dataSource, cfg.blobOpts...)
 }
 
 // fetchIndexBlob fetches the index blob, using cache if available.

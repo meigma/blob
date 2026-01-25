@@ -128,3 +128,23 @@ func TestWithRefCacheTTL_OrderMatters(t *testing.T) {
 	// with DefaultRefCacheTTL. This test documents the order-dependent behavior.
 	assert.Equal(t, 30*time.Minute, client.refCacheTTL)
 }
+
+func TestWithCacheDir_CreatesBlockCache(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+
+	client, err := NewClient(WithCacheDir(dir))
+	require.NoError(t, err)
+	assert.NotNil(t, client.blockCache, "block cache should be created by WithCacheDir")
+}
+
+func TestWithBlockCacheDir(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+
+	client, err := NewClient(WithBlockCacheDir(filepath.Join(dir, "blocks")))
+	require.NoError(t, err)
+	assert.NotNil(t, client.blockCache)
+}

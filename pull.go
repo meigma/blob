@@ -40,6 +40,9 @@ func (c *Client) Pull(ctx context.Context, ref string, opts ...PullOption) (*Arc
 	if cfg.maxIndexSize > 0 {
 		pullOpts = append(pullOpts, registry.WithMaxIndexSize(cfg.maxIndexSize))
 	}
+	if c.blockCache != nil {
+		pullOpts = append(pullOpts, registry.WithBlockCache(c.blockCache))
+	}
 
 	// Pass through blob options
 	blobOpts := cfg.blobOpts
