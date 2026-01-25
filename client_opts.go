@@ -1,6 +1,7 @@
 package blob
 
 import (
+	"errors"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -124,6 +125,7 @@ func WithCacheDir(dir string) Option {
 		refCache, err := registrydisk.NewRefCache(
 			filepath.Join(dir, "refs"),
 			registrydisk.WithMaxBytes(DefaultRefCacheSize),
+			registrydisk.WithRefCacheTTL(c.refCacheTTL),
 		)
 		if err != nil {
 			return err
@@ -182,9 +184,16 @@ func WithBlockCacheDir(dir string) Option {
 
 // WithRefCacheDir enables tag-to-digest reference caching in the specified directory
 // with the default size limit ([DefaultRefCacheSize]).
+//
+// The cache uses the TTL configured via [WithRefCacheTTL], which defaults to
+// [DefaultRefCacheTTL] (5 minutes). Set [WithRefCacheTTL] before this option
+// to customize the TTL.
 func WithRefCacheDir(dir string) Option {
 	return func(c *Client) error {
-		cache, err := registrydisk.NewRefCache(dir, registrydisk.WithMaxBytes(DefaultRefCacheSize))
+		cache, err := registrydisk.NewRefCache(dir,
+			registrydisk.WithMaxBytes(DefaultRefCacheSize),
+			registrydisk.WithRefCacheTTL(c.refCacheTTL),
+		)
 		if err != nil {
 			return err
 		}
@@ -221,8 +230,15 @@ func WithIndexCacheDir(dir string) Option {
 
 // WithRefCacheTTL sets the TTL for reference cache entries.
 // This determines how long tag→digest mappings are considered fresh.
+// Use 0 to disable TTL expiration. Negative values are not allowed.
+//
+// This option must be set before [WithCacheDir] or [WithRefCacheDir]
+// to take effect, as the TTL is applied when the cache is created.
 func WithRefCacheTTL(ttl time.Duration) Option {
 	return func(c *Client) error {
+		if ttl < 0 {
+			return errors.New("ref cache TTL must be non-negative")
+		}
 		c.refCacheTTL = ttl
 		return nil
 	}

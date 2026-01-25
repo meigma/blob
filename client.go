@@ -46,7 +46,9 @@ func (c *Client) log() *slog.Logger {
 // If no authentication is configured, anonymous access is used.
 // Use [WithDockerConfig] to read credentials from ~/.docker/config.json.
 func NewClient(opts ...Option) (*Client, error) {
-	c := &Client{}
+	c := &Client{
+		refCacheTTL: DefaultRefCacheTTL,
+	}
 	for _, opt := range opts {
 		if err := opt(c); err != nil {
 			return nil, err
