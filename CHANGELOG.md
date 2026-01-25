@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.1.2](https://github.com/meigma/blob/compare/v1.1.1...v1.1.2) (2026-01-25)
+
+
+### Bug Fixes
+
+* wire blockCache through to registry Pull ([#62](https://github.com/meigma/blob/issues/62)) ([7857128](https://github.com/meigma/blob/commit/78571280a3d83a7d7e0b4e125b39e21ea660e63c))
+* wire WithRefCacheTTL to ref cache creation ([#60](https://github.com/meigma/blob/issues/60)) ([5d4b964](https://github.com/meigma/blob/commit/5d4b9643eeead589a9468b77f2b53247232e0c2a))
+
 ## [1.1.1](https://github.com/meigma/blob/compare/v1.1.0...v1.1.1) (2026-01-25)
 
 
