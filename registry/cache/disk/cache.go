@@ -431,42 +431,44 @@ func NewManifestCache(dir string, opts ...Option) (*ManifestCache, error) {
 	return c, nil
 }
 
-// GetManifest returns the cached manifest for a digest.
+// GetManifest returns the cached manifest and raw bytes for a digest.
 //
 // Corrupted cache entries (digest mismatch or invalid JSON) are automatically deleted.
-func (c *ManifestCache) GetManifest(dgst string) (manifest *ocispec.Manifest, ok bool) {
+// The raw bytes are returned alongside the parsed manifest for use cases that require
+// the exact original bytes, such as policy evaluation.
+func (c *ManifestCache) GetManifest(dgst string) (manifest *ocispec.Manifest, raw []byte, ok bool) {
 	path, err := c.path(dgst)
 	if err != nil {
-		return nil, false
+		return nil, nil, false
 	}
 
 	root, err := os.OpenRoot(c.dir)
 	if err != nil {
-		return nil, false
+		return nil, nil, false
 	}
 	defer root.Close()
 
 	data, err := root.ReadFile(path)
 	if err != nil {
 		c.log().Debug("manifest cache miss", "digest", dgst[:min(16, len(dgst))])
-		return nil, false
+		return nil, nil, false
 	}
 
 	match, err := digestMatches(dgst, data)
 	if err != nil || !match {
 		c.log().Warn("manifest cache corrupted entry deleted", "digest", dgst[:min(16, len(dgst))])
 		_ = c.deleteByPath(root, path) //nolint:errcheck // best-effort cleanup
-		return nil, false
+		return nil, nil, false
 	}
 
 	var m ocispec.Manifest
 	if err := json.Unmarshal(data, &m); err != nil {
 		c.log().Warn("manifest cache corrupted entry deleted", "digest", dgst[:min(16, len(dgst))])
 		_ = c.deleteByPath(root, path) //nolint:errcheck // best-effort cleanup
-		return nil, false
+		return nil, nil, false
 	}
 	c.log().Debug("manifest cache hit", "digest", dgst[:min(16, len(dgst))])
-	return &m, true
+	return &m, data, true
 }
 
 // PutManifest caches raw manifest bytes by digest.

@@ -117,18 +117,18 @@ func newBenchManifestCache() *benchManifestCache {
 	return &benchManifestCache{data: make(map[string][]byte)}
 }
 
-func (c *benchManifestCache) GetManifest(dgst string) (*ocispec.Manifest, bool) {
+func (c *benchManifestCache) GetManifest(dgst string) (*ocispec.Manifest, []byte, bool) {
 	c.mu.RLock()
 	raw, ok := c.data[dgst]
 	c.mu.RUnlock()
 	if !ok {
-		return nil, false
+		return nil, nil, false
 	}
 	var manifest ocispec.Manifest
 	if err := json.Unmarshal(raw, &manifest); err != nil {
-		return nil, false
+		return nil, nil, false
 	}
-	return &manifest, true
+	return &manifest, raw, true
 }
 
 func (c *benchManifestCache) PutManifest(dgst string, raw []byte) error {
