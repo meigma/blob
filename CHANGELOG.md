@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.1.1](https://github.com/meigma/blob/compare/v1.1.0...v1.1.1) (2026-01-25)
+
+
+### Bug Fixes
+
+* **registry:** return raw bytes from manifest cache for policy evaluation ([#58](https://github.com/meigma/blob/issues/58)) ([fcf8c0a](https://github.com/meigma/blob/commit/fcf8c0a3d0f74d0d2574982572b4f23cc7cc6b65))
+
 ## [1.1.0](https://github.com/meigma/blob/compare/v1.0.0...v1.1.0) (2026-01-23)
 
 
