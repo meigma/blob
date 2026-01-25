@@ -1,6 +1,9 @@
 package registry
 
-import blob "github.com/meigma/blob/core"
+import (
+	blob "github.com/meigma/blob/core"
+	"github.com/meigma/blob/core/cache"
+)
 
 // PullOption configures a Pull operation.
 type PullOption func(*pullConfig)
@@ -12,6 +15,7 @@ type pullConfig struct {
 	// A value <= 0 disables the limit.
 	maxIndexSize int64
 	progress     blob.ProgressFunc
+	blockCache   cache.BlockCache
 }
 
 const defaultMaxIndexSize = 8 << 20 // 8 MiB
@@ -50,5 +54,14 @@ func WithPullSkipCache() PullOption {
 func WithPullProgress(fn blob.ProgressFunc) PullOption {
 	return func(cfg *pullConfig) {
 		cfg.progress = fn
+	}
+}
+
+// WithBlockCache sets a block cache to wrap the HTTP data source.
+// This caches HTTP range request blocks for improved performance on
+// random access patterns.
+func WithBlockCache(bc cache.BlockCache) PullOption {
+	return func(cfg *pullConfig) {
+		cfg.blockCache = bc
 	}
 }
