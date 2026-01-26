@@ -157,7 +157,7 @@ require (
 	github.com/sigstore/protobuf-specs v0.5.0 // indirect
 	github.com/sigstore/rekor v1.5.0 // indirect
 	github.com/sigstore/rekor-tiles/v2 v2.1.0 // indirect
-	github.com/sigstore/sigstore v1.10.3 // indirect
+	github.com/sigstore/sigstore v1.10.4 // indirect
 	github.com/sigstore/sigstore-go v1.1.4 // indirect
 	github.com/sigstore/sigstore/pkg/signature/kms/aws v1.10.3 // indirect
 	github.com/sigstore/sigstore/pkg/signature/kms/azure v1.10.3 // indirect
@@ -171,7 +171,7 @@ require (
 	github.com/stretchr/testify v1.11.1 // indirect
 	github.com/syndtr/goleveldb v1.0.1-0.20220721030215-126854af5e6d // indirect
 	github.com/theupdateframework/go-tuf v0.7.0 // indirect
-	github.com/theupdateframework/go-tuf/v2 v2.3.1 // indirect
+	github.com/theupdateframework/go-tuf/v2 v2.4.1 // indirect
 	github.com/tink-crypto/tink-go-awskms/v2 v2.1.0 // indirect
 	github.com/tink-crypto/tink-go-gcpkms/v2 v2.2.0 // indirect
 	github.com/tink-crypto/tink-go/v2 v2.6.0 // indirect
