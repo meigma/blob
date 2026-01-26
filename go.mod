@@ -13,7 +13,7 @@ require (
 )
 
 require (
-	github.com/containerd/stargz-snapshotter/estargz v0.18.1
+	github.com/containerd/stargz-snapshotter/estargz v0.18.2
 	github.com/vbatts/tar-split v0.12.2 // indirect
 	golang.org/x/sync v0.19.0
 )
