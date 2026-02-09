@@ -4,7 +4,7 @@ go 1.25.5
 
 require (
 	github.com/google/flatbuffers v25.12.19+incompatible
-	github.com/klauspost/compress v1.18.3
+	github.com/klauspost/compress v1.18.4
 	github.com/opencontainers/go-digest v1.0.0
 	github.com/opencontainers/image-spec v1.1.1
 	github.com/stretchr/testify v1.11.1
@@ -13,7 +13,7 @@ require (
 )
 
 require (
-	github.com/containerd/stargz-snapshotter/estargz v0.18.1
+	github.com/containerd/stargz-snapshotter/estargz v0.18.2
 	github.com/vbatts/tar-split v0.12.2 // indirect
 	golang.org/x/sync v0.19.0
 )
