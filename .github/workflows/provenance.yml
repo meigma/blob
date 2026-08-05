@@ -3,7 +3,7 @@ name: Provenance Example
 on:
   push:
     branches:
-      - main
+      - master
     paths:
       - 'examples/provenance/**'
   pull_request:
@@ -11,45 +11,39 @@ on:
       - master
   workflow_dispatch:
 
-permissions:
-  contents: read
-  packages: write
-  id-token: write
-  attestations: write
+permissions: {}
 
 env:
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository }}/provenance-example
+  GOTOOLCHAIN: local
+  MOON_TOOLCHAIN_FORCE_GLOBALS: 'true'
 
 jobs:
   build-and-push:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+      attestations: write
     outputs:
       digest: ${{ steps.push.outputs.digest }}
     steps:
       - name: Checkout repository
-        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
-
-      - name: Set up Go
-        uses: actions/setup-go@7a3fe6cf4cb3a834922a1244abfce67bcef6a0c5 # v6.2.0
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
-          go-version-file: go.mod
+          fetch-depth: 0
+          persist-credentials: false
 
-      - name: Install FlatBuffers compiler
-        run: |
-          curl -L https://github.com/google/flatbuffers/releases/download/v25.2.10/Linux.flatc.binary.clang++-18.zip -o flatc.zip
-          unzip flatc.zip
-          chmod +x flatc
-          sudo mv flatc /usr/local/bin/
+      - name: Setup mise
+        uses: jdx/mise-action@e6a8b3978addb5a52f2b4cd9d91eafa7f0ab959d # v4.2.0
+        with:
+          version: 2026.6.14
+          cache: true
 
-      - name: Generate FlatBuffers
-        run: go generate ./...
-
-      - name: Build provenance CLI
-        working-directory: examples/provenance
-        run: |
-          go mod tidy
-          go build -o provenance .
+      - name: Generate and build provenance CLI
+        run: moon run root:generate provenance:build --summary minimal
 
       - name: Log in to GHCR
         uses: docker/login-action@5e57cd118135c172c3672efd75eb46360885c0ef # v3.6.0
@@ -64,11 +58,11 @@ jobs:
         run: |
           REF="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}"
 
-          # Push and sign with sigstore (keyless), capture output
+          # Push and sign with sigstore (keyless), capture output.
           OUTPUT=$(./provenance push --ref "$REF" --sign 2>&1)
           echo "$OUTPUT"
 
-          # Extract digest from the push output
+          # Extract digest from the push output.
           DIGEST=$(echo "$OUTPUT" | grep "Digest:" | awk '{print $2}')
           echo "digest=$DIGEST" >> "$GITHUB_OUTPUT"
           echo "ref=$REF" >> "$GITHUB_OUTPUT"
@@ -82,37 +76,29 @@ jobs:
 
       - name: Push latest tag
         working-directory: examples/provenance
-        run: |
-          # Also tag and sign as latest
-          ./provenance push --ref "${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest" --sign
+        run: ./provenance push --ref "${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest" --sign
 
   verify:
     runs-on: ubuntu-latest
     needs: build-and-push
+    permissions:
+      contents: read
+      packages: read
     steps:
       - name: Checkout repository
-        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
-
-      - name: Set up Go
-        uses: actions/setup-go@7a3fe6cf4cb3a834922a1244abfce67bcef6a0c5 # v6.2.0
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
-          go-version-file: go.mod
+          fetch-depth: 0
+          persist-credentials: false
 
-      - name: Install FlatBuffers compiler
-        run: |
-          curl -L https://github.com/google/flatbuffers/releases/download/v25.2.10/Linux.flatc.binary.clang++-18.zip -o flatc.zip
-          unzip flatc.zip
-          chmod +x flatc
-          sudo mv flatc /usr/local/bin/
+      - name: Setup mise
+        uses: jdx/mise-action@e6a8b3978addb5a52f2b4cd9d91eafa7f0ab959d # v4.2.0
+        with:
+          version: 2026.6.14
+          cache: true
 
-      - name: Generate FlatBuffers
-        run: go generate ./...
-
-      - name: Build provenance CLI
-        working-directory: examples/provenance
-        run: |
-          go mod tidy
-          go build -o provenance .
+      - name: Generate and build provenance CLI
+        run: moon run root:generate provenance:build --summary minimal
 
       - name: Log in to GHCR
         uses: docker/login-action@5e57cd118135c172c3672efd75eb46360885c0ef # v3.6.0
@@ -127,13 +113,11 @@ jobs:
           REF="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${{ needs.build-and-push.outputs.digest }}"
           echo "Pulling with full verification: $REF"
           # Full verification chain:
-          # 1. Sigstore: Verifies WHO signed the archive (GitHub Actions OIDC identity)
-          # 2. SLSA: Verifies HOW the archive was built (build provenance attestation)
-          # 3. Gittuf: Verifies WHETHER source changes were authorized (RSL verification)
+          # 1. Sigstore verifies who signed the archive.
+          # 2. SLSA verifies how the archive was built.
+          # 3. Gittuf verifies whether source changes were authorized.
           #
-          # Note: Gittuf verification is skipped for PR builds because:
-          # - PR merge refs (refs/pull/XX/merge) don't have RSL entries
-          # - Gittuf RSL only tracks actual branch pushes to protected refs
+          # PR merge refs do not have Gittuf RSL entries, so skip that layer for PRs.
           GITTUF_FLAG=""
           if [ "${{ github.event_name }}" = "pull_request" ]; then
             echo "Skipping gittuf verification for PR build (PR refs don't have RSL entries)"
@@ -150,10 +134,7 @@ jobs:
         run: |
           echo "Verifying extracted files..."
           ls -la ./verified-output/
-
-          # Check expected files exist
           test -f ./verified-output/config.json
           test -f ./verified-output/README.md
           test -f ./verified-output/data/sample.txt
-
           echo "All files verified successfully!"

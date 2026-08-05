@@ -8,11 +8,12 @@ import (
 	"fmt"
 	"log/slog"
 
-	"github.com/meigma/blob/registry"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/sigstore/sigstore-go/pkg/bundle"
 	"github.com/sigstore/sigstore-go/pkg/root"
 	"github.com/sigstore/sigstore-go/pkg/verify"
+
+	"github.com/meigma/blob/registry"
 )
 
 // SignatureArtifactType is the OCI artifact type for sigstore bundles.

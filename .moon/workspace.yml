@@ -1,0 +1,18 @@
+projects:
+  sources:
+    root: '.'
+    docs: 'docs'
+    provenance: 'examples/provenance'
+    policy-gittuf: 'policy/gittuf'
+    policy-opa: 'policy/opa'
+    policy-sigstore: 'policy/sigstore'
+    policy-slsa: 'policy/slsa'
+
+defaultProject: 'root'
+
+vcs:
+  defaultBranch: 'master'
+  provider: 'github'
+
+pipeline:
+  installDependencies: false

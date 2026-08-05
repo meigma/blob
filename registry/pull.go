@@ -78,7 +78,12 @@ func (c *Client) Pull(ctx context.Context, ref string, opts ...PullOption) (*blo
 }
 
 // fetchIndexBlob fetches the index blob, using cache if available.
-func (c *Client) fetchIndexBlob(ctx context.Context, ref string, manifest *BlobManifest, cfg *pullConfig) ([]byte, error) {
+func (c *Client) fetchIndexBlob(
+	ctx context.Context,
+	ref string,
+	manifest *BlobManifest,
+	cfg *pullConfig,
+) ([]byte, error) {
 	indexDesc := manifest.IndexDescriptor()
 	indexDigest := indexDesc.Digest.String()
 

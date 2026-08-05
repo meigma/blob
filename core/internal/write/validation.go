@@ -16,7 +16,8 @@ func CheckFileUnchanged(f *os.File, path string, before fs.FileInfo, strict bool
 	if err != nil {
 		return err
 	}
-	if after.Size() != before.Size() || !after.ModTime().Equal(before.ModTime()) || after.Mode().Perm() != before.Mode().Perm() {
+	if after.Size() != before.Size() || !after.ModTime().Equal(before.ModTime()) ||
+		after.Mode().Perm() != before.Mode().Perm() {
 		return fmt.Errorf("file changed during archive creation: %s", path)
 	}
 	return nil

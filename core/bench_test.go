@@ -315,8 +315,14 @@ func BenchmarkBlobReadFileHTTPMatrix(b *testing.B) {
 		cfg  benchHTTPConfig
 	}{
 		{name: "latency=0/bps=unlimited", cfg: benchHTTPConfig{}},
-		{name: "latency=5ms/bps=10MBps", cfg: benchHTTPConfig{latency: 5 * time.Millisecond, bytesPerSecond: 10 * 1024 * 1024}},
-		{name: "latency=20ms/bps=2MBps", cfg: benchHTTPConfig{latency: 20 * time.Millisecond, bytesPerSecond: 2 * 1024 * 1024}},
+		{
+			name: "latency=5ms/bps=10MBps",
+			cfg:  benchHTTPConfig{latency: 5 * time.Millisecond, bytesPerSecond: 10 * 1024 * 1024},
+		},
+		{
+			name: "latency=20ms/bps=2MBps",
+			cfg:  benchHTTPConfig{latency: 20 * time.Millisecond, bytesPerSecond: 2 * 1024 * 1024},
+		},
 	}
 
 	const fileCount = 64
@@ -411,8 +417,14 @@ func BenchmarkBlobCopyDirHTTPMatrix(b *testing.B) {
 		cfg  benchHTTPConfig
 	}{
 		{name: "latency=0/bps=unlimited", cfg: benchHTTPConfig{}},
-		{name: "latency=5ms/bps=10MBps", cfg: benchHTTPConfig{latency: 5 * time.Millisecond, bytesPerSecond: 10 * 1024 * 1024}},
-		{name: "latency=20ms/bps=2MBps", cfg: benchHTTPConfig{latency: 20 * time.Millisecond, bytesPerSecond: 2 * 1024 * 1024}},
+		{
+			name: "latency=5ms/bps=10MBps",
+			cfg:  benchHTTPConfig{latency: 5 * time.Millisecond, bytesPerSecond: 10 * 1024 * 1024},
+		},
+		{
+			name: "latency=20ms/bps=2MBps",
+			cfg:  benchHTTPConfig{latency: 20 * time.Millisecond, bytesPerSecond: 2 * 1024 * 1024},
+		},
 	}
 
 	const fileCount = 512

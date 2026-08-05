@@ -1,117 +1,76 @@
 name: CI
 
 on:
-  push:
-    branches: [main, master]
   pull_request:
-    branches: [main, master]
+    branches:
+      - master
+      - main
+  push:
+    branches:
+      - master
+      - main
 
-permissions:
-  contents: read
+permissions: {}
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
-  validate:
-    name: Validate
+  ci:
     runs-on: ubuntu-latest
-
+    permissions:
+      contents: read
+    env:
+      # Never auto-download a Go toolchain other than the mise-pinned one.
+      GOTOOLCHAIN: local
+      # Moon must use the binaries installed and activated by mise.
+      MOON_TOOLCHAIN_FORCE_GLOBALS: 'true'
     steps:
-      - name: Checkout code
-        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8  # v6.0.1
-
-      - name: Setup Go
-        uses: actions/setup-go@7a3fe6cf4cb3a834922a1244abfce67bcef6a0c5  # v6.2.0
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
-          go-version-file: go.mod
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Setup mise
+        uses: jdx/mise-action@e6a8b3978addb5a52f2b4cd9d91eafa7f0ab959d # v4.2.0
+        with:
+          version: 2026.6.14
           cache: true
 
-      - name: Install golangci-lint
-        uses: golangci/golangci-lint-action@1e7e51e771db61008b38414a730f564565cf7c20  # v9.2.0
+      - name: Cache Go modules
+        uses: actions/cache@2c8a9bd7457de244a408f35966fab2fb45fda9c8 # v6.0.0
         with:
-          version: latest
+          path: ~/go/pkg/mod
+          key: ${{ runner.os }}-go-mod-${{ hashFiles('**/go.sum') }}
+          restore-keys: |
+            ${{ runner.os }}-go-mod-
 
-      - name: Install FlatBuffers compiler
-        run: |
-          FLATC_VERSION="25.12.19"
-          curl -fsSL "https://github.com/google/flatbuffers/releases/download/v${FLATC_VERSION}/Linux.flatc.binary.clang++-18.zip" -o flatc.zip
-          unzip flatc.zip
-          rm flatc.zip
-          sudo mv flatc /usr/local/bin/
-          flatc --version
-
-      - name: Generate code
-        run: |
-          mkdir -p core/internal/fb
-          flatc --go --go-namespace fb -o core/internal core/schema/index.fbs
-
-      - name: Check generated files are up to date
-        run: |
-          if [ -n "$(git status --porcelain)" ]; then
-            echo "::error::Generated files are out of date. Run 'just generate' locally and commit the changes."
-            echo "Changed files:"
-            git status --porcelain
-            echo "Diff:"
-            git diff
-            git diff --cached
-            exit 1
-          fi
-
-      - name: Check formatting
-        run: |
-          if [ -n "$(gofmt -l .)" ]; then
-            echo "::error::Code is not formatted. Run 'gofmt -w .' to fix."
-            gofmt -l .
-            exit 1
-          fi
-
-      - name: Run go vet
-        run: |
-          go vet ./...
-          for mod in policy/opa policy/sigstore; do
-            echo "Running go vet in $mod..."
-            (cd "$mod" && go vet ./...)
-          done
-
-      - name: Run golangci-lint
-        uses: golangci/golangci-lint-action@1e7e51e771db61008b38414a730f564565cf7c20  # v9.2.0
+      - name: Cache Go build artifacts
+        uses: actions/cache@2c8a9bd7457de244a408f35966fab2fb45fda9c8 # v6.0.0
         with:
-          version: latest
-          skip-cache: true
+          path: ~/.cache/go-build
+          key: ${{ runner.os }}-go-build-${{ hashFiles('mise.lock', '**/go.sum') }}-${{ github.run_id }}
+          restore-keys: |
+            ${{ runner.os }}-go-build-${{ hashFiles('mise.lock', '**/go.sum') }}-
+            ${{ runner.os }}-go-build-
 
-      - name: Run golangci-lint on policy modules
-        run: |
-          for mod in policy/opa policy/sigstore; do
-            echo "Running golangci-lint in $mod..."
-            (cd "$mod" && golangci-lint run)
-          done
+      - name: Cache golangci-lint
+        uses: actions/cache@2c8a9bd7457de244a408f35966fab2fb45fda9c8 # v6.0.0
+        with:
+          path: ~/.cache/golangci-lint
+          key: ${{ runner.os }}-golangci-lint-${{ hashFiles('mise.lock', '.golangci.yml', '**/go.sum') }}-${{ github.run_id }}
+          restore-keys: |
+            ${{ runner.os }}-golangci-lint-${{ hashFiles('mise.lock', '.golangci.yml', '**/go.sum') }}-
+            ${{ runner.os }}-golangci-lint-
 
-      - name: Run tests
-        run: |
-          go test -race -cover -coverprofile=coverage.out ./...
-          for mod in policy/opa policy/sigstore; do
-            echo "Running tests in $mod..."
-            (cd "$mod" && go test -race -cover ./...)
-          done
+      - name: Run Moon CI
+        run: moon ci --summary minimal
 
       - name: Upload coverage
-        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f  # v6.0.0
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
         with:
           name: coverage
           path: coverage.out
           retention-days: 7
-
-  integration:
-    name: Integration Tests
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8  # v6.0.1
-
-      - name: Setup Go
-        uses: actions/setup-go@7a3fe6cf4cb3a834922a1244abfce67bcef6a0c5  # v6.2.0
-        with:
-          go-version-file: go.mod
-          cache: true
-
-      - name: Run integration tests
-        run: go test -tags=integration -race -timeout 5m -v ./integration/...

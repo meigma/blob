@@ -24,7 +24,12 @@ type mockPolicyClient struct {
 }
 
 //nolint:gocritic // implements registry.PolicyClient interface
-func (m *mockPolicyClient) Referrers(_ context.Context, _ string, _ ocispec.Descriptor, _ string) ([]ocispec.Descriptor, error) {
+func (m *mockPolicyClient) Referrers(
+	_ context.Context,
+	_ string,
+	_ ocispec.Descriptor,
+	_ string,
+) ([]ocispec.Descriptor, error) {
 	if m.referrerErr != nil {
 		return nil, m.referrerErr
 	}
@@ -130,7 +135,12 @@ func TestRequireBuilder(t *testing.T) {
 			attDigest := digest.FromString("attestation")
 			manifestDigest := digest.FromString("manifest")
 
-			statement := createSLSAv1Statement(tt.gotBuilderID, "https://github.com/myorg/myrepo", "refs/heads/main", ".github/workflows/build.yml")
+			statement := createSLSAv1Statement(
+				tt.gotBuilderID,
+				"https://github.com/myorg/myrepo",
+				"refs/heads/main",
+				".github/workflows/build.yml",
+			)
 			envelope := createDSSEEnvelope(statement)
 
 			mockClient := &mockPolicyClient{
@@ -253,7 +263,12 @@ func TestRequireSource(t *testing.T) {
 			attDigest := digest.FromString("attestation")
 			manifestDigest := digest.FromString("manifest")
 
-			statement := createSLSAv1Statement("https://github.com/slsa-framework/slsa-github-generator", tt.gotRepo, tt.gotRef, ".github/workflows/build.yml")
+			statement := createSLSAv1Statement(
+				"https://github.com/slsa-framework/slsa-github-generator",
+				tt.gotRepo,
+				tt.gotRef,
+				".github/workflows/build.yml",
+			)
 			envelope := createDSSEEnvelope(statement)
 
 			mockClient := &mockPolicyClient{
@@ -376,7 +391,12 @@ func TestGitHubActionsWorkflow(t *testing.T) {
 			attDigest := digest.FromString("attestation")
 			manifestDigest := digest.FromString("manifest")
 
-			statement := createSLSAv1Statement("https://github.com/slsa-framework/slsa-github-generator", tt.gotRepo, tt.gotRef, tt.workflowPath)
+			statement := createSLSAv1Statement(
+				"https://github.com/slsa-framework/slsa-github-generator",
+				tt.gotRepo,
+				tt.gotRef,
+				tt.workflowPath,
+			)
 			envelope := createDSSEEnvelope(statement)
 
 			mockClient := &mockPolicyClient{

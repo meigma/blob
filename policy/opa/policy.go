@@ -101,7 +101,11 @@ func (p *Policy) Evaluate(ctx context.Context, req registry.PolicyRequest) error
 // the actual attestation content.
 //
 //nolint:gocritic // req passed by value per registry.Policy interface contract
-func (p *Policy) fetchAttestations(ctx context.Context, req registry.PolicyRequest, referrers []ocispec.Descriptor) []AttestationInput {
+func (p *Policy) fetchAttestations(
+	ctx context.Context,
+	req registry.PolicyRequest,
+	referrers []ocispec.Descriptor,
+) []AttestationInput {
 	attestations := make([]AttestationInput, 0, len(referrers))
 
 	for _, ref := range referrers {
@@ -123,7 +127,11 @@ func (p *Policy) fetchAttestations(ctx context.Context, req registry.PolicyReque
 // If the referrer is an OCI image manifest, it fetches the layers containing the attestation.
 //
 //nolint:gocritic // req passed by value per registry.Policy interface contract
-func (p *Policy) fetchAttestationFromReferrer(ctx context.Context, req registry.PolicyRequest, ref ocispec.Descriptor) []AttestationInput {
+func (p *Policy) fetchAttestationFromReferrer(
+	ctx context.Context,
+	req registry.PolicyRequest,
+	ref ocispec.Descriptor,
+) []AttestationInput {
 	data, err := req.Client.FetchDescriptor(ctx, req.Ref, ref)
 	if err != nil {
 		p.logger.Warn("failed to fetch attestation descriptor",
@@ -153,7 +161,11 @@ func (p *Policy) fetchAttestationFromReferrer(ctx context.Context, req registry.
 // fetchAttestationsFromLayers fetches and parses attestations from OCI manifest layers.
 //
 //nolint:gocritic // req passed by value per registry.Policy interface contract
-func (p *Policy) fetchAttestationsFromLayers(ctx context.Context, req registry.PolicyRequest, layers []ocispec.Descriptor) []AttestationInput {
+func (p *Policy) fetchAttestationsFromLayers(
+	ctx context.Context,
+	req registry.PolicyRequest,
+	layers []ocispec.Descriptor,
+) []AttestationInput {
 	attestations := make([]AttestationInput, 0, len(layers))
 
 	for _, layer := range layers {

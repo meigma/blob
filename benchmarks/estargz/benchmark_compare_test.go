@@ -23,6 +23,7 @@ import (
 	"github.com/containerd/stargz-snapshotter/estargz"
 	"github.com/containerd/stargz-snapshotter/estargz/zstdchunked"
 	"github.com/klauspost/compress/zstd"
+
 	blob "github.com/meigma/blob/core"
 	blobhttp "github.com/meigma/blob/core/http"
 )
@@ -115,7 +116,12 @@ func BenchmarkCompareBuild(b *testing.B) {
 		fileSize  int
 		pattern   benchPattern
 	}{
-		{name: "files=128/size=16k/compressible", fileCount: 128, fileSize: 16 << 10, pattern: benchPatternCompressible},
+		{
+			name:      "files=128/size=16k/compressible",
+			fileCount: 128,
+			fileSize:  16 << 10,
+			pattern:   benchPatternCompressible,
+		},
 		{name: "files=128/size=16k/random", fileCount: 128, fileSize: 16 << 10, pattern: benchPatternRandom},
 	}
 

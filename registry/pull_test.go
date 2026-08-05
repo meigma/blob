@@ -29,7 +29,11 @@ type pullMockOCIClient struct {
 	AuthHeadersFunc func(ctx context.Context, repoRef string) (http.Header, error)
 }
 
-func (m *pullMockOCIClient) FetchBlob(ctx context.Context, repoRef string, desc *ocispec.Descriptor) (io.ReadCloser, error) {
+func (m *pullMockOCIClient) FetchBlob(
+	ctx context.Context,
+	repoRef string,
+	desc *ocispec.Descriptor,
+) (io.ReadCloser, error) {
 	if m.FetchBlobFunc != nil {
 		return m.FetchBlobFunc(ctx, repoRef, desc)
 	}

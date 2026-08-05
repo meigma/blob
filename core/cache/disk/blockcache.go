@@ -302,7 +302,11 @@ func (s *cachedSource) readBlockFromSource(off, length int64) ([]byte, error) {
 	return buf, nil
 }
 
-func (c *BlockCache) getBlock(sourceID string, blockSize, blockIndex, blockLen int64, fetch func() ([]byte, error)) ([]byte, error) {
+func (c *BlockCache) getBlock(
+	sourceID string,
+	blockSize, blockIndex, blockLen int64,
+	fetch func() ([]byte, error),
+) ([]byte, error) {
 	key := c.blockKeyHex(sourceID, blockSize, blockIndex)
 	result, err, _ := c.fetchGroup.Do(key, func() (any, error) {
 		path := c.pathForKey(key)

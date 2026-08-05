@@ -11,13 +11,23 @@ import (
 // referrersProvider is an optional interface that OCIClient implementations
 // can provide to support the OCI Referrers API.
 type referrersProvider interface {
-	Referrers(ctx context.Context, repoRef string, subject ocispec.Descriptor, artifactType string) ([]ocispec.Descriptor, error)
+	Referrers(
+		ctx context.Context,
+		repoRef string,
+		subject ocispec.Descriptor,
+		artifactType string,
+	) ([]ocispec.Descriptor, error)
 }
 
 // Referrers lists referrer descriptors for the given subject manifest.
 //
 //nolint:gocritic // hugeParam: public API matches oras-go patterns
-func (c *Client) Referrers(ctx context.Context, ref string, subject ocispec.Descriptor, artifactType string) ([]ocispec.Descriptor, error) {
+func (c *Client) Referrers(
+	ctx context.Context,
+	ref string,
+	subject ocispec.Descriptor,
+	artifactType string,
+) ([]ocispec.Descriptor, error) {
 	provider, ok := c.oci.(referrersProvider)
 	if !ok {
 		return nil, ErrReferrersUnsupported

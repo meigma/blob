@@ -7,3 +7,17 @@ CLAUDE.md
 blob.test
 cpu.prof
 mem.prof
+
+# Moon and mise
+.moon/cache/
+.moon/docker/
+mise.local.toml
+.mise.local.toml
+
+# Build and test outputs
+bin/
+coverage.out
+coverage.html
+node_modules/
+docs/build/
+examples/provenance/provenance

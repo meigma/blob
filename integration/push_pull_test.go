@@ -12,10 +12,11 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/meigma/blob"
-	blobcore "github.com/meigma/blob/core"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/meigma/blob"
+	blobcore "github.com/meigma/blob/core"
 )
 
 // --- Push Operations ---

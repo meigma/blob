@@ -72,7 +72,12 @@ type writer struct {
 }
 
 // reportProgress sends a progress event if a callback is configured.
-func (w *writer) reportProgress(stage ProgressStage, path string, bytesDone, bytesTotal uint64, filesDone, filesTotal int) {
+func (w *writer) reportProgress(
+	stage ProgressStage,
+	path string,
+	bytesDone, bytesTotal uint64,
+	filesDone, filesTotal int,
+) {
 	if w.cfg.progress == nil {
 		return
 	}
@@ -96,7 +101,11 @@ func (w *writer) log() *slog.Logger {
 
 // writeData walks the directory tree and writes file contents to data.
 // Returns the collected entries and total bytes written.
-func (w *writer) writeData(ctx context.Context, root *os.Root, data io.Writer) (entries []Entry, totalBytes uint64, err error) {
+func (w *writer) writeData(
+	ctx context.Context,
+	root *os.Root,
+	data io.Writer,
+) (entries []Entry, totalBytes uint64, err error) {
 	entries = make([]Entry, 0, 1024)
 	strict := w.cfg.changeDetection == ChangeDetectionStrict
 	maxFiles := w.cfg.maxFiles
@@ -118,7 +127,19 @@ func (w *writer) writeData(ctx context.Context, root *os.Root, data io.Writer) (
 	w.reportProgress(StageEnumerating, "", 0, 0, 0, 0)
 
 	err = fs.WalkDir(root.FS(), ".", func(path string, d fs.DirEntry, walkErr error) error {
-		entry, skip, procErr := w.processEntry(ctx, root, data, enc, buf, path, d, walkErr, strict, maxFiles, len(entries))
+		entry, skip, procErr := w.processEntry(
+			ctx,
+			root,
+			data,
+			enc,
+			buf,
+			path,
+			d,
+			walkErr,
+			strict,
+			maxFiles,
+			len(entries),
+		)
 		if procErr != nil || skip {
 			return procErr
 		}
@@ -141,7 +162,18 @@ func (w *writer) writeData(ctx context.Context, root *os.Root, data io.Writer) (
 // processEntry handles a single directory entry during archive creation.
 //
 //nolint:gocritic // unnamedResult is acceptable for this internal helper
-func (w *writer) processEntry(ctx context.Context, root *os.Root, data io.Writer, enc *zstd.Encoder, buf []byte, path string, d fs.DirEntry, walkErr error, strict bool, maxFiles, count int) (Entry, bool, error) {
+func (w *writer) processEntry(
+	ctx context.Context,
+	root *os.Root,
+	data io.Writer,
+	enc *zstd.Encoder,
+	buf []byte,
+	path string,
+	d fs.DirEntry,
+	walkErr error,
+	strict bool,
+	maxFiles, count int,
+) (Entry, bool, error) {
 	if walkErr != nil {
 		return Entry{}, false, walkErr
 	}
@@ -178,7 +210,16 @@ func (w *writer) processEntry(ctx context.Context, root *os.Root, data io.Writer
 }
 
 // writeEntry writes a single file's content to data and returns its metadata.
-func (w *writer) writeEntry(ctx context.Context, root *os.Root, data io.Writer, enc *zstd.Encoder, buf []byte, path, fsPath string, info fs.FileInfo, strict bool) (Entry, error) {
+func (w *writer) writeEntry(
+	ctx context.Context,
+	root *os.Root,
+	data io.Writer,
+	enc *zstd.Encoder,
+	buf []byte,
+	path, fsPath string,
+	info fs.FileInfo,
+	strict bool,
+) (Entry, error) {
 	f, err := platform.OpenFileNoFollow(root, fsPath)
 	if err != nil {
 		return Entry{}, err

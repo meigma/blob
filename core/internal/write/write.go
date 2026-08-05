@@ -19,7 +19,15 @@ import (
 //
 // The encoder and buf are reused across calls for performance. Pass nil encoder
 // for uncompressed writes. The buf should be at least 32KB for efficient copying.
-func File(ctx context.Context, f *os.File, w io.Writer, enc *zstd.Encoder, buf []byte, compression blobtype.Compression, expectedSize int64) (dataSize, originalSize uint64, hash []byte, err error) {
+func File(
+	ctx context.Context,
+	f *os.File,
+	w io.Writer,
+	enc *zstd.Encoder,
+	buf []byte,
+	compression blobtype.Compression,
+	expectedSize int64,
+) (dataSize, originalSize uint64, hash []byte, err error) {
 	if expectedSize < 0 {
 		return 0, 0, nil, errors.New("negative file size")
 	}
@@ -46,7 +54,11 @@ func File(ctx context.Context, f *os.File, w io.Writer, enc *zstd.Encoder, buf [
 	}
 
 	if cr.N != uint64(expectedSize) {
-		return 0, 0, nil, fmt.Errorf("file size changed during archive creation: expected %d, got %d", expectedSize, cr.N)
+		return 0, 0, nil, fmt.Errorf(
+			"file size changed during archive creation: expected %d, got %d",
+			expectedSize,
+			cr.N,
+		)
 	}
 
 	return cw.N, cr.N, hasher.Sum(nil), nil

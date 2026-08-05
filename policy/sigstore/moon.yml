@@ -1,0 +1,32 @@
+language: 'go'
+layer: 'library'
+stack: 'backend'
+
+project:
+  title: 'Sigstore policy adapter'
+
+toolchains:
+  default: 'system'
+
+tasks:
+  format:
+    command: 'golangci-lint fmt --config ../../.golangci.yml --diff'
+    options: { cache: false }
+  lint:
+    command: 'golangci-lint run --config ../../.golangci.yml ./... --show-stats=false'
+    options: { cache: false }
+  vet:
+    command: 'go vet ./...'
+    options: { cache: false }
+  test:
+    command: 'go test -race -cover ./...'
+    options: { cache: false }
+  build:
+    command: 'go build ./...'
+    options: { cache: false }
+  tidy:
+    command: 'go mod tidy'
+    options: { cache: false, runInCI: false }
+  check:
+    deps: ['policy-sigstore:format', 'policy-sigstore:lint', 'policy-sigstore:vet', 'policy-sigstore:test', 'policy-sigstore:build']
+    options: { cache: false, runInCI: true }

@@ -7,11 +7,12 @@ import (
 	"os"
 	"testing"
 
-	blob "github.com/meigma/blob/core"
 	"github.com/opencontainers/go-digest"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	blob "github.com/meigma/blob/core"
 )
 
 // createTestBlob creates a minimal valid blob for testing containing a

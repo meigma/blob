@@ -23,7 +23,12 @@ type mockPolicyClient struct {
 }
 
 //nolint:gocritic // implements registry.PolicyClient interface
-func (m *mockPolicyClient) Referrers(_ context.Context, _ string, _ ocispec.Descriptor, _ string) ([]ocispec.Descriptor, error) {
+func (m *mockPolicyClient) Referrers(
+	_ context.Context,
+	_ string,
+	_ ocispec.Descriptor,
+	_ string,
+) ([]ocispec.Descriptor, error) {
 	if m.referrerErr != nil {
 		return nil, m.referrerErr
 	}

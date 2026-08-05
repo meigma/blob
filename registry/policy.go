@@ -34,11 +34,21 @@ type PolicyRequest struct {
 
 // PolicyClient exposes minimal client capabilities for policies.
 type PolicyClient interface {
-	Referrers(ctx context.Context, ref string, subject ocispec.Descriptor, artifactType string) ([]ocispec.Descriptor, error)
+	Referrers(
+		ctx context.Context,
+		ref string,
+		subject ocispec.Descriptor,
+		artifactType string,
+	) ([]ocispec.Descriptor, error)
 	FetchDescriptor(ctx context.Context, ref string, desc ocispec.Descriptor) ([]byte, error)
 }
 
-func (c *Client) evaluatePolicies(ctx context.Context, ref, digestStr string, manifest *BlobManifest, raw []byte) error {
+func (c *Client) evaluatePolicies(
+	ctx context.Context,
+	ref, digestStr string,
+	manifest *BlobManifest,
+	raw []byte,
+) error {
 	if len(c.policies) == 0 {
 		return nil
 	}

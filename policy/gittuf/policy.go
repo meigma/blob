@@ -201,7 +201,11 @@ func (p *Policy) extractSourceInfo(ctx context.Context, req registry.PolicyReque
 // tryExtractSourceInfo attempts to extract source info from a single attestation.
 //
 //nolint:gocritic // req passed by value per interface contract
-func (p *Policy) tryExtractSourceInfo(ctx context.Context, req registry.PolicyRequest, ref ocispec.Descriptor) *sourceInfo {
+func (p *Policy) tryExtractSourceInfo(
+	ctx context.Context,
+	req registry.PolicyRequest,
+	ref ocispec.Descriptor,
+) *sourceInfo {
 	data, err := req.Client.FetchDescriptor(ctx, req.Ref, ref)
 	if err != nil {
 		p.logger.Debug("failed to fetch attestation",
