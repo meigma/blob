@@ -35,7 +35,11 @@ func (m *mockOCIClient) Resolve(ctx context.Context, repoRef, ref string) (ocisp
 	return ocispec.Descriptor{}, errors.New("Resolve not implemented")
 }
 
-func (m *mockOCIClient) FetchManifest(ctx context.Context, repoRef string, expected *ocispec.Descriptor) (ocispec.Manifest, []byte, error) {
+func (m *mockOCIClient) FetchManifest(
+	ctx context.Context,
+	repoRef string,
+	expected *ocispec.Descriptor,
+) (ocispec.Manifest, []byte, error) {
 	if m.FetchManifestFunc != nil {
 		return m.FetchManifestFunc(ctx, repoRef, expected)
 	}
@@ -57,7 +61,11 @@ func (m *mockOCIClient) FetchBlob(context.Context, string, *ocispec.Descriptor) 
 	return nil, errNotImplemented
 }
 
-func (m *mockOCIClient) PushManifest(ctx context.Context, repoRef, tag string, manifest *ocispec.Manifest) (ocispec.Descriptor, error) {
+func (m *mockOCIClient) PushManifest(
+	ctx context.Context,
+	repoRef, tag string,
+	manifest *ocispec.Manifest,
+) (ocispec.Descriptor, error) {
 	if m.PushManifestFunc != nil {
 		return m.PushManifestFunc(ctx, repoRef, tag, manifest)
 	}

@@ -119,8 +119,14 @@ func benchCacheSources() []benchCacheSource {
 		cfg  benchHTTPConfig
 	}{
 		{name: "latency=0/bps=unlimited", cfg: benchHTTPConfig{}},
-		{name: "latency=5ms/bps=10MBps", cfg: benchHTTPConfig{latency: 5 * time.Millisecond, bytesPerSecond: 10 * 1024 * 1024}},
-		{name: "latency=20ms/bps=2MBps", cfg: benchHTTPConfig{latency: 20 * time.Millisecond, bytesPerSecond: 2 * 1024 * 1024}},
+		{
+			name: "latency=5ms/bps=10MBps",
+			cfg:  benchHTTPConfig{latency: 5 * time.Millisecond, bytesPerSecond: 10 * 1024 * 1024},
+		},
+		{
+			name: "latency=20ms/bps=2MBps",
+			cfg:  benchHTTPConfig{latency: 20 * time.Millisecond, bytesPerSecond: 2 * 1024 * 1024},
+		},
 	}
 
 	for _, bc := range httpCases {
@@ -146,8 +152,14 @@ func BenchmarkBlobReadFileHTTPDiskCacheHit(b *testing.B) {
 		cfg  benchHTTPConfig
 	}{
 		{name: "latency=0/bps=unlimited", cfg: benchHTTPConfig{}},
-		{name: "latency=5ms/bps=10MBps", cfg: benchHTTPConfig{latency: 5 * time.Millisecond, bytesPerSecond: 10 * 1024 * 1024}},
-		{name: "latency=20ms/bps=2MBps", cfg: benchHTTPConfig{latency: 20 * time.Millisecond, bytesPerSecond: 2 * 1024 * 1024}},
+		{
+			name: "latency=5ms/bps=10MBps",
+			cfg:  benchHTTPConfig{latency: 5 * time.Millisecond, bytesPerSecond: 10 * 1024 * 1024},
+		},
+		{
+			name: "latency=20ms/bps=2MBps",
+			cfg:  benchHTTPConfig{latency: 20 * time.Millisecond, bytesPerSecond: 2 * 1024 * 1024},
+		},
 	}
 
 	const fileCount = 64
@@ -409,7 +421,13 @@ func BenchmarkBlobCopyDirBlockCache(b *testing.B) {
 	}
 }
 
-func wrapWithBlockCache(b *testing.B, dir string, src ByteSource, blockSize int64, maxBlocksPerRead int) (ByteSource, error) {
+func wrapWithBlockCache(
+	b *testing.B,
+	dir string,
+	src ByteSource,
+	blockSize int64,
+	maxBlocksPerRead int,
+) (ByteSource, error) {
 	b.Helper()
 
 	blockCache, err := disk.NewBlockCache(dir)

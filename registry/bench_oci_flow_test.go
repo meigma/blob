@@ -13,10 +13,11 @@ import (
 	"sync"
 	"testing"
 
-	blob "github.com/meigma/blob/core"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/wait"
+
+	blob "github.com/meigma/blob/core"
 )
 
 // benchOCISink prevents compiler optimizations from eliminating benchmark results.
@@ -382,7 +383,12 @@ func isOKStatus(status int) bool {
 }
 
 // createBenchOCIData creates benchmark test data with the specified parameters.
-func createBenchOCIData(tb testing.TB, fileCount, fileSize int, compression blob.Compression, pattern benchPattern) benchOCIData {
+func createBenchOCIData(
+	tb testing.TB,
+	fileCount, fileSize int,
+	compression blob.Compression,
+	pattern benchPattern,
+) benchOCIData {
 	tb.Helper()
 
 	dir := tb.TempDir()

@@ -25,6 +25,7 @@ import (
 	"time"
 
 	"github.com/containerd/stargz-snapshotter/estargz"
+
 	blobcache "github.com/meigma/blob/core/cache"
 	blobhttp "github.com/meigma/blob/core/http"
 	"github.com/meigma/blob/core/internal/batch"
@@ -810,7 +811,12 @@ func BenchmarkSequentialVsRandom(b *testing.B) {
 			}
 
 			entries := blob.collectPathEntries(bc.paths)
-			processor := batch.NewProcessor(blob.reader.Source(), blob.reader.Pool(), blob.maxFileSize, batch.WithReadConcurrency(1))
+			processor := batch.NewProcessor(
+				blob.reader.Source(),
+				blob.reader.Pool(),
+				blob.maxFileSize,
+				batch.WithReadConcurrency(1),
+			)
 
 			source.Reset()
 			b.ReportAllocs()
@@ -859,7 +865,12 @@ func BenchmarkDirectoryTransfer(b *testing.B) {
 			name: "single-range",
 			fn: func(blob *Blob, _ benchByteSource) error {
 				entries := blob.collectPrefixEntries(prefix)
-				processor := batch.NewProcessor(blob.reader.Source(), blob.reader.Pool(), blob.maxFileSize, batch.WithReadConcurrency(1))
+				processor := batch.NewProcessor(
+					blob.reader.Source(),
+					blob.reader.Pool(),
+					blob.maxFileSize,
+					batch.WithReadConcurrency(1),
+				)
 				_, err := processor.Process(entries, discardSink{})
 				return err
 			},
@@ -1127,7 +1138,12 @@ func BenchmarkCopyDirContiguous(b *testing.B) {
 	}
 
 	entries := blob.collectPrefixEntries(prefix)
-	processor := batch.NewProcessor(blob.reader.Source(), blob.reader.Pool(), blob.maxFileSize, batch.WithReadConcurrency(1))
+	processor := batch.NewProcessor(
+		blob.reader.Source(),
+		blob.reader.Pool(),
+		blob.maxFileSize,
+		batch.WithReadConcurrency(1),
+	)
 	bytesPerOp := int64(len(entries) * fileSize)
 
 	source.Reset()
@@ -1182,7 +1198,12 @@ func BenchmarkCopyDirVsIndividual(b *testing.B) {
 			name: "copydir",
 			fn: func(blob *Blob) error {
 				entries := blob.collectPrefixEntries(prefix)
-				processor := batch.NewProcessor(blob.reader.Source(), blob.reader.Pool(), blob.maxFileSize, batch.WithReadConcurrency(1))
+				processor := batch.NewProcessor(
+					blob.reader.Source(),
+					blob.reader.Pool(),
+					blob.maxFileSize,
+					batch.WithReadConcurrency(1),
+				)
 				_, err := processor.Process(entries, discardSink{})
 				return err
 			},
@@ -1543,7 +1564,12 @@ func BenchmarkLatencyImpact(b *testing.B) {
 		fileSize  = 64 << 10
 	)
 
-	latencies := []time.Duration{1 * time.Millisecond, 5 * time.Millisecond, 20 * time.Millisecond, 100 * time.Millisecond}
+	latencies := []time.Duration{
+		1 * time.Millisecond,
+		5 * time.Millisecond,
+		20 * time.Millisecond,
+		100 * time.Millisecond,
+	}
 	dir := b.TempDir()
 	paths := makeBenchFiles(b, dir, fileCount, fileSize, benchPatternCompressible)
 	indexData, dataData := createBenchArchive(b, dir, CompressionZstd)
@@ -2290,7 +2316,13 @@ func BenchmarkCreateWithCompression(b *testing.B) {
 		start = time.Now()
 		{
 			var indexBuf, dataBuf bytes.Buffer
-			if err := Create(context.Background(), dir, &indexBuf, &dataBuf, CreateWithCompression(CompressionZstd)); err != nil {
+			if err := Create(
+				context.Background(),
+				dir,
+				&indexBuf,
+				&dataBuf,
+				CreateWithCompression(CompressionZstd),
+			); err != nil {
 				b.Fatal(err)
 			}
 			benchSinkBytes = dataBuf.Bytes()

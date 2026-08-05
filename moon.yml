@@ -1,0 +1,119 @@
+language: 'go'
+layer: 'library'
+stack: 'backend'
+
+project:
+  title: 'blob'
+  description: 'Content-addressed archive library and tooling.'
+  owner: 'meigma'
+  maintainers:
+    - 'meigma'
+
+toolchains:
+  default: 'system'
+
+fileGroups:
+  goSources:
+    - '**/*.go'
+    - 'go.mod'
+    - 'go.sum'
+    - 'core/schema/**/*.fbs'
+  lintConfig:
+    - '.golangci.yml'
+    - 'mise.toml'
+    - 'mise.lock'
+
+workspace:
+  inheritedTasks:
+    include: []
+
+tasks:
+  generate:
+    command: 'flatc --go --go-namespace fb -o core/internal core/schema/index.fbs'
+    inputs:
+      - 'core/schema/**/*.fbs'
+      - 'mise.toml'
+      - 'mise.lock'
+    outputs:
+      - 'core/internal/fb/**/*.go'
+
+  generate-check:
+    command: 'git diff --exit-code -- core/internal/fb'
+    deps:
+      - 'root:generate'
+    options:
+      cache: false
+
+  format:
+    command: 'golangci-lint fmt --config .golangci.yml --diff'
+    inputs:
+      - '@group(goSources)'
+      - '@group(lintConfig)'
+    options:
+      cache: false
+
+  lint:
+    command: 'golangci-lint run --config .golangci.yml . ./benchmarks/... ./core/... ./policy ./registry/... --show-stats=false'
+    inputs:
+      - '@group(goSources)'
+      - '@group(lintConfig)'
+    options:
+      cache: false
+
+  vet:
+    command: 'go vet . ./benchmarks/... ./core/... ./policy ./registry/...'
+    inputs:
+      - '@group(goSources)'
+    options:
+      cache: false
+
+  test:
+    command: 'go test -race -cover -coverprofile coverage.out . ./benchmarks/... ./core/... ./policy ./registry/...'
+    inputs:
+      - '@group(goSources)'
+    outputs:
+      - 'coverage.out'
+    options:
+      cache: false
+
+  build:
+    command: 'go build . ./benchmarks/... ./core/... ./policy ./registry/...'
+    inputs:
+      - '@group(goSources)'
+    options:
+      cache: false
+
+  integration:
+    command: 'go test -tags integration -race -timeout 5m -v ./integration/...'
+    inputs:
+      - '@group(goSources)'
+    options:
+      cache: false
+
+  tidy:
+    command: 'go mod tidy'
+    inputs:
+      - 'go.mod'
+      - 'go.sum'
+    options:
+      cache: false
+      runInCI: false
+
+  check:
+    deps:
+      - 'root:generate-check'
+      - 'root:format'
+      - 'root:lint'
+      - 'root:vet'
+      - 'root:test'
+      - 'root:build'
+      - 'root:integration'
+      - 'docs:check'
+      - 'provenance:check'
+      - 'policy-gittuf:check'
+      - 'policy-opa:check'
+      - 'policy-sigstore:check'
+      - 'policy-slsa:check'
+    options:
+      cache: false
+      runInCI: true

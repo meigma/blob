@@ -178,8 +178,22 @@ func TestProcessor_ShouldProcess(t *testing.T) {
 
 	// Create test entries (uncompressed for simplicity)
 	entries := []*Entry{
-		{Path: "a.txt", DataOffset: 0, DataSize: 5, OriginalSize: 5, Hash: sha256Hash("hello"), Compression: CompressionNone},
-		{Path: "skip.txt", DataOffset: 5, DataSize: 5, OriginalSize: 5, Hash: sha256Hash("world"), Compression: CompressionNone},
+		{
+			Path:         "a.txt",
+			DataOffset:   0,
+			DataSize:     5,
+			OriginalSize: 5,
+			Hash:         sha256Hash("hello"),
+			Compression:  CompressionNone,
+		},
+		{
+			Path:         "skip.txt",
+			DataOffset:   5,
+			DataSize:     5,
+			OriginalSize: 5,
+			Hash:         sha256Hash("world"),
+			Compression:  CompressionNone,
+		},
 	}
 
 	// Set up source data

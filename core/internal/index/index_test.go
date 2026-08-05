@@ -116,9 +116,14 @@ func TestIndexEntriesWithPrefix(t *testing.T) {
 		expected []string
 	}{
 		{
-			name:     "assets directory",
-			prefix:   "assets/",
-			expected: []string{"assets/css/main.css", "assets/css/reset.css", "assets/images/banner.png", "assets/images/logo.png"},
+			name:   "assets directory",
+			prefix: "assets/",
+			expected: []string{
+				"assets/css/main.css",
+				"assets/css/reset.css",
+				"assets/images/banner.png",
+				"assets/images/logo.png",
+			},
 		},
 		{
 			name:     "assets/css subdirectory",
@@ -141,9 +146,16 @@ func TestIndexEntriesWithPrefix(t *testing.T) {
 			expected: []string{},
 		},
 		{
-			name:     "empty prefix matches all",
-			prefix:   "",
-			expected: []string{"assets/css/main.css", "assets/css/reset.css", "assets/images/banner.png", "assets/images/logo.png", "src/main.go", "src/util/helper.go"},
+			name:   "empty prefix matches all",
+			prefix: "",
+			expected: []string{
+				"assets/css/main.css",
+				"assets/css/reset.css",
+				"assets/images/banner.png",
+				"assets/images/logo.png",
+				"src/main.go",
+				"src/util/helper.go",
+			},
 		},
 	}
 

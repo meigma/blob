@@ -238,7 +238,13 @@ func TestInspectResult_ManifestMethods(t *testing.T) {
 }
 
 // createTestInspectResult creates an InspectResult with a properly constructed manifest for testing.
-func createTestInspectResult(t *testing.T, digest string, created time.Time, index *blobcore.IndexView, indexSize, dataSize int64) *InspectResult {
+func createTestInspectResult(
+	t *testing.T,
+	digest string,
+	created time.Time,
+	index *blobcore.IndexView,
+	indexSize, dataSize int64,
+) *InspectResult {
 	t.Helper()
 
 	manifest := registry.NewTestManifest(digest, created, indexSize, dataSize)

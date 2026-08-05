@@ -127,7 +127,13 @@ func TestBlobWithCacheSingleflight(t *testing.T) {
 	// With singleflight, we should have exactly 1 read despite 10 concurrent callers
 	// (Allow up to 2 in case of race between cache check and singleflight)
 	readCount := countingSource.ReadCount()
-	assert.LessOrEqual(t, readCount, int64(2), "singleflight should deduplicate concurrent reads (got %d reads)", readCount)
+	assert.LessOrEqual(
+		t,
+		readCount,
+		int64(2),
+		"singleflight should deduplicate concurrent reads (got %d reads)",
+		readCount,
+	)
 	t.Logf("concurrent reads deduplicated: %d goroutines, %d actual reads", numGoroutines, readCount)
 }
 

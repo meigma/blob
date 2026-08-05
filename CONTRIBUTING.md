@@ -22,11 +22,11 @@ We are committed to providing a welcoming and inclusive environment. Please be r
 
 ### Prerequisites
 
-- **Go 1.25+** - [Installation guide](https://go.dev/doc/install)
+- **mise** - Tool and environment manager ([installation](https://mise.jdx.dev/getting-started.html))
 - **Docker** - Required for integration tests
-- **just** - Command runner ([installation](https://github.com/casey/just#installation))
-- **golangci-lint** - Go linter ([installation](https://golangci-lint.run/welcome/install/))
-- **flatc** - FlatBuffers compiler ([releases](https://github.com/google/flatbuffers/releases))
+
+mise installs the repository's pinned Go, Node.js, FlatBuffers, golangci-lint,
+and Moonrepo versions from `mise.toml` and verifies them against `mise.lock`.
 
 ### Setup
 
@@ -43,9 +43,11 @@ We are committed to providing a welcoming and inclusive environment. Please be r
    git remote add upstream https://github.com/meigma/blob.git
    ```
 
-4. Verify your setup:
+4. Install the pinned toolchain and verify your setup:
    ```bash
-   just ci
+   mise trust
+   mise install
+   mise exec -- moon run root:check --summary minimal
    ```
 
 ## Development Workflow
@@ -64,19 +66,19 @@ Use descriptive branch names with prefixes like `feat/`, `fix/`, `docs/`, or `re
 
 ### Available Commands
 
-Use `just` to run common development tasks:
+Use Moonrepo through the mise-managed toolchain for common development tasks:
 
 | Command | Description |
 |---------|-------------|
-| `just` | Run default checks (fmt, vet, lint, test) |
-| `just ci` | Run full CI pipeline |
-| `just build` | Build all packages |
-| `just test` | Run unit tests with race detection |
-| `just lint` | Run golangci-lint |
-| `just fmt` | Check formatting |
-| `just fmt-write` | Format code (modifies files) |
-| `just generate` | Generate FlatBuffers code |
-| `just tools` | Install development tools |
+| `mise exec -- moon run root:check` | Run the complete repository gate |
+| `mise exec -- moon run :test` | Run tests in every Go module |
+| `mise exec -- moon run :lint` | Run golangci-lint in every Go module |
+| `mise exec -- moon run :format` | Check formatting in every Go module |
+| `mise exec -- moon run :build` | Build every Go module and the docs |
+| `mise exec -- moon run root:generate` | Generate FlatBuffers code |
+| `mise exec -- moon run :tidy` | Tidy every Go module |
+
+`just` remains available for the benchmark and registry helper recipes.
 
 ### Local Testing with a Registry
 
@@ -90,11 +92,11 @@ docker run -d -p 5000:5000 --name registry registry:2
 
 ### Formatting
 
-Code must be formatted with `gofmt`:
+Code must pass the repository's golangci-lint formatter configuration:
 
 ```bash
-just fmt        # Check formatting
-just fmt-write  # Fix formatting
+mise exec -- moon run :format
+mise exec -- golangci-lint fmt --config .golangci.yml
 ```
 
 Imports must be organized in groups:
@@ -107,7 +109,7 @@ Imports must be organized in groups:
 All code must pass `golangci-lint` with no errors:
 
 ```bash
-just lint
+mise exec -- moon run :lint
 ```
 
 The linter enforces:
@@ -184,7 +186,7 @@ deduplication across archives based on content hash."
 Run unit tests:
 
 ```bash
-just test
+mise exec -- moon run :test
 ```
 
 Tests run with race detection and coverage enabled by default.
@@ -229,7 +231,7 @@ func TestBlob_ReadFile(t *testing.T) {
 
 2. **Run all checks**:
    ```bash
-   just ci
+   mise exec -- moon run root:check --summary minimal
    ```
 
 ### Submitting a PR

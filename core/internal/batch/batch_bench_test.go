@@ -110,7 +110,10 @@ func BenchmarkProcessorPipelined(b *testing.B) {
 	}
 }
 
-func buildBenchBatchData(b *testing.B, bc benchBatchCase) (entries []*Entry, data []byte, pool *file.DecompressPool, totalBytes int64) {
+func buildBenchBatchData(
+	b *testing.B,
+	bc benchBatchCase,
+) (entries []*Entry, data []byte, pool *file.DecompressPool, totalBytes int64) {
 	b.Helper()
 
 	groupSize := bc.groupSize

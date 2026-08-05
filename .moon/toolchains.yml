@@ -1,0 +1,2 @@
+# Tool versions are managed by mise. Moon runs tasks against the system
+# binaries that mise places on PATH.

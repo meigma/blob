@@ -9,10 +9,11 @@ import (
 	"math"
 	"time"
 
-	blob "github.com/meigma/blob/core"
 	"github.com/opencontainers/go-digest"
 	"github.com/opencontainers/image-spec/specs-go"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
+
+	blob "github.com/meigma/blob/core"
 )
 
 // Push pushes a blob archive to an OCI registry.
@@ -139,7 +140,10 @@ func dataDescriptor(b *blob.Blob) (ocispec.Descriptor, error) {
 }
 
 // buildManifest creates an OCI manifest for a blob archive.
-func buildManifest(configDesc, indexDesc, dataDesc *ocispec.Descriptor, customAnnotations map[string]string) ocispec.Manifest {
+func buildManifest(
+	configDesc, indexDesc, dataDesc *ocispec.Descriptor,
+	customAnnotations map[string]string,
+) ocispec.Manifest {
 	annotations := make(map[string]string)
 	for k, v := range customAnnotations {
 		annotations[k] = v

@@ -42,7 +42,11 @@ func (m *signMockOCIClient) Resolve(ctx context.Context, repoRef, ref string) (o
 	return ocispec.Descriptor{}, errors.New("Resolve not implemented")
 }
 
-func (m *signMockOCIClient) FetchManifest(ctx context.Context, repoRef string, expected *ocispec.Descriptor) (ocispec.Manifest, []byte, error) {
+func (m *signMockOCIClient) FetchManifest(
+	ctx context.Context,
+	repoRef string,
+	expected *ocispec.Descriptor,
+) (ocispec.Manifest, []byte, error) {
 	if m.FetchManifestFunc != nil {
 		return m.FetchManifestFunc(ctx, repoRef, expected)
 	}
@@ -56,7 +60,11 @@ func (m *signMockOCIClient) PushBlob(ctx context.Context, repoRef string, desc *
 	return errors.New("PushBlob not implemented")
 }
 
-func (m *signMockOCIClient) PushManifestByDigest(ctx context.Context, repoRef string, manifest *ocispec.Manifest) (ocispec.Descriptor, error) {
+func (m *signMockOCIClient) PushManifestByDigest(
+	ctx context.Context,
+	repoRef string,
+	manifest *ocispec.Manifest,
+) (ocispec.Descriptor, error) {
 	if m.PushManifestByDigestFunc != nil {
 		return m.PushManifestByDigestFunc(ctx, repoRef, manifest)
 	}
@@ -68,7 +76,12 @@ func (m *signMockOCIClient) FetchBlob(context.Context, string, *ocispec.Descript
 	return nil, errors.New("not implemented")
 }
 
-func (m *signMockOCIClient) PushManifest(context.Context, string, string, *ocispec.Manifest) (ocispec.Descriptor, error) {
+func (m *signMockOCIClient) PushManifest(
+	context.Context,
+	string,
+	string,
+	*ocispec.Manifest,
+) (ocispec.Descriptor, error) {
 	return ocispec.Descriptor{}, errors.New("not implemented")
 }
 

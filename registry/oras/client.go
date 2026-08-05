@@ -139,7 +139,11 @@ func (c *Client) FetchBlob(ctx context.Context, repoRef string, desc *ocispec.De
 //
 // Handles OCI 1.0/1.1 compatibility transparently: uses OCI image manifest format
 // which works with both 1.0 and 1.1 registries.
-func (c *Client) PushManifest(ctx context.Context, repoRef, tag string, manifest *ocispec.Manifest) (ocispec.Descriptor, error) {
+func (c *Client) PushManifest(
+	ctx context.Context,
+	repoRef, tag string,
+	manifest *ocispec.Manifest,
+) (ocispec.Descriptor, error) {
 	if manifest == nil {
 		return ocispec.Descriptor{}, fmt.Errorf("%w: manifest is nil", ErrManifestInvalid)
 	}
@@ -173,7 +177,11 @@ func (c *Client) PushManifest(ctx context.Context, repoRef, tag string, manifest
 //
 // The manifest is referenced only by its digest, which is useful for
 // OCI 1.1 referrer artifacts that don't need a tag.
-func (c *Client) PushManifestByDigest(ctx context.Context, repoRef string, manifest *ocispec.Manifest) (ocispec.Descriptor, error) {
+func (c *Client) PushManifestByDigest(
+	ctx context.Context,
+	repoRef string,
+	manifest *ocispec.Manifest,
+) (ocispec.Descriptor, error) {
 	if manifest == nil {
 		return ocispec.Descriptor{}, fmt.Errorf("%w: manifest is nil", ErrManifestInvalid)
 	}
@@ -207,7 +215,11 @@ func (c *Client) PushManifestByDigest(ctx context.Context, repoRef string, manif
 //
 // Call Resolve first and pass the resolved descriptor to avoid extra lookups.
 // Handles both OCI 1.0 and 1.1 manifest formats.
-func (c *Client) FetchManifest(ctx context.Context, repoRef string, expected *ocispec.Descriptor) (ocispec.Manifest, []byte, error) {
+func (c *Client) FetchManifest(
+	ctx context.Context,
+	repoRef string,
+	expected *ocispec.Descriptor,
+) (ocispec.Manifest, []byte, error) {
 	if err := validateDescriptor(expected); err != nil {
 		return ocispec.Manifest{}, nil, err
 	}
@@ -247,7 +259,12 @@ func (c *Client) FetchManifest(ctx context.Context, repoRef string, expected *oc
 
 	computed := expected.Digest.Algorithm().FromBytes(raw)
 	if computed != expected.Digest {
-		return ocispec.Manifest{}, nil, fmt.Errorf("%w: expected %s, got %s", ErrDigestMismatch, expected.Digest, computed)
+		return ocispec.Manifest{}, nil, fmt.Errorf(
+			"%w: expected %s, got %s",
+			ErrDigestMismatch,
+			expected.Digest,
+			computed,
+		)
 	}
 
 	var manifest ocispec.Manifest
@@ -296,7 +313,12 @@ func (c *Client) Tag(ctx context.Context, repoRef string, desc *ocispec.Descript
 // Referrers lists referrer descriptors for the given subject manifest.
 //
 //nolint:gocritic // hugeParam: matches oras-go interface patterns
-func (c *Client) Referrers(ctx context.Context, repoRef string, subject ocispec.Descriptor, artifactType string) ([]ocispec.Descriptor, error) {
+func (c *Client) Referrers(
+	ctx context.Context,
+	repoRef string,
+	subject ocispec.Descriptor,
+	artifactType string,
+) ([]ocispec.Descriptor, error) {
 	if subject.MediaType == "" {
 		return nil, fmt.Errorf("%w: missing media type", ErrInvalidDescriptor)
 	}

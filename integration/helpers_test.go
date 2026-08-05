@@ -12,10 +12,11 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/meigma/blob"
 	"github.com/stretchr/testify/require"
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/wait"
+
+	"github.com/meigma/blob"
 )
 
 // --- Registry Container Setup ---

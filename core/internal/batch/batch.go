@@ -133,7 +133,12 @@ func WithProcessorProgress(fn blobtype.ProgressFunc) ProcessorOption {
 // The source provides random access to the data blob.
 // The pool provides reusable zstd decoders for compressed entries.
 // maxFileSize limits the size of individual entries (0 for no limit).
-func NewProcessor(source file.ByteSource, pool *file.DecompressPool, maxFileSize uint64, opts ...ProcessorOption) *Processor {
+func NewProcessor(
+	source file.ByteSource,
+	pool *file.DecompressPool,
+	maxFileSize uint64,
+	opts ...ProcessorOption,
+) *Processor {
 	p := &Processor{
 		source:          source,
 		pool:            pool,
@@ -420,7 +425,12 @@ func groupSize(group rangeGroup) (int64, error) {
 }
 
 // processEntriesSerial processes entries one at a time.
-func (p *Processor) processEntriesSerial(entries []*Entry, data []byte, groupStart uint64, sink Sink) (ProcessStats, error) {
+func (p *Processor) processEntriesSerial(
+	entries []*Entry,
+	data []byte,
+	groupStart uint64,
+	sink Sink,
+) (ProcessStats, error) {
 	var stats ProcessStats
 	for _, entry := range entries {
 		if err := p.processEntry(entry, data, groupStart, sink); err != nil {
@@ -434,7 +444,13 @@ func (p *Processor) processEntriesSerial(entries []*Entry, data []byte, groupSta
 }
 
 // processEntriesParallel processes entries concurrently.
-func (p *Processor) processEntriesParallel(entries []*Entry, data []byte, groupStart uint64, sink Sink, workers int) (ProcessStats, error) {
+func (p *Processor) processEntriesParallel(
+	entries []*Entry,
+	data []byte,
+	groupStart uint64,
+	sink Sink,
+	workers int,
+) (ProcessStats, error) {
 	var stop atomic.Bool
 	var processed atomic.Int64
 	var totalBytes atomic.Uint64

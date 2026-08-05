@@ -93,7 +93,11 @@ func (c *Client) resolveDigest(ctx context.Context, ref, reference string, skipC
 
 // fetchManifestByDigest fetches a manifest by digest.
 // Uses manifest cache if available, otherwise calls FetchManifest().
-func (c *Client) fetchManifestByDigest(ctx context.Context, ref, dgst string, skipCache bool) (manifest *BlobManifest, raw []byte, fromCache bool, err error) {
+func (c *Client) fetchManifestByDigest(
+	ctx context.Context,
+	ref, dgst string,
+	skipCache bool,
+) (manifest *BlobManifest, raw []byte, fromCache bool, err error) {
 	// Try manifest cache
 	if !skipCache && c.manifestCache != nil {
 		if cached, cachedRaw, ok := c.manifestCache.GetManifest(dgst); ok {
