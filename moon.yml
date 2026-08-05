@@ -108,7 +108,7 @@ tasks:
       - 'root:test'
       - 'root:build'
       - 'root:integration'
-      - 'docs:check'
+      - 'docs:build'
       - 'provenance:check'
       - 'policy-gittuf:check'
       - 'policy-opa:check'

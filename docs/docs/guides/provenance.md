@@ -1,7 +1,3 @@
----
-sidebar_position: 8
----
-
 # Provenance & Signing
 
 Verify archive integrity and provenance using Sigstore signatures and SLSA attestations.
@@ -106,7 +102,7 @@ blob verify --policy=policy.yaml ghcr.io/myorg/archive:v1
 blob pull --verify --repo=myorg/myrepo ghcr.io/myorg/archive:v1 ./dest
 ```
 
-For complete CLI security workflows, see [CLI Workflows](cli-workflows).
+For complete CLI security workflows, see [CLI Workflows](cli-workflows.md).
 
 ### Signer Options
 
@@ -715,7 +711,7 @@ No SLSA attestations are attached. Ensure your CI pipeline includes the `actions
 
 ## See Also
 
-- [CLI Reference](../reference/cli#security-commands) - Command-line signing and verification
-- [CLI Workflows](cli-workflows) - CI/CD integration patterns
-- [OCI Client](oci-client#sign-operations) - Go library signing API
-- [API Reference](../reference/api#package-blobpolicysigstore) - Sigstore policy package
+- [CLI Reference](../reference/cli.md#security-commands) - Command-line signing and verification
+- [CLI Workflows](cli-workflows.md) - CI/CD integration patterns
+- [OCI Client](oci-client.md#sign-operations) - Go library signing API
+- [API Reference](../reference/api.md#package-blobpolicysigstore) - Sigstore policy package

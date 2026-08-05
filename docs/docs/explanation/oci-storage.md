@@ -1,7 +1,3 @@
----
-sidebar_position: 3
----
-
 # OCI Storage
 
 Understanding how blob archives are stored in OCI container registries.
@@ -356,7 +352,7 @@ Using OCI means:
 
 ## See Also
 
-- [Architecture](architecture) - Overall blob archive design
-- [Integrity](integrity) - Detailed verification mechanisms
-- [OCI Client](../guides/oci-client) - Push and pull operations
-- [Caching](../guides/caching) - Cache configuration
+- [Architecture](architecture.md) - Overall blob archive design
+- [Integrity](integrity.md) - Detailed verification mechanisms
+- [OCI Client](../guides/oci-client.md) - Push and pull operations
+- [Caching](../guides/caching.md) - Cache configuration

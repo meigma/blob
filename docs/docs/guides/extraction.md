@@ -1,7 +1,3 @@
----
-sidebar_position: 6
----
-
 # Extracting Files
 
 How to extract archive contents to the local filesystem.
@@ -309,7 +305,7 @@ err := extractArchive(archive, "/app/deploy", ExtractOptions{
 
 ## See Also
 
-- [CLI Reference](../reference/cli) - Command-line extraction commands (`pull`, `cp`, `cat`)
-- [OCI Client](oci-client) - Pull archives from registries
-- [Performance Tuning](performance-tuning) - Advanced extraction optimization
-- [Caching](caching) - Cache content for faster repeated extraction
+- [CLI Reference](../reference/cli.md) - Command-line extraction commands (`pull`, `cp`, `cat`)
+- [OCI Client](oci-client.md) - Pull archives from registries
+- [Performance Tuning](performance-tuning.md) - Advanced extraction optimization
+- [Caching](caching.md) - Cache content for faster repeated extraction

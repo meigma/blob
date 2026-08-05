@@ -1,13 +1,10 @@
----
-sidebar_position: 1
-
----
-
 # Blob
 
 A file archive format designed for OCI container registries.
 
 Blob enables random access to individual files via HTTP range requests without downloading entire archives. Push archives to any OCI registry and read files lazily with minimal network transfer.
+
+![Blob CLI demo](img/demo.gif)
 
 ## Key Features
 
@@ -40,7 +37,7 @@ content, _ := archive.ReadFile("config.json")
 
 ```bash
 # Install
-curl -sSfL https://blob.meigma.dev/install.sh | sh
+curl -sSfL https://meigma.github.io/blob/install.sh | sh
 
 # Push an archive
 blob push --compression=zstd ghcr.io/myorg/myarchive:v1 ./src
@@ -57,16 +54,16 @@ The pulled archive uses HTTP range requests to fetch file data on demand. Only t
 ## Next Steps
 
 **Library users:**
-- [Getting Started](./getting-started) - Go library tutorial
-- [API Reference](./reference/api) - Complete Go API
-- [OCI Client](./guides/oci-client) - Push and pull archives to registries
+- [Getting Started](./getting-started.md) - Go library tutorial
+- [API Reference](./reference/api.md) - Complete Go API
+- [OCI Client](./guides/oci-client.md) - Push and pull archives to registries
 
 **CLI users:**
-- [CLI Getting Started](./cli-getting-started) - Command-line tutorial
-- [CLI Reference](./reference/cli) - Complete command reference
-- [CLI Workflows](./guides/cli-workflows) - Signing, verification, and CI/CD patterns
+- [CLI Getting Started](./cli-getting-started.md) - Command-line tutorial
+- [CLI Reference](./reference/cli.md) - Complete command reference
+- [CLI Workflows](./guides/cli-workflows.md) - Signing, verification, and CI/CD patterns
 
 **All users:**
-- [Creating Archives](./guides/creating-archives) - Archive creation options
-- [Provenance & Signing](./guides/provenance) - Sigstore signatures and SLSA attestations
-- [Caching](./guides/caching) - Content-addressed caching for deduplication
+- [Creating Archives](./guides/creating-archives.md) - Archive creation options
+- [Provenance & Signing](./guides/provenance.md) - Sigstore signatures and SLSA attestations
+- [Caching](./guides/caching.md) - Content-addressed caching for deduplication

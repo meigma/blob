@@ -1,7 +1,3 @@
----
-sidebar_position: 2
----
-
 # CLI Reference
 
 Complete reference for the `blob` command-line tool.
@@ -70,7 +66,7 @@ blob push -a "org.opencontainers.image.source=https://github.com/myorg/repo" \
 blob push --sign ghcr.io/myorg/archive:v1 ./src
 ```
 
-**See Also:** [OCI Client - Push Operations](../guides/oci-client#push-operations)
+**See Also:** [OCI Client - Push Operations](../guides/oci-client.md#push-operations)
 
 ---
 
@@ -124,7 +120,7 @@ blob pull --clean ghcr.io/myorg/archive:v1 ./dest
 blob pull --verify ghcr.io/myorg/archive:v1 ./dest
 ```
 
-**See Also:** [Extracting Files](../guides/extraction)
+**See Also:** [Extracting Files](../guides/extraction.md)
 
 ---
 
@@ -333,7 +329,7 @@ Annotations:
   org.opencontainers.image.created 2024-01-15T10:30:00Z
 ```
 
-**See Also:** [OCI Client - Inspect Operations](../guides/oci-client#inspect-operations-metadata--file-index)
+**See Also:** [OCI Client - Inspect Operations](../guides/oci-client.md#inspect-operations-metadata-file-index)
 
 ---
 
@@ -413,7 +409,7 @@ blob sign ghcr.io/myorg/archive:v1
 blob sign --key private.pem ghcr.io/myorg/archive:v1
 ```
 
-**See Also:** [Provenance & Signing - Signing Archives](../guides/provenance#signing-archives)
+**See Also:** [Provenance & Signing - Signing Archives](../guides/provenance.md#signing-archives)
 
 ---
 
@@ -480,7 +476,7 @@ provenance:
     - "v*"
 ```
 
-**See Also:** [Provenance & Signing - Verification](../guides/provenance#sigstore-signature-verification)
+**See Also:** [Provenance & Signing - Verification](../guides/provenance.md#sigstore-signature-verification)
 
 ---
 
@@ -765,6 +761,6 @@ Environment variables override config file values. Flags override both.
 
 ## See Also
 
-- [CLI Getting Started](../cli-getting-started) - Tutorial for CLI usage
-- [CLI Workflows](../guides/cli-workflows) - CI/CD and advanced workflows
-- [API Reference](api) - Go library reference
+- [CLI Getting Started](../cli-getting-started.md) - Tutorial for CLI usage
+- [CLI Workflows](../guides/cli-workflows.md) - CI/CD and advanced workflows
+- [API Reference](api.md) - Go library reference

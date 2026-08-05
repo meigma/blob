@@ -1,7 +1,3 @@
----
-sidebar_position: 8
----
-
 # CLI Workflows
 
 Task-oriented guide for common CLI workflows including signing, verification, and CI/CD integration.
@@ -158,7 +154,7 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Install blob CLI
-        run: curl -sSfL https://blob.meigma.dev/install.sh | sh
+        run: curl -sSfL https://meigma.github.io/blob/install.sh | sh
 
       - name: Log in to GHCR
         uses: docker/login-action@v3
@@ -201,7 +197,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Install blob CLI
-        run: curl -sSfL https://blob.meigma.dev/install.sh | sh
+        run: curl -sSfL https://meigma.github.io/blob/install.sh | sh
 
       - name: Log in to GHCR
         uses: docker/login-action@v3
@@ -249,7 +245,7 @@ release:
     SIGSTORE_ID_TOKEN:
       aud: sigstore
   script:
-    - curl -sSfL https://blob.meigma.dev/install.sh | sh
+    - curl -sSfL https://meigma.github.io/blob/install.sh | sh
     - blob push --sign --compression=zstd
         registry.gitlab.com/$CI_PROJECT_PATH/assets:$CI_COMMIT_TAG
         ./dist
@@ -271,7 +267,7 @@ services:
     image: alpine
     command: |
       sh -c "
-        curl -sSfL https://blob.meigma.dev/install.sh | sh
+        curl -sSfL https://meigma.github.io/blob/install.sh | sh
         blob pull --verify --repo=myorg/myrepo \
           ghcr.io/myorg/assets:latest /app/assets
       "
@@ -455,7 +451,7 @@ Usage:
 
 ## See Also
 
-- [CLI Reference](../reference/cli) - Complete command documentation
-- [CLI Getting Started](../cli-getting-started) - Tutorial introduction
-- [Provenance & Signing](provenance) - Detailed signing and verification concepts
-- [Caching](caching) - Cache architecture and configuration
+- [CLI Reference](../reference/cli.md) - Complete command documentation
+- [CLI Getting Started](../cli-getting-started.md) - Tutorial introduction
+- [Provenance & Signing](provenance.md) - Detailed signing and verification concepts
+- [Caching](caching.md) - Cache architecture and configuration

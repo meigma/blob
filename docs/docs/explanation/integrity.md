@@ -1,7 +1,3 @@
----
-sidebar_position: 2
----
-
 # Integrity Model
 
 Understanding how blob ensures file integrity.
@@ -80,9 +76,9 @@ The verification-before-caching guarantee means cache entries are trustworthy as
 
 Blob's integrity model integrates with OCI's existing infrastructure to provide a complete chain of trust from source to consumption.
 
-:::tip Practical Guide
-For step-by-step instructions on implementing signature verification and provenance policies, see the [Provenance & Signing](../guides/provenance) guide.
-:::
+!!! tip "Practical Guide"
+
+    For step-by-step instructions on implementing signature verification and provenance policies, see the [Provenance & Signing](../guides/provenance.md) guide.
 
 ### The Integrity Chain
 

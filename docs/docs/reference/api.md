@@ -1,7 +1,3 @@
----
-sidebar_position: 1
----
-
 # API Reference
 
 Complete reference for the blob library. The primary API is `github.com/meigma/blob`, which provides everything most users need. Internal packages are documented at the end for advanced use cases.

@@ -39,6 +39,10 @@ jobs:
           version: 2026.6.14
           cache: true
 
+      - name: Resolve uv cache directory
+        id: uv-cache
+        run: echo "dir=$(uv cache dir)" >> "$GITHUB_OUTPUT"
+
       - name: Cache Go modules
         uses: actions/cache@2c8a9bd7457de244a408f35966fab2fb45fda9c8 # v6.0.0
         with:
@@ -64,6 +68,14 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-golangci-lint-${{ hashFiles('mise.lock', '.golangci.yml', '**/go.sum') }}-
             ${{ runner.os }}-golangci-lint-
+
+      - name: Cache uv downloads
+        uses: actions/cache@2c8a9bd7457de244a408f35966fab2fb45fda9c8 # v6.0.0
+        with:
+          path: ${{ steps.uv-cache.outputs.dir }}
+          key: ${{ runner.os }}-uv-docs-${{ hashFiles('docs/uv.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-uv-docs-
 
       - name: Run Moon CI
         run: moon ci --summary minimal

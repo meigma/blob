@@ -1,7 +1,3 @@
----
-sidebar_position: 2
----
-
 # OCI Client
 
 How to push and pull blob archives to OCI container registries.
@@ -385,7 +381,7 @@ func pushAndSign(ctx context.Context, ref, srcDir string) error {
 }
 ```
 
-For detailed signing options and verification, see [Provenance & Signing](provenance).
+For detailed signing options and verification, see [Provenance & Signing](provenance.md).
 
 ## Error Handling
 
@@ -493,8 +489,8 @@ func main() {
 
 ## See Also
 
-- [CLI Reference](../reference/cli) - Command-line equivalent operations
-- [Creating Archives](creating-archives) - Archive creation options
-- [Caching](caching) - Cache configuration and sizing
-- [Provenance & Signing](provenance) - Signing archives and verification policies
-- [OCI Storage](../explanation/oci-storage) - How blob archives are stored in OCI registries
+- [CLI Reference](../reference/cli.md) - Command-line equivalent operations
+- [Creating Archives](creating-archives.md) - Archive creation options
+- [Caching](caching.md) - Cache configuration and sizing
+- [Provenance & Signing](provenance.md) - Signing archives and verification policies
+- [OCI Storage](../explanation/oci-storage.md) - How blob archives are stored in OCI registries

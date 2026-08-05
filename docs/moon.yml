@@ -1,13 +1,14 @@
-language: 'javascript'
+language: 'python'
 layer: 'application'
 stack: 'frontend'
 tags:
   - 'docs'
-  - 'docusaurus'
+  - 'mkdocs'
+  - 'uv'
 
 project:
   title: 'blob docs'
-  description: 'Docusaurus documentation site for blob.'
+  description: 'MkDocs documentation site for blob.'
   owner: 'meigma'
   maintainers:
     - 'meigma'
@@ -17,40 +18,27 @@ toolchains:
 
 fileGroups:
   configs:
-    - 'go.mod'
-    - 'package.json'
-    - 'package-lock.json'
-    - 'docusaurus.config.ts'
-    - 'sidebars.ts'
-    - 'tsconfig.json'
+    - 'mkdocs.yml'
+    - 'pyproject.toml'
+    - 'uv.lock'
+    - '.python-version'
   sources:
     - 'docs/**/*'
-    - 'src/**/*'
-    - 'static/**/*'
 
 tasks:
   install:
-    command: 'npm ci'
+    command: 'uv sync --locked'
     inputs:
-      - 'package.json'
-      - 'package-lock.json'
+      - 'pyproject.toml'
+      - 'uv.lock'
+      - '.python-version'
     outputs:
-      - 'node_modules/.package-lock.json'
-    options:
-      cache: false
-
-  typecheck:
-    command: 'npm run typecheck'
-    deps:
-      - 'docs:install'
-    inputs:
-      - '@group(configs)'
-      - '@group(sources)'
+      - '.venv/pyvenv.cfg'
     options:
       cache: false
 
   build:
-    command: 'npm run build'
+    command: 'uv run --locked mkdocs build --strict'
     deps:
       - 'docs:install'
     inputs:
@@ -59,10 +47,12 @@ tasks:
     outputs:
       - 'build/**/*'
 
-  check:
+  serve:
+    command: 'uv run --locked mkdocs serve --dev-addr 127.0.0.1:8000'
     deps:
-      - 'docs:typecheck'
-      - 'docs:build'
+      - 'docs:install'
+    inputs:
+      - '@group(configs)'
+      - '@group(sources)'
     options:
       cache: false
-      runInCI: true

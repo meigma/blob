@@ -1,12 +1,8 @@
----
-sidebar_position: 3
----
-
 # CLI Getting Started
 
 This tutorial walks through using the `blob` command-line tool to push, inspect, browse, and pull file archives from OCI registries.
 
-> **Library users**: This tutorial covers the CLI. For Go library usage, see [Getting Started](getting-started).
+> **Library users**: This tutorial covers the CLI. For Go library usage, see [Getting Started](getting-started.md).
 
 ## Prerequisites
 
@@ -18,7 +14,7 @@ This tutorial walks through using the `blob` command-line tool to push, inspect,
 ### Install Script (Recommended)
 
 ```bash
-curl -sSfL https://blob.meigma.dev/install.sh | sh
+curl -sSfL https://meigma.github.io/blob/install.sh | sh
 ```
 
 This installs the latest `blob` binary to `/usr/local/bin`.
@@ -247,7 +243,7 @@ aliases:
 
 Now that you have the basics:
 
-- [CLI Reference](reference/cli) - Complete command documentation
-- [CLI Workflows](guides/cli-workflows) - Signing, verification, and CI/CD patterns
-- [OCI Client](guides/oci-client) - Go library equivalent operations
-- [Provenance & Signing](guides/provenance) - Supply chain security details
+- [CLI Reference](reference/cli.md) - Complete command documentation
+- [CLI Workflows](guides/cli-workflows.md) - Signing, verification, and CI/CD patterns
+- [OCI Client](guides/oci-client.md) - Go library equivalent operations
+- [Provenance & Signing](guides/provenance.md) - Supply chain security details
