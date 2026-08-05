@@ -23,3 +23,8 @@ Plan: Keep the session open for review and follow-up CI/CD improvements. The imp
 Goal for the session: Publish the CI modernization for review and verify GitHub checks on the exact implementation head.
 Current state of the world: `feat/mise-moon-ci` was pushed and PR #86 (`ci: adopt mise and moonrepo`) is ready for review at head `596720160cf7a8d122c21cdb4a3a8842f9687179`. The CI run `30975198363` passed its consolidated Moon job in 9m08s. CodeQL for Go and Actions, provenance build-and-push and verify, Kusari Inspector, and Cloudflare Workers Builds also passed; Dependabot-only tidy skipped as designed. The PR is mergeable but blocked pending its normal review requirement.
 Plan: Await human review; do not merge without explicit authorization.
+
+## 2026-08-04 22:58 — Merge blocked by branch protection
+Goal for the session: Squash-merge the exact reviewed head of PR #86 after the user's approval.
+Current state of the world: PR #86 remains open at the unchanged green head `596720160cf7a8d122c21cdb4a3a8842f9687179`. A normal `gh pr merge --squash --match-head-commit` was rejected because base-branch policy still requires a GitHub review. Exact-head auto-merge could not be enabled because the repository has auto-merge disabled. No admin bypass was used.
+Plan: Ask for explicit admin-merge authorization or wait for the required GitHub review, then re-verify the head/checks before merging and cleaning up.
