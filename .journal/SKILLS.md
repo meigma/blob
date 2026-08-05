@@ -1,0 +1,4 @@
+# Required Skills
+
+- `git`
+- `worktrunk`
