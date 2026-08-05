@@ -20,4 +20,12 @@ coverage.out
 coverage.html
 node_modules/
 docs/build/
+docs/.venv/
 examples/provenance/provenance
+
+# Python
+__pycache__/
+*.py[cod]
+.python-version
+.venv/
+!docs/.python-version

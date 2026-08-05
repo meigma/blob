@@ -1,10 +1,6 @@
----
-sidebar_position: 2
----
-
 # Getting Started
 
-> **CLI users**: This tutorial covers the Go library. For command-line usage, see [CLI Getting Started](cli-getting-started).
+> **CLI users**: This tutorial covers the Go library. For command-line usage, see [CLI Getting Started](cli-getting-started.md).
 
 This tutorial walks through the complete workflow of creating a blob archive, pushing it to an OCI registry, and reading files lazily via HTTP range requests.
 
@@ -355,11 +351,11 @@ config/ directory:
 
 Now that you have the basics, explore these guides:
 
-- [OCI Client](guides/oci-client) - Authentication options and client configuration
-- [Creating Archives](guides/creating-archives) - Compression, change detection, and file limits
-- [Caching](guides/caching) - Cache configuration and sizing
-- [Extracting Files](guides/extraction) - Advanced extraction options
-- [Performance Tuning](guides/performance-tuning) - Optimize for your workload
+- [OCI Client](guides/oci-client.md) - Authentication options and client configuration
+- [Creating Archives](guides/creating-archives.md) - Compression, change detection, and file limits
+- [Caching](guides/caching.md) - Cache configuration and sizing
+- [Extracting Files](guides/extraction.md) - Advanced extraction options
+- [Performance Tuning](guides/performance-tuning.md) - Optimize for your workload
 
 ## Production Security
 
@@ -424,4 +420,4 @@ archive, err := c.Pull(ctx, ref)
 
 This ensures archives are signed by trusted workflows and built through authorized CI/CD pipelines.
 
-See the [Provenance & Signing](guides/provenance) guide for complete implementation details, including custom OPA policies for advanced use cases.
+See the [Provenance & Signing](guides/provenance.md) guide for complete implementation details, including custom OPA policies for advanced use cases.

@@ -79,7 +79,7 @@ c, _ := blob.NewClient(
 archive, err := c.Pull(ctx, "ghcr.io/myorg/config:v1")
 ```
 
-See [Provenance & Signing](https://blob.meigma.dev/docs/guides/provenance) for complete documentation.
+See [Provenance & Signing](https://meigma.github.io/blob/guides/provenance/) for complete documentation.
 
 ### Per-File Integrity
 
@@ -120,7 +120,7 @@ When using Blob:
 
 ## Learning More
 
-- [Blob Documentation](https://blob.meigma.dev)
-- [Provenance & Signing Guide](https://blob.meigma.dev/docs/guides/provenance)
-- [Integrity Verification](https://blob.meigma.dev/docs/explanation/integrity)
+- [Blob Documentation](https://meigma.github.io/blob/)
+- [Provenance & Signing Guide](https://meigma.github.io/blob/guides/provenance/)
+- [Integrity Verification](https://meigma.github.io/blob/explanation/integrity/)
 - [Sigstore Documentation](https://docs.sigstore.dev/)

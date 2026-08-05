@@ -1,7 +1,3 @@
----
-sidebar_position: 9
----
-
 # Advanced Usage
 
 For most users, `github.com/meigma/blob` provides everything needed. This guide covers advanced patterns that require internal packages.
@@ -309,7 +305,7 @@ err := blobcore.Create(ctx, srcDir, indexFile, dataFile,
 
 ## See Also
 
-- [OCI Client](oci-client) - High-level client API
-- [Caching](caching) - Standard cache configuration
-- [Creating Archives](creating-archives) - Archive options
-- [API Reference](../reference/api) - Complete API documentation
+- [OCI Client](oci-client.md) - High-level client API
+- [Caching](caching.md) - Standard cache configuration
+- [Creating Archives](creating-archives.md) - Archive options
+- [API Reference](../reference/api.md) - Complete API documentation

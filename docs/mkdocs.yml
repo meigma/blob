@@ -1,0 +1,72 @@
+site_name: Blob
+site_description: A file archive format for OCI container registries
+site_url: https://meigma.github.io/blob/
+repo_name: meigma/blob
+repo_url: https://github.com/meigma/blob
+edit_uri: edit/master/docs/docs/
+docs_dir: docs
+site_dir: build
+strict: true
+
+theme:
+  name: material
+  language: en
+  features:
+    - content.action.edit
+    - navigation.instant
+    - navigation.tracking
+    - search.highlight
+    - search.suggest
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: custom
+      accent: custom
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: custom
+      accent: custom
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+
+nav:
+  - Home: index.md
+  - Getting Started: getting-started.md
+  - CLI Getting Started: cli-getting-started.md
+  - Guides:
+      - Creating Archives: guides/creating-archives.md
+      - OCI Client: guides/oci-client.md
+      - Caching: guides/caching.md
+      - Extraction: guides/extraction.md
+      - Performance Tuning: guides/performance-tuning.md
+      - Provenance & Signing: guides/provenance.md
+      - CLI Workflows: guides/cli-workflows.md
+      - Advanced Usage: guides/advanced.md
+  - Reference:
+      - API: reference/api.md
+      - CLI: reference/cli.md
+  - Explanation:
+      - Architecture: explanation/architecture.md
+      - Integrity Model: explanation/integrity.md
+      - OCI Storage: explanation/oci-storage.md
+
+plugins:
+  - search
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - md_in_html
+  - toc:
+      permalink: true
+  - pymdownx.details
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.superfences
+
+extra_css:
+  - stylesheets/palette.css

@@ -1,7 +1,7 @@
 # Blob
 
 [![CI](https://github.com/meigma/blob/actions/workflows/ci.yml/badge.svg?branch=master)](https://github.com/meigma/blob/actions/workflows/ci.yml)
-[![Docs](https://img.shields.io/badge/docs-blob.meigma.dev-blue)](https://blob.meigma.dev)
+[![Docs](https://img.shields.io/badge/docs-meigma.github.io%2Fblob-blue)](https://meigma.github.io/blob/)
 [![Go Reference](https://pkg.go.dev/badge/github.com/meigma/blob.svg)](https://pkg.go.dev/github.com/meigma/blob)
 [![Release](https://img.shields.io/github/v/release/meigma/blob)](https://github.com/meigma/blob/releases)
 [![License](https://img.shields.io/badge/license-Apache--2.0%2FMIT-blue)](LICENSE-MIT)
@@ -27,7 +27,7 @@ The index blob is small (~1MB for 10K files) and contains file metadata. The dat
 ### CLI
 
 ```bash
-curl -sSfL https://blob.meigma.dev/install.sh | sh
+curl -sSfL https://meigma.github.io/blob/install.sh | sh
 ```
 
 See [blob-cli](https://github.com/meigma/blob-cli) for more installation options.
@@ -112,11 +112,11 @@ Path-sorted storage means directories fetch with a single range request. Content
 
 ## Documentation
 
-- [Getting Started](https://blob.meigma.dev/docs/getting-started) — Go library tutorial
-- [CLI Getting Started](https://blob.meigma.dev/docs/cli-getting-started) — Command-line tutorial
-- [CLI Reference](https://blob.meigma.dev/docs/reference/cli) — Complete CLI command reference
-- [Architecture](https://blob.meigma.dev/docs/explanation/architecture) — Design decisions and trade-offs
-- [API Reference](https://blob.meigma.dev/docs/reference/api) — Complete API documentation
+- [Getting Started](https://meigma.github.io/blob/getting-started/) — Go library tutorial
+- [CLI Getting Started](https://meigma.github.io/blob/cli-getting-started/) — Command-line tutorial
+- [CLI Reference](https://meigma.github.io/blob/reference/cli/) — Complete CLI command reference
+- [Architecture](https://meigma.github.io/blob/explanation/architecture/) — Design decisions and trade-offs
+- [API Reference](https://meigma.github.io/blob/reference/api/) — Complete API documentation
 
 ## License
 

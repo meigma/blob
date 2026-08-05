@@ -1,7 +1,3 @@
----
-sidebar_position: 3
----
-
 # Caching
 
 How to configure caching for blob archives to minimize network requests and improve performance.
@@ -296,8 +292,8 @@ func main() {
 
 ## See Also
 
-- [CLI Reference](../reference/cli#blob-cache) - Command-line cache management
-- [CLI Workflows](cli-workflows#cache-management) - CLI caching patterns
-- [OCI Client](oci-client) - Client configuration and authentication
-- [Performance Tuning](performance-tuning) - Cache tuning for specific scenarios
-- [Advanced Usage](advanced) - Custom cache implementations
+- [CLI Reference](../reference/cli.md#blob-cache) - Command-line cache management
+- [CLI Workflows](cli-workflows.md#cache-management) - CLI caching patterns
+- [OCI Client](oci-client.md) - Client configuration and authentication
+- [Performance Tuning](performance-tuning.md) - Cache tuning for specific scenarios
+- [Advanced Usage](advanced.md) - Custom cache implementations

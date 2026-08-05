@@ -1,6 +1,6 @@
 #!/bin/sh
 # Blob CLI Installer Script
-# Usage: curl -fsSL https://blob.meigma.dev/install.sh | sh
+# Usage: curl -fsSL https://meigma.github.io/blob/install.sh | sh
 #
 # Environment variables:
 #   BLOB_VERSION    - Version to install (default: latest)
@@ -11,13 +11,13 @@
 #
 # Examples:
 #   # Install latest version
-#   curl -fsSL https://blob.meigma.dev/install.sh | sh
+#   curl -fsSL https://meigma.github.io/blob/install.sh | sh
 #
 #   # Install specific version
-#   curl -fsSL https://blob.meigma.dev/install.sh | BLOB_VERSION=1.0.0 sh
+#   curl -fsSL https://meigma.github.io/blob/install.sh | BLOB_VERSION=1.0.0 sh
 #
 #   # Install to custom directory
-#   curl -fsSL https://blob.meigma.dev/install.sh | BLOB_INSTALL=/usr/local/bin sh
+#   curl -fsSL https://meigma.github.io/blob/install.sh | BLOB_INSTALL=/usr/local/bin sh
 
 set -e
 

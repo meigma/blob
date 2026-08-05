@@ -1,7 +1,3 @@
----
-sidebar_position: 1
----
-
 # Creating Archives
 
 How to build and push blob archives to OCI registries.
@@ -259,6 +255,6 @@ func main() {
 
 ## See Also
 
-- [OCI Client](oci-client) - Client configuration and authentication
-- [Advanced Usage](advanced) - Lower-level Create API for custom I/O pipelines
-- [Architecture](../explanation/architecture) - How the archive format works
+- [OCI Client](oci-client.md) - Client configuration and authentication
+- [Advanced Usage](advanced.md) - Lower-level Create API for custom I/O pipelines
+- [Architecture](../explanation/architecture.md) - How the archive format works

@@ -1,7 +1,3 @@
----
-sidebar_position: 7
----
-
 # Performance Tuning
 
 How to tune blob for production workloads.
@@ -199,7 +195,7 @@ c, _ := blob.NewClient(
 )
 ```
 
-See [Caching](caching) for advanced cache configuration including custom sizes and implementations.
+See [Caching](caching.md) for advanced cache configuration including custom sizes and implementations.
 
 ## Tuning Scenarios
 
@@ -320,8 +316,8 @@ log.Printf("extraction took %v", time.Since(start))
 
 ## See Also
 
-- [OCI Client](oci-client) - Push and pull archives
-- [Caching](caching) - Cache configuration and sizing
-- [Architecture](../explanation/architecture) - Understand how the format affects performance
-- [Creating Archives](creating-archives) - Options that affect read performance
-- [Advanced Usage](advanced) - Low-level options for custom cache implementations
+- [OCI Client](oci-client.md) - Push and pull archives
+- [Caching](caching.md) - Cache configuration and sizing
+- [Architecture](../explanation/architecture.md) - Understand how the format affects performance
+- [Creating Archives](creating-archives.md) - Options that affect read performance
+- [Advanced Usage](advanced.md) - Low-level options for custom cache implementations

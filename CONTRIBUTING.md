@@ -25,8 +25,9 @@ We are committed to providing a welcoming and inclusive environment. Please be r
 - **mise** - Tool and environment manager ([installation](https://mise.jdx.dev/getting-started.html))
 - **Docker** - Required for integration tests
 
-mise installs the repository's pinned Go, Node.js, FlatBuffers, golangci-lint,
-and Moonrepo versions from `mise.toml` and verifies them against `mise.lock`.
+mise installs the repository's pinned Go, Python, uv, FlatBuffers,
+golangci-lint, and Moonrepo versions from `mise.toml` and verifies them against
+`mise.lock`.
 
 ### Setup
 
@@ -271,12 +272,10 @@ func TestBlob_ReadFile(t *testing.T) {
 
 ### User Documentation
 
-User-facing documentation lives in `/docs` (Docusaurus site):
+User-facing documentation lives in `/docs` (MkDocs site):
 
 ```bash
-cd docs
-npm install
-npm run start
+mise exec -- moon run docs:serve
 ```
 
 Update documentation when:
@@ -288,7 +287,7 @@ Update documentation when:
 
 - **Questions**: Open a [GitHub Discussion](https://github.com/meigma/blob/discussions)
 - **Bugs**: Open a [GitHub Issue](https://github.com/meigma/blob/issues)
-- **Documentation**: Visit [blob.meigma.dev](https://blob.meigma.dev)
+- **Documentation**: Visit [meigma.github.io/blob](https://meigma.github.io/blob/)
 
 ## License
 

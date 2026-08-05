@@ -1,7 +1,3 @@
----
-sidebar_position: 1
----
-
 # Architecture
 
 Understanding the design decisions behind blob.
@@ -98,7 +94,7 @@ Blob makes deliberate trade-offs in favor of specific use cases.
 
 **Cache efficiency.** Content-addressed caching with automatic deduplication means identical files across different archives share cache storage. The cache key is the content hash, not the file path or archive identity.
 
-**OCI integration.** The two-blob design fits naturally into OCI's model of content-addressed blobs referenced by manifests. Standard OCI tooling, registries, and signing workflows work without modification. See [OCI Storage](oci-storage) for details on how blob archives are stored in OCI registries.
+**OCI integration.** The two-blob design fits naturally into OCI's model of content-addressed blobs referenced by manifests. Standard OCI tooling, registries, and signing workflows work without modification. See [OCI Storage](oci-storage.md) for details on how blob archives are stored in OCI registries.
 
 ## What Blob Does Not Optimize For
 
