@@ -28,3 +28,8 @@ Plan: Await human review; do not merge without explicit authorization.
 Goal for the session: Squash-merge the exact reviewed head of PR #86 after the user's approval.
 Current state of the world: PR #86 remains open at the unchanged green head `596720160cf7a8d122c21cdb4a3a8842f9687179`. A normal `gh pr merge --squash --match-head-commit` was rejected because base-branch policy still requires a GitHub review. Exact-head auto-merge could not be enabled because the repository has auto-merge disabled. No admin bypass was used.
 Plan: Ask for explicit admin-merge authorization or wait for the required GitHub review, then re-verify the head/checks before merging and cleaning up.
+
+## 2026-08-05 07:59 — Merge blocker corrected
+Goal for the session: Identify why PR #86 is policy-blocked despite zero required approvals.
+Current state of the world: Live ruleset `11847279` confirms `required_approving_review_count: 0`; no review is required. The actual blocker is its stale required status contexts, `Validate` and `Integration Tests`, which were removed when PR #86 consolidated CI into the green `ci` job. GitHub reports the absent required contexts only as generic `BLOCKED`, and `gh pr checks --required` did not surface them because no check runs with those names exist. The earlier review-blocker diagnosis was incorrect.
+Plan: Update the ruleset's required contexts to the new CI contract before performing the normal exact-head squash merge, if authorized.
