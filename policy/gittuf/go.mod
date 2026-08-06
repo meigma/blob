@@ -1,6 +1,6 @@
 module github.com/meigma/blob/policy/gittuf
 
-go 1.25.5
+go 1.26.5
 
 require (
 	github.com/gittuf/gittuf v0.0.0
