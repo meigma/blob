@@ -38,7 +38,7 @@ See [blob-cli](https://github.com/meigma/blob-cli) for more installation options
 go get github.com/meigma/blob
 ```
 
-Requires Go 1.25 or later.
+Requires Go 1.26 or later.
 
 ## Quick Start
 

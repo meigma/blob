@@ -2,7 +2,7 @@
 # Keep versions here and resolved downloads in mise.lock in sync.
 
 [tools]
-go = "1.25.5"
+go = "1.26.5"
 python = "3.14.3"
 flatc = "25.12.19"
 "aqua:golangci/golangci-lint" = "2.12.2"
