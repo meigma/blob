@@ -1,0 +1,4 @@
+interface:
+  display_name: "Journal Sync"
+  short_description: "Safely refresh teammate journal worktrees"
+  default_prompt: "Use $journal-sync to discover and safely refresh teammate journal worktrees."

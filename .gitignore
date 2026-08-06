@@ -23,6 +23,11 @@ docs/build/
 docs/.venv/
 examples/provenance/provenance
 
+# Agent session protocol state
+.agents/
+.journal/
+.wt/
+
 # Python
 __pycache__/
 *.py[cod]
