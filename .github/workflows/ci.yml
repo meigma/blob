@@ -28,13 +28,13 @@ jobs:
       MOON_TOOLCHAIN_FORCE_GLOBALS: 'true'
     steps:
       - name: Checkout
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
           persist-credentials: false
 
       - name: Setup mise
-        uses: jdx/mise-action@e6a8b3978addb5a52f2b4cd9d91eafa7f0ab959d # v4.2.0
+        uses: jdx/mise-action@7e36c90d9ab29c415a2384db3006f3ec8a8cc654 # v4.2.4
         with:
           version: 2026.6.14
           cache: true
@@ -44,7 +44,7 @@ jobs:
         run: echo "dir=$(uv cache dir)" >> "$GITHUB_OUTPUT"
 
       - name: Cache Go modules
-        uses: actions/cache@2c8a9bd7457de244a408f35966fab2fb45fda9c8 # v6.0.0
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/go/pkg/mod
           key: ${{ runner.os }}-go-mod-${{ hashFiles('**/go.sum') }}
@@ -52,7 +52,7 @@ jobs:
             ${{ runner.os }}-go-mod-
 
       - name: Cache Go build artifacts
-        uses: actions/cache@2c8a9bd7457de244a408f35966fab2fb45fda9c8 # v6.0.0
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/.cache/go-build
           key: ${{ runner.os }}-go-build-${{ hashFiles('mise.lock', '**/go.sum') }}-${{ github.run_id }}
@@ -61,7 +61,7 @@ jobs:
             ${{ runner.os }}-go-build-
 
       - name: Cache golangci-lint
-        uses: actions/cache@2c8a9bd7457de244a408f35966fab2fb45fda9c8 # v6.0.0
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/.cache/golangci-lint
           key: ${{ runner.os }}-golangci-lint-${{ hashFiles('mise.lock', '.golangci.yml', '**/go.sum') }}-${{ github.run_id }}
@@ -70,7 +70,7 @@ jobs:
             ${{ runner.os }}-golangci-lint-
 
       - name: Cache uv downloads
-        uses: actions/cache@2c8a9bd7457de244a408f35966fab2fb45fda9c8 # v6.0.0
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ${{ steps.uv-cache.outputs.dir }}
           key: ${{ runner.os }}-uv-docs-${{ hashFiles('docs/uv.lock') }}
@@ -81,7 +81,7 @@ jobs:
         run: moon ci --summary minimal
 
       - name: Upload coverage
-        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: coverage
           path: coverage.out
