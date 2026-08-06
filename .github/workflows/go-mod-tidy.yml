@@ -32,7 +32,7 @@ jobs:
 
       - name: Run Go module tidy tasks
         run: >-
-          moon run
+          env -u CI moon run
           root:tidy
           provenance:tidy
           policy-gittuf:tidy
