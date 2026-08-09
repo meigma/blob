@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.1.3](https://github.com/meigma/blob/compare/v1.1.2...v1.1.3) (2026-08-06)
+
+
+### Bug Fixes
+
+* **ci:** make Dependabot tidy check read-only ([#99](https://github.com/meigma/blob/issues/99)) ([92d73cf](https://github.com/meigma/blob/commit/92d73cfd4ffaea356589fca71cceef971a18e545))
+
 ## [1.1.2](https://github.com/meigma/blob/compare/v1.1.1...v1.1.2) (2026-01-25)
 
 
